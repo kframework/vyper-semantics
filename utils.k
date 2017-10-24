@@ -1,0 +1,28 @@
+module UTILS
+
+//////////////////////////////////////////////////////////////////////////////
+// Constants
+//////////////////////////////////////////////////////////////////////////////
+
+
+    syntax Int  ::= "#reservedMemPos"     [function]
+    syntax Int  ::= "#addrSizePos"        [function]
+    syntax Int  ::= "#maxNumPos"          [function]
+    syntax Int  ::= "#minNumPos"          [function]
+    syntax Int  ::= "#maxDecimalPos"      [function]
+    syntax Int  ::= "#minDecimalPos"      [function]
+    syntax Int  ::= "#freeVarPos"         [function]
+    syntax Int  ::= "#blankPos"           [function]
+    syntax Int  ::= "#freeLoopIndexPos"   [function]
+ // -----------------------------------------------------
+    rule #reservedMemPos => 320
+    rule #addrSizePos => 32
+    rule #maxNumPos => 64
+    rule #minNumPos => 96
+    rule #maxDecimalPos => 128
+    rule #minDecimalPos => 160
+    rule #freeVarPos => 192
+    rule #blankPos => 224
+    rule #freeLoopIndexPos => 256
+
+endmodule
