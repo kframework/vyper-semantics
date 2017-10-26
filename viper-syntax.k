@@ -50,17 +50,22 @@ module VIPER-SYNTAX
 
     syntax Const    ::= Int | String
 
-    syntax Type          ::= BaseType
-                           | "%void"
-                           | "%map"    "(" Type "," BaseType ")"
-                           | "%array"   "(" Type "," Int ")"
+    syntax Type          ::= "%void"
+                           | BaseType
                            | ByteArrayType
+                           | ListType
+                           | MappingType
                            | StructType
-    syntax StructType    ::= "%struct" "(" VarDecls ")"
+
+    syntax BaseType      ::= "%num" | "%decimal" | "%bool" | "%address" | "%bytes32"
 
     syntax ByteArrayType ::= "%bytes"  "(" Int ")"
 
-    syntax BaseType      ::= "%num" | "%decimal" | "%bool" | "%address" | "%bytes32"
+    syntax ListType      ::= "%list"   "(" Type "," Int ")"
+
+    syntax MappingType   ::= "%map"    "(" Type "," BaseType ")"
+
+    syntax StructType    ::= "%struct" "(" VarDecls ")"
 
     syntax BinOp         ::= "+" | "-" | "*" | "/" | "%"
                            | "and" | "or"
