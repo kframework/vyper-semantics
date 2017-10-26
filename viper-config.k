@@ -13,7 +13,9 @@ module VIPER-CONFIG
     <T>
         <k> #compileViperToLLL($PGM:Pgm) </k>
         <lll> .LLLExps </lll>
+        <lllCodeStack> .List </lllCodeStack>
         <env> .Map </env>
+        <global> .Map </global>
         <nextStorage> 0 </nextStorage>
         <nextMem> #reservedMemPos </nextMem>
     </T>
