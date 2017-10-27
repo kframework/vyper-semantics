@@ -7,76 +7,89 @@ module LLL-EVM
     imports EVM-SYNTAX
     imports VIPER-CONFIG
 
-    rule $mstore(L,V) // L := V
-      => V L MSTORE
-
-    rule $mload(L)
-      => L MLOAD
+    rule <k> S:XEVM => . ... </k>
+         <xevm> ... (. => S) </xevm>
 
 ////
 
-    rule N:Int
-      => push(N)
+    // L := V
+    rule $mstore(L,V) => V ~> L ~> MSTORE
+
+    rule $mload(L) => L ~> MLOAD
+
+////
+
+    rule N:Int => push(N)
     when -2^255 <= N < 2^256
 
-    rule $var(X)
-      => DUP(H - W[X])
+    rule <k> $var(X) => DUP(H - L) ... </k>
+         <height> H </height>
+         <with> ... X |-> L ... </with>
+    when H - L <= 16
+
+    // X := V
+    rule <k> $set(X,V) => V ~> SWAP(H - L) ~> POP ... </k>
+         <height> H </height>
+         <with> ... X |-> L ... </with>
+    when H - L <= 16
+
+    rule $pass => .
+
+    // if C then T
+    rule $if(C,T) => $if(C,T;mk_label)
+    rule $if(C,T;LEnd)
+      => C
+      ~> ISZERO ~> JUMPI(LEnd)
+      ~> T
+      ~> JUMPDEST(LEnd)
+
+    // if C then T else F
+    rule $if(C,T,F) => if(C,T,F;mk_label;mk_label)
+    rule $if(C,T,F;LMid,LEnd)
+      => C
+      ~> ISZERO ~> JUMPI(LMid)
+      ~> T
+      ~> JUMP(LEnd)
+      ~> JUMPDEST(LMid)
+      ~> F
+      ~> JUMPDEST(LEnd)
+
+    // let X = V in E
+    rule <k>
+         $with(X,V,E)
+      => V
+      ~> ctx(E, H + 1, W[X <- H])
+      ~> #if valency(E) == 0 #then SWAP(1) #else . #fi
+      ~> POP
+         ...</k>
          <height> H </height>
          <with> W </with>
-    when H - W[X] <= 16
 
-    rule $set(X,V) // X := V
-      => V SWAP(H - W[X]) POP
-
-    rule $pass
-      => .
-
-    rule $if(C,T) // if C then T
-      => let end_label = mk_label() in
-         C
-         ISZERO JUMPI(end_label)
-         T
-         JUMPDEST(end_label)
-
-    rule $if(C,T,F) // if C then T else F
-      => let mid_label = mk_label() in
-         let end_label = mk_label() in
-         C
-         ISZERO JUMPI(mid_label)
-         T
-         JUMP(end_label)
-         JUMPDEST(mid_label)
-         F
-         JUMPDEST(end_label)
-
-    rule $with(X,V,E) // let X = V in E
-      => V
-         E // TODO: with height update
+    rule $lll(S1,S2) => $lll(S1,S2;mk_label;mk_label)
+    rule <k>
+         $lll(S1,S2;LBegin,LEnd)
+      => JUMP(LEnd)
+      ~> JUMPDEST(LBegin)
+      ~> ctx(S1, 0, .Map)
+      ~> JUMPDEST(LEnd)
+      ~> PUSH(LBegin) ~> PUSH(LEnd) ~> SUB
+      ~> PUSH(LBegin)
+      ~> S2
+      ~> CODECOPY
+      ~> PUSH(LBegin) ~> PUSH(LEnd) ~> SUB
+         ...</k>
          <height> H </height>
-         <with> X |-> (_ => H) </with>
-         // TODO: fix
+         <with> W </with>
 
-    rule $lll(S1,S2)
-      => let l_begin = mk_label() in
-         let l_end   = mk_label() in
-         JUMP(l_end)
-         JUMPDEST(l_begin)
-         S1 // clean env
-         JUMPDEST(l_end)
-         PUSH(l_begin) PUSH(l_end) SUB
-         PUSH(l_begin)
-         S2
-         CODECOPY
-         PUSH(l_begin) PUSH(l_end) SUB
-
-    rule $seq(S1,S2)
+    rule $seq(S1 S2 Ss)
       => S1
-         POP // TODO: if needed
-         S2
+      ~> #if valency(S1) == 1 #then POP #else . #fi
+      ~> $seq(S2 Ss)
+    rule $seq(S .LLLExps) => S
 
     rule $assert(C)
       => C
-         ISZERO JUMPI(PC)
+      ~> ISZERO ~> JUMPI(PC)
 
 
 ////
@@ -100,6 +113,22 @@ module LLL-EVM
          in
          f(N,nil)
     when N > 0
+
+    rule <k> height(H) => . ... </k>
+         <height> _ => H </height>
+
+    rule <k> with(W) => . ... </k>
+         <with> _ => W </with>
+
+    rule <k>
+         ctx(K,H,W)
+      =>
+         height(H) ~> with(W)
+      ~> K
+      ~> height(H') ~> with(W')
+         ...</k>
+         <height> H' </height>
+         <with> W' </with>
 
 
 
