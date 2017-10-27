@@ -18,6 +18,8 @@ module VIPER-CONFIG
         <global> .Map </global>
         <nextStorage> 0 </nextStorage>
         <nextMem> #reservedMemPos </nextMem>
+        <constant> false </constant>
+        <payable> false </payable>
     </T>
 
 endmodule

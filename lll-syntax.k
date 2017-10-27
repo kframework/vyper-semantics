@@ -41,6 +41,7 @@ module LLL-SYNTAX
                     | "$calldatacopy"  "(" LLLExp "," LLLExp "," LLLExp ")"
                     | "$eq"            "(" LLLExp "," LLLExp ")"
                     | "$iszero"        "(" LLLExp ")"
+                    | "$add"           "(" LLLExp "," LLLExp ")"
 
     syntax LLLExps ::= List{LLLExp, ";"}
 

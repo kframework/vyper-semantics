@@ -29,6 +29,7 @@ module VIPER-SYNTAX
                       | "%return" "(" Expr ")"
                       | "%send" "(" Expr "," Expr ")"
                       | "%selfdestruct" "(" Expr ")"
+                      | "%throw"
     syntax Stmts    ::= List{Stmt, ""}
 
     syntax VarDecl  ::= "%vdecl" "(" Id "," Type ")"
