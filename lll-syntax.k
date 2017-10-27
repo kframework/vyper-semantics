@@ -11,7 +11,7 @@ module LLL-SYNTAX
                     | "$break"
                     | "$with"          "(" LLLExp "," LLLExp "," LLLExp ")"
                     | "$lll"           "(" LLLExp "," LLLExp ")"
-                    | "$seq"           "(" LLLExps ")"
+                    | "$seq"           "(" LLLExp "," LLLExp ")"
                     | "$assert"        "(" LLLExp ")"
                     | "$uclamplt"      "(" LLLExp "," LLLExp ")"
                     | "$uclample"      "(" LLLExp "," LLLExp ")"
@@ -43,13 +43,6 @@ module LLL-SYNTAX
                     | "$iszero"        "(" LLLExp ")"
                     | "$add"           "(" LLLExp "," LLLExp ")"
 
-    syntax LLLExps ::= List{LLLExp, ";"}
-
     syntax LLLConst ::= Int | "~codelen" | "callvalue" | "caller" | "address"
-
-    syntax LLLExps ::= "#extLLL" "(" LLLExps "," LLLExps ")"    [function]
- // -------------------------------------------------------------------------
-    rule #extLLL(.LLLExps, LES) => LES
-    rule #extLLL(E ; ES1, ES2) => E ; #extLLL(ES1, ES2)
 
 endmodule
