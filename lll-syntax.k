@@ -1,7 +1,8 @@
 module LLL-SYNTAX
 
-    syntax LLLExp ::= LLLConst
-                    | LLLEVM
+    syntax LLLExp ::= LLLEVM
+                    | Int
+                    | "$codelen"
                     | "$set"           "(" LLLExp "," LLLExp ")"
                     | "$pass"
                     | "$codeload"      "(" LLLExp ")"
@@ -42,7 +43,10 @@ module LLL-SYNTAX
                     | "$eq"            "(" LLLExp "," LLLExp ")"
                     | "$iszero"        "(" LLLExp ")"
                     | "$add"           "(" LLLExp "," LLLExp ")"
-
-    syntax LLLConst ::= Int | "~codelen" | "callvalue" | "caller" | "address"
+                    | "$return"        "(" LLLExp "," LLLExp ")"
+                    | "$stop"
+                    | "$callvalue"
+                    | "$caller"
+                    | "$address"
 
 endmodule
