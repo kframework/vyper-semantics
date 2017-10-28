@@ -17,6 +17,7 @@ module XEVM-SYNTAX
                   | "RETURN"
                   | "CODECOPY"
                   | "SUB"
+                  | "ADD"
                   | "EQ"
                   | "CALLDATALOAD"
                   | "CALLVALUE"

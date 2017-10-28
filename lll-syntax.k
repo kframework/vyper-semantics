@@ -2,6 +2,7 @@ module LLL-SYNTAX
 
     syntax LLLExp ::= LLLEVM
                     | Int
+                    | Id
                     | "$codelen"
                     | "$set"           "(" LLLExp "," LLLExp ")"
                     | "$pass"

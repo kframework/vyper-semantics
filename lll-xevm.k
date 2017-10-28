@@ -35,6 +35,7 @@ module LLL-XEVM
     rule $callvalue => CALLVALUE
 
     rule $eq(X, Y) => Y ~> X ~> EQ
+    rule $add(X, Y) => Y ~> X ~> ADD
 
     rule $iszero(X) => X ~> ISZERO
 
@@ -48,12 +49,12 @@ module LLL-XEVM
     rule N:Int => push(N)
     when -1 *Int (2 ^Int 255) <=Int N andBool N <Int (2 ^Int 256)
 
-/*
-    rule <k> $var(X) => DUP(H - L) ... </k>
+    rule <k> X:Id => DUP(H -Int L) ... </k>
          <height> H </height>
          <with> ... X |-> L ... </with>
-    when H - L <= 16
+    when H -Int L <=Int 16
 
+/*
     // X := V
     rule <k> $set(X, V) => V ~> SWAP(H - L) ~> POP ... </k>
          <height> H </height>
@@ -82,18 +83,17 @@ module LLL-XEVM
       ~> JUMPDEST(LMid)
       ~> F
       ~> JUMPDEST(LEnd)
+*/
 
     // let X = V in E
-    rule <k>
-         $with(X, V, E)
-      => V
-      ~> ctx(E, H + 1, W[X <- H])
-      ~> #if valency(E) == 0 #then SWAP(1) #else . #fi
-      ~> POP
-         ...</k>
+    rule <k> $with(X, V, E)
+          => V
+          ~> ctx(E, H +Int 1, W[X <- H])
+//        ~> #if valency(E) == 0 #then SWAP(1) #else . #fi // TODO:
+          ~> POP
+         ... </k>
          <height> H </height>
          <with> W </with>
-*/
 
     rule $lll(S1, S2) => lll(S1, S2, newLabel, newLabel)    syntax KItem ::= "lll" "(" LLLExp "," LLLExp "," Label "," Label ")"
     rule <k> lll(S1, S2, LBegin, LEnd)
