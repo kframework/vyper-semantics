@@ -54,13 +54,11 @@ module LLL-XEVM
          <with> ... X |-> L ... </with>
     when H -Int L <=Int 16
 
-/*
     // X := V
-    rule <k> $set(X, V) => V ~> SWAP(H - L) ~> POP ... </k>
+    rule <k> $set(X, V) => V ~> SWAP(H -Int L) ~> POP ... </k>
          <height> H </height>
          <with> ... X |-> L ... </with>
-    when H - L <= 16
-*/
+    when H -Int L <=Int 16
 
     rule $pass => .
 
@@ -72,10 +70,9 @@ module LLL-XEVM
       ~> T
       ~> JUMPDEST(LEnd)
 
-/*
     // if C then T else F
-    rule $if(C, T, F) => if(C, T, F, newLabel, newLabel)
-    rule $if(C, T, F, LMid, LEnd)
+    rule $if(C, T, F) => if(C, T, F, newLabel, newLabel)    syntax KItem ::= "if" "(" LLLExp "," LLLExp "," LLLExp "," Label "," Label ")"
+    rule if(C, T, F, LMid, LEnd)
       => C
       ~> ISZERO ~> JUMPI(LMid)
       ~> T
@@ -83,7 +80,6 @@ module LLL-XEVM
       ~> JUMPDEST(LMid)
       ~> F
       ~> JUMPDEST(LEnd)
-*/
 
     // let X = V in E
     rule <k> $with(X, V, E)
