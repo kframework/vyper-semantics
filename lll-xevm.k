@@ -64,8 +64,7 @@ module LLL-XEVM
     rule $pass => .
 
     // if C then T
-    rule $if(C, T) => if(C, T, newLabel)
-    syntax KItem ::= "if" "(" LLLExp "," LLLExp "," Label ")"
+    rule $if(C, T) => if(C, T, newLabel)    syntax KItem ::= "if" "(" LLLExp "," LLLExp "," Label ")"
     rule if(C, T, LEnd)
       => C
       ~> ISZERO ~> JUMPI(LEnd)
@@ -96,8 +95,7 @@ module LLL-XEVM
          <with> W </with>
 */
 
-    rule $lll(S1, S2) => lll(S1, S2, newLabel, newLabel)
-    syntax KItem ::= "lll" "(" LLLExp "," LLLExp "," Label "," Label ")"
+    rule $lll(S1, S2) => lll(S1, S2, newLabel, newLabel)    syntax KItem ::= "lll" "(" LLLExp "," LLLExp "," Label "," Label ")"
     rule <k> lll(S1, S2, LBegin, LEnd)
           => JUMP(LEnd)
           ~> JUMPDEST(LBegin)
