@@ -127,16 +127,16 @@ module LLL-XEVM
     rule newLabel => label(!N:Int)
 
     syntax KItem ::= "push" "(" Int ")"
-    rule push(0) => PUSH(1, 0)
-    rule push(N) => pushAux(N, 0, .Bytes)
-    when 0 <Int N andBool N <Int (2 ^Int 256)
-    //
+                   | "push" "(" Int "," Int "," Bytes ")"
     rule push(N) => push(N modInt (2 ^Int 256)) // two's complement representation for negative numbers
     when -1 *Int (2 ^Int 255) <=Int N andBool N <Int 0
-
-    syntax KItem ::= "pushAux" "(" Int "," Int "," Bytes ")"
-    rule pushAux(0, S, B) => PUSH(S, B)
-    rule pushAux(N, S, B) => pushAux(N /Int 256, S +Int 1, (N %Int 256) B)
+    //
+    rule push(0) => PUSH(1, 0)
+    rule push(N) => push(N, 0, .Bytes)
+    when 0 <Int N andBool N <Int (2 ^Int 256)
+    //
+    rule push(0, S, B) => PUSH(S, B)
+    rule push(N, S, B) => push(N /Int 256, S +Int 1, (N %Int 256) B)
     when N >Int 0
 
     syntax KItem ::= "height" "(" Int ")"
