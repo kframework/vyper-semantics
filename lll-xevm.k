@@ -65,7 +65,7 @@ module LLL-XEVM
 
     // if C then T
     rule $if(C, T) => if(C, T, newLabel)
-    syntax KItem ::= if(LLLExp, LLLExp, K) [seqstrict(3)]
+    syntax KItem ::= "if" "(" LLLExp "," LLLExp "," K ")" [seqstrict(3)]
     rule if(C, T, LEnd:Label)
       => C
       ~> ISZERO ~> JUMPI(LEnd)
@@ -97,7 +97,7 @@ module LLL-XEVM
 */
 
     rule $lll(S1, S2) => lll(S1, S2, newLabel, newLabel)
-    syntax KItem ::= lll(LLLExp, LLLExp, K, K) [seqstrict(3,4)]
+    syntax KItem ::= "lll" "(" LLLExp "," LLLExp "," K "," K ")" [seqstrict(3,4)]
     rule <k> lll(S1, S2, LBegin:Label, LEnd:Label)
           => JUMP(LEnd)
           ~> JUMPDEST(LBegin)
@@ -126,7 +126,7 @@ module LLL-XEVM
     syntax KItem ::= "newLabel"
     rule newLabel => label(!N:Int)
 
-    syntax KItem ::= push(Int)
+    syntax KItem ::= "push" "(" Int ")"
     rule push(0) => PUSH(1, 0)
     rule push(N) => pushAux(N, 0, .Bytes)
     when 0 <Int N andBool N <Int (2 ^Int 256)
@@ -134,20 +134,20 @@ module LLL-XEVM
     rule push(N) => push(N modInt (2 ^Int 256)) // two's complement representation for negative numbers
     when -1 *Int (2 ^Int 255) <=Int N andBool N <Int 0
 
-    syntax KItem ::= pushAux(Int, Int, Bytes)
+    syntax KItem ::= "pushAux" "(" Int "," Int "," Bytes ")"
     rule pushAux(0, S, B) => PUSH(S, B)
     rule pushAux(N, S, B) => pushAux(N /Int 256, S +Int 1, (N %Int 256) B)
     when N >Int 0
 
-    syntax KItem ::= height(Int)
+    syntax KItem ::= "height" "(" Int ")"
     rule <k> height(H) => . ... </k>
          <height> _ => H </height>
 
-    syntax KItem ::= with(Map)
+    syntax KItem ::= "with" "(" Map ")"
     rule <k> with(W) => . ... </k>
          <with> _ => W </with>
 
-    syntax KItem ::= ctx(K, Int, Map)
+    syntax KItem ::= "ctx" "(" K "," Int "," Map ")"
     rule <k> ctx(K, H, W)
           => height(H) ~> with(W)
           ~> K

@@ -1,15 +1,18 @@
 module XEVM-SYNTAX
 
-    syntax XEVM ::= "MSTORE"
+    syntax XEVM ::= YEVM
+                  | "DUP"       "(" Int ")"
+                  | "SWAP"      "(" Int ")"
+                  | "PUSH"      "(" Int "," Bytes ")"
+                  | "PUSH"      "(" Label ")"
+                  | "JUMP"      "(" Label ")"
+                  | "JUMPI"     "(" Label ")"
+                  | "JUMPDEST"  "(" Label ")"
+
+    syntax YEVM ::= "MSTORE"
                   | "MLOAD"
-                  | PUSH(Int, Bytes) | PUSH(Label)
-                  | DUP(Int)
-                  | SWAP(Int)
                   | "POP"
                   | "ISZERO"
-                  | JUMP(Label)
-                  | JUMPI(Label)
-                  | JUMPDEST(Label)
                   | "PC"
                   | "RETURN"
                   | "CODECOPY"
@@ -19,7 +22,7 @@ module XEVM-SYNTAX
                   | "CALLVALUE"
                   | "STOP"
 
-    syntax Label ::= label(Int)
+    syntax Label ::= "label" "(" Int ")"
                    | "pc"
 
     syntax Bytes ::= List{Int,""}
