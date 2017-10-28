@@ -65,8 +65,8 @@ module LLL-XEVM
 
     // if C then T
     rule $if(C, T) => if(C, T, newLabel)
-    syntax KItem ::= "if" "(" LLLExp "," LLLExp "," K ")" [seqstrict(3)]
-    rule if(C, T, LEnd:Label)
+    syntax KItem ::= "if" "(" LLLExp "," LLLExp "," Label ")"
+    rule if(C, T, LEnd)
       => C
       ~> ISZERO ~> JUMPI(LEnd)
       ~> T
@@ -97,8 +97,8 @@ module LLL-XEVM
 */
 
     rule $lll(S1, S2) => lll(S1, S2, newLabel, newLabel)
-    syntax KItem ::= "lll" "(" LLLExp "," LLLExp "," K "," K ")" [seqstrict(3,4)]
-    rule <k> lll(S1, S2, LBegin:Label, LEnd:Label)
+    syntax KItem ::= "lll" "(" LLLExp "," LLLExp "," Label "," Label ")"
+    rule <k> lll(S1, S2, LBegin, LEnd)
           => JUMP(LEnd)
           ~> JUMPDEST(LBegin)
           ~> ctx(S1, 0, .Map)
@@ -123,7 +123,7 @@ module LLL-XEVM
 
 ////
 
-    syntax KItem ::= "newLabel"
+    syntax Label ::= "newLabel" [function]
     rule newLabel => label(!N:Int)
 
     syntax KItem ::= "push" "(" Int ")"
