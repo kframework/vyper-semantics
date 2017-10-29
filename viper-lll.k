@@ -1,6 +1,7 @@
 require "viper-lll-interface.k"
 require "viper-config.k"
 require "utils.k"
+require "domains.k"
 
 module VIPER-LLL
     imports VIPER-LLL-INTERFACE
@@ -12,13 +13,12 @@ module VIPER-LLL
     imports KRYPTO
 
     syntax CompileCode ::= LLLExps
-                         | TypedAddr
 
 
-    syntax KResult     ::= LLLExp
-                         | LLLExps
+    syntax KResult     ::= LLLExps
                          | TypedAddr
                          | Bool
+                         | Int
    
 
     syntax KItem     ::= "#compileViperToLLL"    "(" Pgm ")"
@@ -55,14 +55,13 @@ module VIPER-LLL
                         $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0));.LLLExps)</lll>
 
 
-    syntax TypedAddr ::= "@taddr" "(" Type "," Int "," Bool /*mutable*/ ")"
-                       | "@taddr" "(" Map ")"    // struct
+    syntax TypedAddr ::= "@taddr" "(" Type "," Int "," Bool /*global*/ "," Bool /*mutable*/ ")"
     syntax KItem     ::= "#resolveGlobals" "(" Globals ")"
- // ------------------------------------------------------
+ // -------------------------------------------------------------------------------------------
     rule #resolveGlobals(.Globals) => .
 
     rule <k> #resolveGlobals(%svdecl(NAME, T, _) GS) => #resolveGlobals(GS) ... </k>
-         <global> GLOBAL => GLOBAL[%svar(NAME) <- @taddr(T, LOC, true)] </global>
+         <global> GLOBAL => GLOBAL[%svar(NAME) <- @taddr(T, LOC, true, true)] </global>
          <nextStorage> LOC => LOC +Int 1 </nextStorage>
 
 
@@ -75,13 +74,19 @@ module VIPER-LLL
                                                  Bool        /*is init?*/
                                              ")"                         [seqstrict]
  // --------------------------------------------------------------------------------
-    rule #resolveFunc(%fdecl(DECS, NAME, PARAMS, T, STMTS))
-             => #resolveFuncAux(#copyInput(PARAMS, #isInitFunc(NAME)),
-                                #checkDecorators(DECS),
-                                #fillParams(PARAMS, 0, #isInitFunc(NAME)),
-                                #resolveStmts(STMTS),
-                                #generateMethodId(NAME, PARAMS),
-                                #isInitFunc(NAME))
+    rule <k> #resolveFunc(%fdecl(DECS, NAME, PARAMS, T, STMTS))
+                 => #resolveFuncAux(#copyInput(PARAMS, #isInitFunc(NAME)),
+                                    #checkDecorators(DECS),
+                                    #fillParams(PARAMS, 0, #isInitFunc(NAME)),
+                                    #resolveStmts(STMTS),
+                                    #generateMethodId(NAME, PARAMS),
+                                    #isInitFunc(NAME))
+                 ~> #env(ENV, LOC, ISCONSTANT, ISPAYABLE) ... </k>
+         <env> ENV </env>
+         <nextMem> LOC </nextMem>
+         <constant> ISCONSTANT </constant>
+         <payable> ISPAYABLE </payable>
+
 
     rule #resolveFuncAux(COPYINPUT, CHECKDECS, FILLPARAMS, STMTS, _, true)
              => $%seq(COPYINPUT ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL STMTS);.LLLExps
@@ -173,6 +178,7 @@ module VIPER-LLL
     syntax CompileCode ::= "#resolveStmt"     "(" Stmt ")"
  // ------------------------------------------------------
     rule #resolveStmt(%throw) => $assert(0);.LLLExps
+    rule #resolveStmt(STMT) => .LLLExps
 
 
     syntax CompileCode ::= "#resolveStmts"    "(" Stmts ")"
@@ -196,12 +202,13 @@ module VIPER-LLL
  // --------------------------------------
    
 
-    syntax KItem     ::= "#env" "(" Map "," Int ")"
- // ----------------------------------------------
-    rule <k> #env(ENV, I) => . ...</k>
+    syntax KItem     ::= "#env" "(" Map "," Int "," Bool "," Bool ")"
+ // -----------------------------------------------------------------
+    rule <k> CODE:LLLExps ~> (#env(ENV, LOC, ISCONSTANT, ISPAYABLE) => .) ...</k>
          <env> _ => ENV </env>
-         <nextMem> _ => I </nextMem>            [structural]
-    rule (#env(_, _) => .) ~> #env(_, _)        [structural]
+         <nextMem> _ => LOC </nextMem>
+         <constant> _ => ISCONSTANT </constant>
+         <payable> _ => ISPAYABLE </payable>                [structural]
 
 
     syntax KItem    ::= "#exception" "(" String ")"
@@ -223,7 +230,7 @@ module VIPER-LLL
  // ---------------------------------------------------------------------------------------------------
     rule #allocVar(V, %struct(VARDECLS), LOC, M, ISMUTABLE) => #flattenStruct(V, VARDECLS, LOC, M, ISMUTABLE)
 
-    rule #allocVar(V, T, LOC, M, ISMUTABLE) => M[V <- @taddr(T, LOC, ISMUTABLE)]    requires notBool isStructType(T)
+    rule #allocVar(V, T, LOC, M, ISMUTABLE) => M[V <- @taddr(T, LOC, false, ISMUTABLE)]    requires notBool isStructType(T)
 
     rule #flattenStruct(V, .VarDecls, LOC, M, ISMUTABLE) => M
 
@@ -304,7 +311,8 @@ module VIPER-LLL
     rule #generateMethodId(__init__, PARAMS) => 0
 
     rule #generateMethodId(NAME, PARAMS)
-             => #hex2Int(substrString(Keccak256(#generateSignature(Id2String(NAME) +String "(", PARAMS)), 0, 8))
+             => String2Base(substrString(Keccak256(#generateSignature(Id2String(NAME) +String "(", PARAMS)), 0, 8), 16)
+      requires NAME =/=K __init__
 
 
     syntax LLLExps  ::= List{LLLExp, ";"}
