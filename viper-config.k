@@ -12,7 +12,7 @@ module VIPER-CONFIG
     configuration
     <T>
         <k> #compileViperToLLL($PGM:Pgm) </k>
-        <lll> .LLLExps </lll>
+        <lll> .K </lll>
         <lllCodeStack> .List </lllCodeStack>
         <env> .Map </env>
         <global> .Map </global>
