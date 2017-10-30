@@ -112,8 +112,24 @@ module LLL-XEVM
       ~> S2
 
     rule $assert(C)
-      => C
-      ~> ISZERO ~> JUMPI(pc)
+      => C ~> assertTrue
+
+    rule $uclamplt(X, UB) => X ~> UB ~> DUP(2) ~>  LT ~> assertTrue   /* X <  UB */
+    rule $uclample(X, UB) => X ~> UB ~> DUP(2) ~>  GT ~> assertFalse  /* X <= UB */
+    rule  $clamplt(X, UB) => X ~> UB ~> DUP(2) ~> SLT ~> assertTrue   /* X <  UB */
+    rule  $clample(X, UB) => X ~> UB ~> DUP(2) ~> SGT ~> assertFalse  /* X <= UB */
+
+    rule $uclampgt(X, LB) => X ~> LB ~> DUP(2) ~>  GT ~> assertTrue   /* X >  LB */
+    rule $uclampge(X, LB) => X ~> LB ~> DUP(2) ~>  LT ~> assertFalse  /* X >= LB */
+    rule  $clampgt(X, LB) => X ~> LB ~> DUP(2) ~> SGT ~> assertTrue   /* X >  LB */
+    rule  $clampge(X, LB) => X ~> LB ~> DUP(2) ~> SLT ~> assertFalse  /* X >= LB */
+
+    rule $uclamp(LB, X, UB)
+      => LB ~> X ~> DUP(1) ~> UB ~> SWAP(1) ~>  GT ~> assertFalse /* X <= UB */
+            ~> DUP(1) ~> SWAP(2) ~> SWAP(1) ~>  LT ~> assertFalse /* X >= LB */
+    rule  $clamp(LB, X, UB)
+      => LB ~> X ~> DUP(1) ~> UB ~> SWAP(1) ~> SGT ~> assertFalse /* X <= UB */
+            ~> DUP(1) ~> SWAP(2) ~> SWAP(1) ~> SLT ~> assertFalse /* X >= LB */
 
 ////
 
@@ -149,5 +165,13 @@ module LLL-XEVM
          ... </k>
          <height> H' </height>
          <with> W' </with>
+
+    syntax KItem ::= "assertTrue"
+    rule assertTrue
+      => ISZERO ~> JUMPI(pc)
+
+    syntax KItem ::= "assertFalse"
+    rule assertFalse
+      => JUMPI(pc)
 
 endmodule

@@ -17,7 +17,7 @@
           $seq($with(
                  _mloc,
                  320 ,
-                 $mstore( _mloc, $add( $mload( _mloc), 1) )
+                 $mstore( _mloc, $clamp( $mload( 96), $add( $mload( _mloc), 1), $mload( 64)))
                ),
                $stop
           ))))
