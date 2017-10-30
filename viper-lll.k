@@ -12,16 +12,28 @@ module VIPER-LLL
     imports STRING
     imports KRYPTO
 
+
+    syntax TypedAddr ::= "@taddr" "(" Type "," Int "," Bool /*global*/ "," Bool /*mutable*/ ")"
+                       | "@notfound"
+
+    syntax TypedLLLExp  ::= "@tlll"  "(" Type "," LLLExp ")"
+    syntax TypedLLLExps ::= "@tllls" "(" Type "," LLLExp ")"
+
+
     // Convention: C'Sort' is an one-one corresponding supersort of Sort which
     //             requires for evaluation (i.e. not KResult).
     syntax CLLLExp  ::= LLLExp
     syntax CLLLExps ::= LLLExps
+    syntax CTypedLLLExp  ::= TypedLLLExp
+    syntax CTypedLLLExps ::= TypedLLLExps
     syntax CType    ::= Type
     syntax CTypedAddr ::= TypedAddr
 
 
     syntax KResult  ::= LLLExp
                       | LLLExps
+                      | TypedLLLExp
+                      | TypedLLLExps
                       | TypedAddr
                       | Type
                       | Bool
@@ -62,8 +74,6 @@ module VIPER-LLL
                         $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0));.LLLExps)</lll>
 
 
-    syntax TypedAddr ::= "@taddr" "(" Type "," Int "," Bool /*global*/ "," Bool /*mutable*/ ")"
-                       | "@notfound"
     syntax KItem     ::= "#resolveGlobals" "(" Globals ")"
  // -------------------------------------------------------------------------------------------
     rule #resolveGlobals(.Globals) => .
@@ -110,7 +120,7 @@ module VIPER-LLL
 
 
     rule #resolveFuncAux(COPYINPUT, CHECKDECS, FILLPARAMS, STMTS, _, true)
-             => $%seq(COPYINPUT ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL STMTS);.LLLExps
+             => $%seq(COPYINPUT ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL $%seq(STMTS));.LLLExps
 
     rule #resolveFuncAux(COPYINPUT, CHECKDECS, FILLPARAMS, STMTS, METHODID, false)
              => $if(
@@ -184,8 +194,8 @@ module VIPER-LLL
 
 
     syntax CLLLExps ::= "#resolveStmts"    "(" Stmts ")"
-    syntax CLLLExps ::= "#resolveStmtsAux" "(" Stmts "," CLLLExps ")"
- // -------------------------------------------------------------------------
+    syntax CLLLExps ::= "#resolveStmtsAux" "(" Stmts "," CLLLExps ")"  [strict(2)]
+ // ------------------------------------------------------------------------------
     rule #resolveStmts(.Stmts) => .LLLExps
 
     rule #resolveStmts(STMT .Stmts) => #resolveStmt(STMT)
@@ -200,16 +210,28 @@ module VIPER-LLL
 
     syntax CLLLExps ::= "#resolveStmt"     "(" Stmt ")"
  // -------------------------------------------------------
-    rule #resolveStmt(%assign(V, E)) => #assignHelper(V, #resolveExpr(E), #resolveExprType(E))
+    rule #resolveStmt(%assign(V, E)) => #assign(V, #resolveExpr(E))
+
     rule #resolveStmt(%throw) => $assert(0);.LLLExps
 
 
-    syntax CLLLExp ::= "#assignHelper" "(" Var                            ","
-                                           CLLLExp  /*compiled Expr*/     ","
-                                           CType    /*resovled ExprType*/
-                                       ")"                   [seqstrict(2,3)]
- // -------------------------------------------------------------------------
-    rule #assignHelper(V, CODE:LLLExp, T:Type) => #mkSetter(#lookupOrAllocVar(V, T), CODE, T)
+    syntax CLLLExps ::= "#assign"    "(" Var                             ","
+                                         CTypedLLLExp  /*compiled Expr*/
+                                     ")"                      [seqstrict(2)]
+    syntax CLLLExps ::= "#assignAux" "(" CTypedAddr /*variable address*/ ","
+                                         TypedLLLExp
+                                     ")"                         [strict(1)]
+ // ------------------------------------------------------------------------
+    rule #assign(V, @tlll(T, CODE)) => #assignAux(#lookupOrAllocVar(V, T), @tlll(T, CODE))
+
+    rule <k> #assignAux(@taddr(LEFTT, LOC, ISGLOBAL, ISMUTABLE), CODE)
+                 => #ifThen((ISGLOBAL ==K true andBool ISCONSTANT ==K true),
+                            #exception("Cannot modify storage inside a constant function!"))
+                 ~> #ifThen(ISMUTABLE ==K false,
+                            #exception("Cannot modify function argument"))
+                 ~> #convertToLLLExps(#mkSetter(@taddr(LEFTT, LOC, ISGLOBAL, ISMUTABLE), CODE))
+                 ... </k>
+         <constant> ISCONSTANT </constant>
 
 
     syntax CTypedAddr ::= "#lookupVar" "(" Var ")"
@@ -254,44 +276,82 @@ module VIPER-LLL
       requires notBool %svar(NAME) in keys(GLOBAL)
 
 
-    syntax LLLExp  ::= "#mkSetter"    "(" CTypedAddr /*left variable address*/   ","
-                                          LLLExp     /*right compiled Expr*/     ","
-                                          Type       /*right resovled ExprType*/
-                                      ")"                                [strict(1)]
-    syntax LLLExp  ::= "#mkSetterAux" "(" TypedAddr "," LLLExp "," Type ")"
- // --------------------------------------------------------------------------------
-    rule <k> #mkSetter(@taddr(_, _, true, _), _, _)
-                 => #exception("Cannot modify storage inside a constant function!") ... </k>
-         <constant> true </constant>
+    syntax CLLLExp ::= "#mkSetter"    "(" TypedAddr    /*left variable address*/   ","
+                                          TypedLLLExp  /*right compiled Expr*/
+                                      ")"
+    syntax CLLLExp ::= "#mkSetterForBase" "("TypedAddr "," CLLLExp "," Type ")"    [strict(2)]
+ // ----------------------------------------------------------------------------------------------
+    rule #mkSetter(@taddr(LEFTT, LOC, ISGLOBAL, ISMUTABLE), @tlll(RIGHTT, CODE))
+             => #mkSetterForBase(@taddr(LEFTT, LOC, ISGLOBAL, ISMUTABLE),
+                                 #baseTypeConvert(CODE, RIGHTT, LEFTT),
+                                 RIGHTT)
+      requires isBaseType(LEFTT)
 
-    rule <k> #mkSetter(@taddr(_, _, false, false), _, _)
-                 => #exception("Cannot modify function argument") ...</k>
+    rule #mkSetterForBase(@taddr(_, LOC, true, _), CODE, _) => $sstore(LOC, CODE)
 
-    rule <k> #mkSetter(@taddr(LEFTT, LOC, ISGLOBAL, true), CODE, RIGHTT)
-                 => #mkSetterAux(@taddr(LEFTT, LOC, ISGLOBAL, true), CODE, RIGHTT) ... </k>
-         <constant> ISCONSTANT </constant>
-       requires ISGLOBAL =/=K ISCONSTANT
+    rule #mkSetterForBase(@taddr(_, LOC, false, _), CODE, _) => $mstore(LOC, CODE)
 
 
 
-    syntax CLLLExp ::= "#resolveExpr" "(" Expr ")"
- // --------------------------------------------------
-    rule #resolveExpr(%self) => $address
+    syntax CLLLExp ::= "#baseTypeConvert" "(" LLLExp "," Type /*from*/ "," Type /*to*/ ")"
+ // --------------------------------------------------------------------------------------
+    rule #baseTypeConvert(CODE, FROMT, TOT)
+             => #ifThenElse(notBool(isBaseType(FROMT)) orBool notBool(isBaseType(TOT)),
+                            #exception("Base type conversion from or to non-base type."),
+                  #ifThenElse(FROMT ==K TOT,
+                              CODE,
+                    #ifThenElse(FROMT ==K %num andBool TOT ==K %decimal,
+                                $mul(CODE, #decimalDivisor),
+                                #exception("Typecasting unavailable"))))
 
-    rule <k> #resolveExpr(%var(NAME)) => $mload(LOC) ...</k>
-         <env> %var(NAME) |-> @taddr(_, LOC, _, _) ENV </env>
+
+    syntax CTypedLLLExp ::= "#resolveExpr" "(" Expr ")"
+    syntax CTypedLLLExp ::= "#binOp" "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [strict(2,3)]
+ // -----------------------------------------------------------------------------------------------
+    rule #resolveExpr(%self) => @tlll(%address, $address)
+
+    // Number
+    rule #resolveExpr(I:Int) => #ifThenElse(
+                                  (I >=Int -2 ^Int 127 +Int 1) andBool (I <=Int 2 ^Int 127 -Int 1),
+                                  @tlll(%num, I),
+                                  #exception("Number out of range")
+                                )
+
+    // Arithmetic
+    syntax CTypedLLLExp ::= "#binOp"    "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [strict(2,3)]
+    syntax CTypedLLLExp ::= "#binOpAux" "(" BinOp "," TypedLLLExp "," TypedLLLExp ")"
+    syntax CTypedLLLExp ::= "#clampArithResult" "(" CTypedLLLExp ")"                     [strict]
+ // --------------------------------------------------------------------------------------------------
+    rule #resolveExpr(%binop(BOP, LEFTE, RIGHTE)) => #binOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+
+    rule #binOp(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE))
+             => #ifThen(notBool(#isNumericType(LT)) orBool notBool(#isNumericType(RT)),
+                        #exception("Unsupported types for arithmetic op"))
+             ~> #clampArithResult(#binOpAux(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE)))
+
+    rule #clampArithResult(@tlll(%num, CODE))
+              => @tlll(%num, $clamp($mload(#minNumPos), CODE, $mload(#maxNumPos)))
+
+    rule #clampArithResult(@tlll(%decimal, CODE))
+              => @tlll(%decimal, $clamp($mload(#minDecimalPos), CODE, $mload(#maxDecimalPos)))
+
+    rule #binOpAux(+, @tlll(LT, LCODE), @tlll(RT, RCODE))
+             => #ifThenElse(LT ==K RT,
+                            @tlll(LT, $add(LCODE, RCODE)),
+                  #ifThenElse(LT ==K %num andBool RT ==K %decimal,
+                              @tlll(%decimal, $add($mul(LCODE, #decimalDivisor), RCODE)),
+                    #ifThenElse(LT ==K %decimal andBool RT ==K %num,
+                                @tlll(%decimal, $add(LCODE, $mul(RCODE, #decimalDivisor))),
+                                #exception("How did I get here?"))))
+
+
+    // Var
+    rule <k> #resolveExpr(%var(NAME)) => @tlll(T, $mload(LOC)) ...</k>
+         <env> %var(NAME) |-> @taddr(T, LOC, _, _) ENV </env>
 
     rule <k> #resolveExpr(%var(NAME)) => #exception("Undeclared Variable:" +String Id2String(NAME)) ...</k>
          <env> ENV </env>
       requires notBool %var(NAME) in keys(ENV)
-
-
-    syntax CType   ::= "#resolveExprType" "(" Expr ")"
- // --------------------------------------------------
-    rule #resolveExprType(%self) => %address
-
-    rule <k> #resolveExprType(%var(NAME)) => T ...</k>
-         <env> %var(NAME) |-> @taddr(T, _, _, _) ENV </env>
    
 
     syntax KItem       ::= "#env" "(" Map "," Int "," Bool "," Bool ")"
@@ -301,6 +361,11 @@ module VIPER-LLL
          <nextMem> _ => LOC </nextMem>
          <constant> _ => ISCONSTANT </constant>
          <payable> _ => ISPAYABLE </payable>                [structural]
+
+
+    syntax CLLLExps    ::= "#convertToLLLExps" "(" CLLLExp ")"  [strict]
+ // --------------------------------------------------------------------
+    rule #convertToLLLExps(CODE) => CODE;.LLLExps
 
 
     syntax KItem       ::= "#exception" "(" String ")"
@@ -462,10 +527,10 @@ module VIPER-LLL
  // ------------------------------------------------------
     rule #initializer_lll => $%seq(
                                $mstore(28 , $calldataload(0));
-                               $mstore(#addrSizePos , 2  ^Int 160);
-                               $mstore(#maxNumPos , 2  ^Int 127 -Int 1);
+                               $mstore(#addrSizePos , 2 ^Int 160);
+                               $mstore(#maxNumPos , 2 ^Int 127 -Int 1);
                                $mstore(#minNumPos , -2 ^Int 127);
-                               $mstore(#maxDecimalPos, (2  ^Int 127 -Int 1) *Int 10000000000);
+                               $mstore(#maxDecimalPos, (2 ^Int 127 -Int 1) *Int 10000000000);
                                $mstore(#minDecimalPos, (-2 ^Int 127) *Int 10000000000)
                              );.LLLExps
 
@@ -474,6 +539,26 @@ module VIPER-LLL
  // --------------------------------------------------------------
     rule #sizeOfStmts(.Stmts) => 0
     rule #sizeOfStmts(STMT STMTS) => 1 +Int #sizeOfStmts(STMTS)
+
+
+    syntax Bool   ::= "#isNumericType" "(" Type ")"     [function]
+ // --------------------------------------------------------------
+    rule #isNumericType(%num) => true
+    rule #isNumericType(%decimal) => true
+    rule #isNumericType(T) => false
+      requires T =/=K %num andBool T =/=K %decimal
+
+
+    syntax KItem  ::= "#ifThen" "(" Bool /*condition*/ "," K /*then*/ ")"
+ // ---------------------------------------------------------------------
+    rule #ifThen(true, THENCLAUSE) => THENCLAUSE
+    rule #ifThen(false, THENCLAUSE) => .
+
+
+    syntax KItem  ::= "#ifThenElse" "(" Bool /*condition*/ "," K /*then*/ "," K /*else*/ ")"
+ // ----------------------------------------------------------------------------------------
+    rule #ifThenElse(true, THENCLAUSE, ELSECLAUSE) => THENCLAUSE
+    rule #ifThenElse(false, THENCLAUSE, ELSECLAUSE) => ELSECLAUSE
 
 
 endmodule

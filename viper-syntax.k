@@ -43,14 +43,18 @@ module VIPER-SYNTAX
                       | "%arr"  "(" Var "," Expr ")"
                       | "%self"
 
-    syntax Expr     ::= Const | Var
-                      | "%const"    "(" Const ")"
-                      | "%binop"    "(" BinOp    "," Expr "," Expr ")"
-                      | "%unaryop"  "(" UnaryOp  "," Expr ")"
-                      | "%typecast" "(" BaseType "," Expr ")"
+    syntax Expr     ::= Const
+                      | Var
+                      | "%binop"    "(" BinOp     "," Expr "," Expr ")"
+                      | "%compare"  "(" CompareOp "," Expr "," Expr ")"
+                      | "%boolop"   "(" BoolOp    "," Expr "," Expr ")"
+                      | "%unaryop"  "(" UnaryOp   "," Expr ")"
+                      | "%typecast" "(" BaseType  "," Expr ")"
                       | "%floor"    "(" Expr ")"
 
-    syntax Const    ::= Int | String
+    syntax Const    ::= Int
+                      | String
+                      | Bool
 
     syntax Type          ::= "%void"
                            | BaseType
@@ -70,8 +74,10 @@ module VIPER-SYNTAX
     syntax StructType    ::= "%struct" "(" VarDecls ")"
 
     syntax BinOp         ::= "+" | "-" | "*" | "/" | "%"
-                           | "and" | "or"
-                           | "<" | "<=" | ">" | ">=" | "==" | "!="
+
+    syntax CompareOp     ::= "<" | "<=" | ">" | ">=" | "==" | "!="
+
+    syntax BoolOp        ::= "and" | "or"
 
     syntax UnaryOp       ::= "not"
 

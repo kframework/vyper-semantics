@@ -44,6 +44,7 @@ module LLL-SYNTAX
                     | "$eq"            "(" LLLExp "," LLLExp ")"
                     | "$iszero"        "(" LLLExp ")"
                     | "$add"           "(" LLLExp "," LLLExp ")"
+                    | "$mul"           "(" LLLExp "," LLLExp ")"
                     | "$return"        "(" LLLExp "," LLLExp ")"
                     | "$stop"
                     | "$callvalue"

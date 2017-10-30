@@ -15,6 +15,7 @@ module UTILS
     syntax Int  ::= "#freeVarPos"         [function]
     syntax Int  ::= "#blankPos"           [function]
     syntax Int  ::= "#freeLoopIndexPos"   [function]
+    syntax Int  ::= "#decimalDivisor"     [function]
  // ------------------------------------------------
     rule #reservedMemPos => 320
     rule #addrSizePos => 32
@@ -25,6 +26,7 @@ module UTILS
     rule #freeVarPos => 192
     rule #blankPos => 224
     rule #freeLoopIndexPos => 256
+    rule #decimalDivisor => 10000000000
 
 
 endmodule
