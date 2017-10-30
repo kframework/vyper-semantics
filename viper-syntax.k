@@ -41,6 +41,7 @@ module VIPER-SYNTAX
                       | "%svar" "(" Id ")"
                       | "%mem"  "(" Var "," Id ")"
                       | "%arr"  "(" Var "," Expr ")"
+                      | "%self"
 
     syntax Expr     ::= Const | Var
                       | "%const"    "(" Const ")"
