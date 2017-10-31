@@ -21,6 +21,7 @@ module VIPER-SYNTAX
                       | "%assign"    "(" Var "," Expr ")"
                       | "%augassign" "(" AugAssignOp "," Var "," Expr ")"
                       | "%if"        "(" Expr "," Stmts "," Stmts ")"
+                      | "%if"        "(" Expr "," Stmts ")"
                       | "%for"       "(" Id "," Int "," Stmts ")"
                       | "%for"       "(" Id "," Expr "," Int "," Stmts ")"
                       | "%pass"
@@ -75,7 +76,7 @@ module VIPER-SYNTAX
 
     syntax BinOp         ::= "+" | "-" | "*" | "/" | "%"
 
-    syntax CompareOp     ::= "<" | "<=" | ">" | ">=" | "==" | "!="
+    syntax CompareOp     ::= "%lt" | "%le" | "%gt" | "%ge" | "%eq" | "%ne"
 
     syntax BoolOp        ::= "and" | "or"
 

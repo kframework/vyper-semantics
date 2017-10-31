@@ -200,12 +200,7 @@ module VIPER-LLL
     syntax CLLLExps ::= "#resolveStmts"    "(" Stmts ")"
     syntax CLLLExps ::= "#resolveStmtsAux" "(" Stmts "," CLLLExps ")"  [strict(2)]
  // ------------------------------------------------------------------------------
-    rule #resolveStmts(.Stmts) => .LLLExps
-
-    rule #resolveStmts(STMT .Stmts) => #resolveStmt(STMT)
-
     rule #resolveStmts(STMTS) => #resolveStmtsAux(STMTS, .LLLExps)
-      requires #sizeOfStmts(STMTS) >Int 1
 
     rule #resolveStmtsAux(.Stmts, CODE) => CODE
 
@@ -217,6 +212,12 @@ module VIPER-LLL
     rule #resolveStmt(%assign(V, E)) => #assign(V, #resolveExpr(E))
 
     rule #resolveStmt(%augassign(OP, V, E)) => #augassign(OP, #lookupVar(V), #resolveExpr(E))
+
+    rule #resolveStmt(%if(TEST, THENSTMTS, ELSESTMTS)) => #if(#resolveExpr(TEST),
+                                                              #resolveStmts(THENSTMTS),
+                                                              #resolveStmts(ELSESTMTS))
+
+    rule #resolveStmt(%if(TEST, THENSTMTS)) => #if(#resolveExpr(TEST), #resolveStmts(THENSTMTS))
 
     rule #resolveStmt(%throw) => $assert(0);.LLLExps
 
@@ -243,14 +244,10 @@ module VIPER-LLL
     syntax CLLLExps ::= "#augassign"    "(" AugAssignOp                     ","
                                             CTypedAddr /*variable address*/ ","
                                             CTypedLLLExp  /*compiled Expr*/
-                                        ")"                       [strict(2,3)]
+                                        ")"                    [seqstrict(2,3)]
     syntax CLLLExps ::= "#augassignAux" "(" TypedAddr /*variable address*/  ","
                                             CLLLExp   /*compiled Expr*/
                                         ")"                         [strict(2)]
-    syntax CTypedLLLExp ::= "#convertToBinaryArith" "(" AugAssignOp           ","
-                                                        TypedLLLExp  /*left*/ ","
-                                                        TypedLLLExp  /*right*/
-                                                    ")"
  // -----------------------------------------------------------------------------
     rule <k> #augassign(OP, @taddr(LT, LOC, true, _), @tlll(RT, CODE))
                => #exception("Cannot modify storage inside a constant function!") ... </k>
@@ -272,7 +269,17 @@ module VIPER-LLL
 
     rule #augassignAux(@taddr(_, LOC, false, _), CODE) => $with($mloc, LOC, $mstore($mloc, CODE));.LLLExps
 
-    rule #convertToBinaryArith(+=, LEXP, REXP) => #binOp(+, LEXP, REXP)
+
+    syntax CLLLExps ::= "#if" "(" CTypedLLLExp /*TEST*/ ","
+                                  CLLLExps     /*Then*/ ","
+                                  CLLLExps     /*Else*/
+                              ")"               [seqstrict]
+    syntax CLLLExps ::= "#if" "(" CTypedLLLExp /*TEST*/ ","
+                                  CLLLExps     /*Then*/
+                              ")"               [seqstrict]
+ // --------------------------------------------------------
+    rule #if(@tlll(_, CODE), THEN:LLLExps, ELSE:LLLExps) => $if(CODE, $%seq(THEN), $%seq(ELSE));.LLLExps
+    rule #if(@tlll(_, CODE), THEN:LLLExps, ELSE) => $if(CODE, $%seq(THEN));.LLLExps
 
 
     syntax CTypedAddr ::= "#lookupVar" "(" Var ")"
@@ -334,6 +341,13 @@ module VIPER-LLL
     rule #mkSetterForBase(@taddr(_, LOC, false, _), CODE, _) => $mstore(LOC, CODE)
 
 
+    syntax CTypedLLLExp ::= "#convertToBinaryArith" "(" AugAssignOp           ","
+                                                        TypedLLLExp  /*left*/ ","
+                                                        TypedLLLExp  /*right*/
+                                                    ")"
+ // ------------------------------------------------------------------------------
+    rule #convertToBinaryArith(+=, LEXP, REXP) => #binOp(+, LEXP, REXP)
+
 
     syntax CLLLExp ::= "#baseTypeConvertL" "(" CLLLExp "," Type /*from*/ "," Type /*to*/ ")"  [strict(1)]
  // -----------------------------------------------------------------------------------------------------
@@ -362,6 +376,11 @@ module VIPER-LLL
  // -----------------------------------------------------------------------------------------------
     rule #resolveExpr(%self) => @tlll(%address, $address)
 
+    rule #resolveExpr(%binop(BOP, LEFTE, RIGHTE)) => #binOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+
+    rule #resolveExpr(%compare(COP, LEFTE, RIGHTE)) => #compareOp(COP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+
+
     // Number
     rule #resolveExpr(I:Int) => #ifThenElse(
                                   (I >=Int -2 ^Int 127 +Int 1) andBool (I <=Int 2 ^Int 127 -Int 1),
@@ -370,11 +389,9 @@ module VIPER-LLL
                                 )
 
     // Arithmetic
-    syntax CTypedLLLExp ::= "#binOp"    "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [strict(2,3)]
+    syntax CTypedLLLExp ::= "#binOp"    "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
     syntax CTypedLLLExp ::= "#binOpAux" "(" BinOp "," TypedLLLExp "," TypedLLLExp ")"
- // --------------------------------------------------------------------------------------------------
-    rule #resolveExpr(%binop(BOP, LEFTE, RIGHTE)) => #binOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
-
+ // -----------------------------------------------------------------------------------------------------
     rule #binOp(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE))
              => #ifThen(notBool(#isNumericType(LT)) orBool notBool(#isNumericType(RT)),
                         #exception("Unsupported types for arithmetic op"))
@@ -388,6 +405,70 @@ module VIPER-LLL
                     #ifThenElse(LT ==K %decimal andBool RT ==K %num,
                                 @tlll(%decimal, $add(LCODE, $mul(RCODE, #decimalDivisor))),
                                 #exception("How did I get here?"))))
+
+    // Compare
+    syntax CTypedLLLExp ::= "#compareOp"    "(" CompareOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
+    syntax CTypedLLLExp ::= "#compareOpAux" "(" CompareOp "," TypedLLLExp "," TypedLLLExp ")"
+ // ----------------------------------------------------------------------------------------------------------
+    rule #compareOp(COP, @tlll(LT, LCODE), @tlll(RT, RCODE))
+           => #ifThen(notBool(#isNumericType(LT)) orBool notBool(#isNumericType(RT)),
+                #ifThen(COP =/=K %eq andBool COP =/=K %ne,
+                        #exception("Invalid type for comparison op")))
+           ~> #compareOpAux(COP, @tlll(LT, LCODE), @tlll(RT, RCODE))
+
+    rule #compareOpAux(%gt, @tlll(LT, LCODE), @tlll(RT, RCODE))
+           => #ifThenElse(LT ==K RT,
+                          @tlll(%bool, $sgt(LCODE, RCODE)),
+                #ifThenElse(LT ==K %decimal andBool RT ==K %num,
+                            @tlll(%bool, $sgt(LCODE, $mul(RCODE, #decimalDivisor))),
+                  #ifThenElse(LT ==K %num andBool RT ==K %decimal,
+                              @tlll(%bool, $sgt($mul(LCODE, #decimalDivisor), RCODE)),
+                              #exception("Unsupported types for comparison"))))
+
+    rule #compareOpAux(%ge, @tlll(LT, LCODE), @tlll(RT, RCODE))
+           => #ifThenElse(LT ==K RT,
+                          @tlll(%bool, $sge(LCODE, RCODE)),
+                #ifThenElse(LT ==K %decimal andBool RT ==K %num,
+                            @tlll(%bool, $sge(LCODE, $mul(RCODE, #decimalDivisor))),
+                  #ifThenElse(LT ==K %num andBool RT ==K %decimal,
+                              @tlll(%bool, $sge($mul(LCODE, #decimalDivisor), RCODE)),
+                              #exception("Unsupported types for comparison"))))
+
+    rule #compareOpAux(%lt, @tlll(LT, LCODE), @tlll(RT, RCODE))
+           => #ifThenElse(LT ==K RT,
+                          @tlll(%bool, $slt(LCODE, RCODE)),
+                #ifThenElse(LT ==K %decimal andBool RT ==K %num,
+                            @tlll(%bool, $slt(LCODE, $mul(RCODE, #decimalDivisor))),
+                  #ifThenElse(LT ==K %num andBool RT ==K %decimal,
+                              @tlll(%bool, $slt($mul(LCODE, #decimalDivisor), RCODE)),
+                              #exception("Unsupported types for comparison"))))
+
+    rule #compareOpAux(%le, @tlll(LT, LCODE), @tlll(RT, RCODE))
+           => #ifThenElse(LT ==K RT,
+                          @tlll(%bool, $sle(LCODE, RCODE)),
+                #ifThenElse(LT ==K %decimal andBool RT ==K %num,
+                            @tlll(%bool, $sle(LCODE, $mul(RCODE, #decimalDivisor))),
+                  #ifThenElse(LT ==K %num andBool RT ==K %decimal,
+                              @tlll(%bool, $sle($mul(LCODE, #decimalDivisor), RCODE)),
+                              #exception("Unsupported types for comparison"))))
+
+    rule #compareOpAux(%eq, @tlll(LT, LCODE), @tlll(RT, RCODE))
+           => #ifThenElse(LT ==K RT,
+                          @tlll(%bool, $eq(LCODE, RCODE)),
+                #ifThenElse(LT ==K %decimal andBool RT ==K %num,
+                            @tlll(%bool, $eq(LCODE, $mul(RCODE, #decimalDivisor))),
+                  #ifThenElse(LT ==K %num andBool RT ==K %decimal,
+                              @tlll(%bool, $eq($mul(LCODE, #decimalDivisor), RCODE)),
+                              #exception("Unsupported types for comparison"))))
+
+    rule #compareOpAux(%ne, @tlll(LT, LCODE), @tlll(RT, RCODE))
+           => #ifThenElse(LT ==K RT,
+                          @tlll(%bool, $ne(LCODE, RCODE)),
+                #ifThenElse(LT ==K %decimal andBool RT ==K %num,
+                            @tlll(%bool, $ne(LCODE, $mul(RCODE, #decimalDivisor))),
+                  #ifThenElse(LT ==K %num andBool RT ==K %decimal,
+                              @tlll(%bool, $ne($mul(LCODE, #decimalDivisor), RCODE)),
+                              #exception("Unsupported types for comparison"))))
 
 
     syntax CTypedLLLExp ::= "#clampArithResult" "(" CTypedLLLExp ")"                     [strict]
