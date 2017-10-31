@@ -14,7 +14,6 @@ module VIPER-LLL
 
 
     syntax TypedAddr ::= "@taddr" "(" Type "," Int "," Bool /*global*/ "," Bool /*mutable*/ ")"
-                       | "@notfound"
 
     syntax TypedLLLExp  ::= "@tlll"  "(" Type "," LLLExp ")"
     syntax TypedLLLExps ::= "@tllls" "(" Type "," LLLExp ")"
@@ -193,6 +192,11 @@ module VIPER-LLL
              => #append(#fillParam(P, DATAPOS, ISINIT), #fillParams(PS, DATAPOS +Int #sizeOfParam(P), ISINIT))
 
 
+ ///////////////////////////////////////////////////////////////////////////////
+ // Stmts
+ ///////////////////////////////////////////////////////////////////////////////
+
+
     syntax CLLLExps ::= "#resolveStmts"    "(" Stmts ")"
     syntax CLLLExps ::= "#resolveStmtsAux" "(" Stmts "," CLLLExps ")"  [strict(2)]
  // ------------------------------------------------------------------------------
@@ -212,12 +216,14 @@ module VIPER-LLL
  // -------------------------------------------------------
     rule #resolveStmt(%assign(V, E)) => #assign(V, #resolveExpr(E))
 
+    rule #resolveStmt(%augassign(OP, V, E)) => #augassign(OP, #lookupVar(V), #resolveExpr(E))
+
     rule #resolveStmt(%throw) => $assert(0);.LLLExps
 
 
     syntax CLLLExps ::= "#assign"    "(" Var                             ","
                                          CTypedLLLExp  /*compiled Expr*/
-                                     ")"                      [seqstrict(2)]
+                                     ")"                         [strict(2)]
     syntax CLLLExps ::= "#assignAux" "(" CTypedAddr /*variable address*/ ","
                                          TypedLLLExp
                                      ")"                         [strict(1)]
@@ -234,12 +240,48 @@ module VIPER-LLL
          <constant> ISCONSTANT </constant>
 
 
+    syntax CLLLExps ::= "#augassign"    "(" AugAssignOp                     ","
+                                            CTypedAddr /*variable address*/ ","
+                                            CTypedLLLExp  /*compiled Expr*/
+                                        ")"                       [strict(2,3)]
+    syntax CLLLExps ::= "#augassignAux" "(" TypedAddr /*variable address*/  ","
+                                            CLLLExp   /*compiled Expr*/
+                                        ")"                         [strict(2)]
+    syntax CTypedLLLExp ::= "#convertToBinaryArith" "(" AugAssignOp           ","
+                                                        TypedLLLExp  /*left*/ ","
+                                                        TypedLLLExp  /*right*/
+                                                    ")"
+ // -----------------------------------------------------------------------------
+    rule <k> #augassign(OP, @taddr(LT, LOC, true, _), @tlll(RT, CODE))
+               => #exception("Cannot modify storage inside a constant function!") ... </k>
+         <constant> true </constant>
+
+    rule #augassign(OP, @taddr(LT, LOC, true, ISMUTABLE), @tlll(RT, CODE))
+             => #augassignAux(@taddr(LT, LOC, true, ISMUTABLE),
+                              #baseTypeConvertTL(
+                                  #convertToBinaryArith(OP, @tlll(LT, $sload($stloc)), @tlll(RT, CODE)),
+                                  LT))
+
+    rule #augassign(OP, @taddr(LT, LOC, false, ISMUTABLE), @tlll(RT, CODE))
+             => #augassignAux(@taddr(LT, LOC, false, ISMUTABLE),
+                              #baseTypeConvertTL(
+                                  #convertToBinaryArith(OP, @tlll(LT, $mload($mloc)), @tlll(RT, CODE)),
+                                  LT))
+
+    rule #augassignAux(@taddr(_, LOC, true, _), CODE) => $with($stloc, LOC, $sstore($stloc, CODE));.LLLExps
+
+    rule #augassignAux(@taddr(_, LOC, false, _), CODE) => $with($mloc, LOC, $mstore($mloc, CODE));.LLLExps
+
+    rule #convertToBinaryArith(+=, LEXP, REXP) => #binOp(+, LEXP, REXP)
+
+
     syntax CTypedAddr ::= "#lookupVar" "(" Var ")"
  // ----------------------------------------------
     rule <k> #lookupVar(%var(NAME)) => TADDR ... </k>
          <env> %var(NAME) |-> TADDR:TypedAddr ENV </env>
 
-    rule <k> #lookupVar(%var(NAME)) => @notfound ... </k>
+    rule <k> #lookupVar(%var(NAME))
+                 => #exception("Undeclared Variable:" +String Id2String(NAME)) ... </k>
          <env> ENV </env>
       requires notBool %var(NAME) in keys(ENV)
 
@@ -280,10 +322,10 @@ module VIPER-LLL
                                           TypedLLLExp  /*right compiled Expr*/
                                       ")"
     syntax CLLLExp ::= "#mkSetterForBase" "("TypedAddr "," CLLLExp "," Type ")"    [strict(2)]
- // ----------------------------------------------------------------------------------------------
+ // ------------------------------------------------------------------------------------------
     rule #mkSetter(@taddr(LEFTT, LOC, ISGLOBAL, ISMUTABLE), @tlll(RIGHTT, CODE))
              => #mkSetterForBase(@taddr(LEFTT, LOC, ISGLOBAL, ISMUTABLE),
-                                 #baseTypeConvert(CODE, RIGHTT, LEFTT),
+                                 #baseTypeConvertL(CODE, RIGHTT, LEFTT),
                                  RIGHTT)
       requires isBaseType(LEFTT)
 
@@ -293,9 +335,9 @@ module VIPER-LLL
 
 
 
-    syntax CLLLExp ::= "#baseTypeConvert" "(" LLLExp "," Type /*from*/ "," Type /*to*/ ")"
- // --------------------------------------------------------------------------------------
-    rule #baseTypeConvert(CODE, FROMT, TOT)
+    syntax CLLLExp ::= "#baseTypeConvertL" "(" CLLLExp "," Type /*from*/ "," Type /*to*/ ")"  [strict(1)]
+ // -----------------------------------------------------------------------------------------------------
+    rule #baseTypeConvertL(CODE, FROMT, TOT)
              => #ifThenElse(notBool(isBaseType(FROMT)) orBool notBool(isBaseType(TOT)),
                             #exception("Base type conversion from or to non-base type."),
                   #ifThenElse(FROMT ==K TOT,
@@ -305,8 +347,18 @@ module VIPER-LLL
                                 #exception("Typecasting unavailable"))))
 
 
+    syntax CLLLExp ::= "#baseTypeConvertTL" "(" CTypedLLLExp "," Type /*to*/ ")"  [strict(1)]
+ // -----------------------------------------------------------------------------------------
+    rule #baseTypeConvertTL(@tlll(FROMT, CODE), TOT)
+             => #baseTypeConvertL(CODE, FROMT, TOT)
+
+
+ ///////////////////////////////////////////////////////////////////////////////
+ // Expressions
+ ///////////////////////////////////////////////////////////////////////////////
+
+
     syntax CTypedLLLExp ::= "#resolveExpr" "(" Expr ")"
-    syntax CTypedLLLExp ::= "#binOp" "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [strict(2,3)]
  // -----------------------------------------------------------------------------------------------
     rule #resolveExpr(%self) => @tlll(%address, $address)
 
@@ -320,7 +372,6 @@ module VIPER-LLL
     // Arithmetic
     syntax CTypedLLLExp ::= "#binOp"    "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [strict(2,3)]
     syntax CTypedLLLExp ::= "#binOpAux" "(" BinOp "," TypedLLLExp "," TypedLLLExp ")"
-    syntax CTypedLLLExp ::= "#clampArithResult" "(" CTypedLLLExp ")"                     [strict]
  // --------------------------------------------------------------------------------------------------
     rule #resolveExpr(%binop(BOP, LEFTE, RIGHTE)) => #binOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
 
@@ -328,12 +379,6 @@ module VIPER-LLL
              => #ifThen(notBool(#isNumericType(LT)) orBool notBool(#isNumericType(RT)),
                         #exception("Unsupported types for arithmetic op"))
              ~> #clampArithResult(#binOpAux(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE)))
-
-    rule #clampArithResult(@tlll(%num, CODE))
-              => @tlll(%num, $clamp($mload(#minNumPos), CODE, $mload(#maxNumPos)))
-
-    rule #clampArithResult(@tlll(%decimal, CODE))
-              => @tlll(%decimal, $clamp($mload(#minDecimalPos), CODE, $mload(#maxDecimalPos)))
 
     rule #binOpAux(+, @tlll(LT, LCODE), @tlll(RT, RCODE))
              => #ifThenElse(LT ==K RT,
@@ -345,14 +390,29 @@ module VIPER-LLL
                                 #exception("How did I get here?"))))
 
 
-    // Var
-    rule <k> #resolveExpr(%var(NAME)) => @tlll(T, $mload(LOC)) ...</k>
-         <env> %var(NAME) |-> @taddr(T, LOC, _, _) ENV </env>
+    syntax CTypedLLLExp ::= "#clampArithResult" "(" CTypedLLLExp ")"                     [strict]
+ // --------------------------------------------------------------------------------------------------
+    rule #clampArithResult(@tlll(%num, CODE))
+              => @tlll(%num, $clamp($mload(#minNumPos), CODE, $mload(#maxNumPos)))
 
-    rule <k> #resolveExpr(%var(NAME)) => #exception("Undeclared Variable:" +String Id2String(NAME)) ...</k>
-         <env> ENV </env>
-      requires notBool %var(NAME) in keys(ENV)
+    rule #clampArithResult(@tlll(%decimal, CODE))
+              => @tlll(%decimal, $clamp($mload(#minDecimalPos), CODE, $mload(#maxDecimalPos)))
+
+
+    // Var
+    rule #resolveExpr(V:Var) => #unwrapLocation(#lookupVar(V))
+
+
+    syntax CTypedLLLExp ::= "#unwrapLocation" "(" CTypedAddr ")"  [strict]
+ // ----------------------------------------------------------------------
+    rule #unwrapLocation(@taddr(T, LOC, false, _)) => @tlll(T, $mload(LOC))
+    rule #unwrapLocation(@taddr(T, LOC, true, _)) => @tlll(T, $sload(LOC))
    
+
+    syntax CLLLExps    ::= "#convertToLLLExps" "(" CLLLExp ")"    [strict]
+ // ----------------------------------------------------------------------
+    rule #convertToLLLExps(CODE) => CODE;.LLLExps
+
 
     syntax KItem       ::= "#env" "(" Map "," Int "," Bool "," Bool ")"
  // -----------------------------------------------------------------
@@ -363,18 +423,13 @@ module VIPER-LLL
          <payable> _ => ISPAYABLE </payable>                [structural]
 
 
-    syntax CLLLExps    ::= "#convertToLLLExps" "(" CLLLExp ")"  [strict]
- // --------------------------------------------------------------------
-    rule #convertToLLLExps(CODE) => CODE;.LLLExps
-
-
     syntax KItem       ::= "#exception" "(" String ")"
  // --------------------------------------------------
 
 
-//////////////////////////////////////////////////////////////////////////////
-// Utils
-//////////////////////////////////////////////////////////////////////////////
+ //////////////////////////////////////////////////////////////////////////////
+ // Utils
+ //////////////////////////////////////////////////////////////////////////////
 
 
     syntax Bool ::= "#isInitFunc" "(" Id ")"    [function]
