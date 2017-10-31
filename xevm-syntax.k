@@ -1,6 +1,9 @@
-module XEVM-SYNTAX
+require "evm-core-syntax.k"
 
-    syntax XEVM ::= YEVM
+module XEVM-SYNTAX
+    imports EVM-CORE-SYNTAX
+
+    syntax XEVM ::= EVMCORE
                 //| "LOG"       "(" Int ")"
                   | "DUP"       "(" Int ")"
                   | "SWAP"      "(" Int ")"
@@ -10,77 +13,6 @@ module XEVM-SYNTAX
                   | "JUMPI"     "(" Label ")"
                   | "JUMPDEST"  "(" Label ")"
                   | "CODELEN"
-
-    syntax YEVM ::=
-                  // 0x0*
-                    "STOP"
-                  | "ADD"
-                  | "MUL"
-                  | "SUB"
-                  | "DIV"
-                  | "SDIV"
-                  | "MOD"
-                  | "SMOD"
-                  | "ADDMOD"
-                  | "MULMOD"
-                  | "EXP"
-                  | "SIGNEXTEND"
-                  // 0x1*
-                  | "LT"
-                  | "GT"
-                  | "SLT"
-                  | "SGT"
-                  | "EQ"
-                  | "ISZERO"
-                  | "AND"
-                  | "OR"
-                  | "XOR"
-                  | "NOT"
-                  | "BYTE"
-                  // 0x2*
-                  | "SHA3"
-                  // 0x3*
-                  | "ADDRESS"
-                  | "BALANCE"
-                  | "ORIGIN"
-                  | "CALLER"
-                  | "CALLVALUE"
-                  | "CALLDATALOAD"
-                  | "CALLDATASIZE"
-                  | "CALLDATACOPY"
-                  | "CODESIZE"
-                  | "CODECOPY"
-                  | "GASPRICE"
-                  | "EXTCODESIZE"
-                  | "EXTCODECOPY"
-                  // 0x4*
-                  // ...
-                  // 0x5*
-                  | "POP"
-                  | "MLOAD"
-                  | "MSTORE"
-                  | "MSTORE8"
-                  | "SLOAD"
-                  | "SSTORE"
-                //| "JUMP"
-                //| "JUMPI"
-                  | "PC"
-                  | "MSIZE"
-                  | "GAS"
-                //| "JUMPDEST"
-                  // 0x6* - 0x9*
-                //| "PUSH1" | ... | "PUSH32"
-                //| "DUP1"  | ... | "DUP16"
-                //| "SWAP1" | ... | "SWAP16"
-                  // 0xa*
-                //| "LOG0"  | ... | "LOG4"
-                  // 0xf*
-                  | "CREATE"
-                  | "CALL"
-                  | "CALLCODE"
-                  | "RETURN"
-                  | "DELEGATECALL"
-                  | "SUICIDE"
 
     syntax Label ::= "label" "(" Int ")"
                    | "pc"

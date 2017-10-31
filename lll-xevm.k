@@ -1,5 +1,6 @@
 require "lll-syntax.k"
 require "xevm-syntax.k"
+require "xevm-evm.k"
 
 module LLL-XEVM-SYNTAX
     imports LLL-SYNTAX
@@ -8,10 +9,12 @@ endmodule
 module LLL-XEVM
     imports LLL-XEVM-SYNTAX
     imports XEVM-SYNTAX
+    imports XEVM-EVM-SYNTAX
 
     configuration <T>
-      <k> $PGM:LLLExp </k>
+      <k> $PGM:LLLExp ~> xevm2evm </k>
       <xevm> .List </xevm> // XEVM*
+      <evm> .List </evm> // EVM*
       <height> 0 </height>
       <with> .Map </with> // Var -> StackLoc
       <b> // NOTE: mean break, but parser confuses with <br>
