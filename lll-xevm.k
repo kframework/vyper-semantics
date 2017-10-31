@@ -62,6 +62,10 @@ module LLL-XEVM
 
     rule $pass => .
 
+//TODO:
+//  rule $codelen =>
+//  rule $codeload =>
+
     // if C then T
     rule $if(C, T) => if(C, T, newLabel)    syntax KItem ::= "if" "(" LLLExp "," LLLExp "," Label ")"
     rule if(C, T, LEnd)
@@ -69,6 +73,9 @@ module LLL-XEVM
       ~> ISZERO ~> JUMPI(LEnd)
       ~> T
       ~> JUMPDEST(LEnd)
+    /* TODO:DJ: clean semantics
+      => $if(C, T, $pass)
+    */
 
     // if C then T else F
     rule $if(C, T, F) => if(C, T, F, newLabel, newLabel)    syntax KItem ::= "if" "(" LLLExp "," LLLExp "," LLLExp "," Label "," Label ")"
@@ -80,6 +87,49 @@ module LLL-XEVM
       ~> JUMPDEST(LMid)
       ~> F
       ~> JUMPDEST(LEnd)
+
+    // for L = I; N times; do S
+    rule $repeat(L, I, N:Int, S) => repeat(L, I, N, S, newLabel, newLabel)    syntax KItem ::= "repeat" "(" LLLExp "," LLLExp "," LLLExp "," LLLExp "," Label "," Label ")"
+    rule <k> repeat(L, I, N:Int, S, LBegin, LEnd)
+          => L
+          ~> ctx(I, H +Int 1, W)
+          ~> push(N) // NOTE: no need to consider zero case
+          ~> DUP(2) ~> DUP(4) ~> MSTORE // L := I
+          ~> ADD // I + N
+          ~> JUMPDEST(LBegin)
+          ~> ctx(S, H +Int 2, W) // TODO:DJ: break
+          ~> DUP(2) ~> MLOAD // L
+          ~> PUSH(1, 1) ~> ADD // L + 1
+          ~> DUP(1) ~> DUP(4) ~> MSTORE // L := L + 1
+          ~> DUP(2) ~> EQ ~> ISZERO ~> JUMPI(LBegin) // if(L =/= I + N) goto LBegin
+          ~> JUMPDEST(LEnd)
+          ~> POP ~> POP
+         ... </k>
+         <height> H </height>
+         <with> W </with>
+    when N >Int 0
+    /* TODO:DJ: clean semantics
+      L := I
+      begin:
+      S
+      L := L + 1
+      if (L != I + N) {
+        goto begin
+      }
+      end:
+      => $seq($mstore(L,I),
+              JUMPDEST(begin),
+              S,
+              $mstore(L, $add($mload(L), 1)),
+              $if($eq($mload(L), I + N),
+                  $pass,
+                  JUMP(begin)
+                 ),
+              JUMPDEST(end)
+             )
+    */
+
+//  rule $break( // TODO:
 
     // let X = V in E
     rule <k> $with(X, V, E)
@@ -130,6 +180,15 @@ module LLL-XEVM
     rule  $clamp(LB, X, UB)
       => LB ~> X ~> DUP(1) ~> UB ~> SWAP(1) ~> SGT ~> assertFalse /* X <= UB */
             ~> DUP(1) ~> SWAP(2) ~> SWAP(1) ~> SLT ~> assertFalse /* X >= LB */
+
+//  rule $clamp_nonzero
+//  rule $sha3_32
+//  rule $le
+//  rule $ge
+//  rule $sle
+//  rule $sge
+//  rule $ne
+//  rule $ceil32
 
 //// Valency
 
