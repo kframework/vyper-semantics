@@ -67,9 +67,9 @@ module LLL-XEVM
 
     rule $pass => .
 
-//TODO:
-//  rule $codelen =>
-//  rule $codeload =>
+    rule $codelen => CODELEN
+
+    rule $codeload(X) => $seq($codecopy(FREE_VAR_SPACE, X, 32), $mload(FREE_VAR_SPACE))
 
     // if C then T
     rule $if(C, T) => if(C, T, newLabel)    syntax KItem ::= "if" "(" LLLExp "," LLLExp "," Label ")"

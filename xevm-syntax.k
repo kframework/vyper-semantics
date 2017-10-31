@@ -9,6 +9,7 @@ module XEVM-SYNTAX
                   | "JUMP"      "(" Label ")"
                   | "JUMPI"     "(" Label ")"
                   | "JUMPDEST"  "(" Label ")"
+                  | "CODELEN"
 
     syntax YEVM ::=
                   // 0x0*
