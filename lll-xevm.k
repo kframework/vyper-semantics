@@ -44,6 +44,11 @@ module LLL-XEVM
     // return mem[L..L+S]
     rule $return(L, S) => S ~> L ~> RETURN
 
+    rule  $lt(X, Y) => Y ~> X ~>  LT
+    rule  $gt(X, Y) => Y ~> X ~>  GT
+    rule $slt(X, Y) => Y ~> X ~> SLT
+    rule $sgt(X, Y) => Y ~> X ~> SGT
+
 //// LLLExp
 
     rule N:Int => push(N)
@@ -181,14 +186,24 @@ module LLL-XEVM
       => LB ~> X ~> DUP(1) ~> UB ~> SWAP(1) ~> SGT ~> assertFalse /* X <= UB */
             ~> DUP(1) ~> SWAP(2) ~> SWAP(1) ~> SLT ~> assertFalse /* X >= LB */
 
-//  rule $clamp_nonzero
+    rule $clamp_nonzero(X)
+      => X ~> DUP(1) ~> assertNonZero
+
 //  rule $sha3_32
-//  rule $le
-//  rule $ge
-//  rule $sle
-//  rule $sge
-//  rule $ne
-//  rule $ceil32
+
+    rule  $ne(X, Y) => $iszero( $eq(X, Y))
+
+    rule  $le(X, Y) => $iszero( $gt(X, Y))
+    rule  $ge(X, Y) => $iszero( $lt(X, Y))
+    rule $sle(X, Y) => $iszero($sgt(X, Y))
+    rule $sge(X, Y) => $iszero($slt(X, Y))
+
+    syntax Id ::= "_val" [token]
+    // ceil32(x) = (x + 31) - ((x - 1) % 32)
+    // TODO:DJ: equivalent and better? ((x + 31) / 32) * 32
+    rule $ceil32(X) => $with(_val, X,
+                             $sub($add(_val, 31),
+                                  $mod($sub(_val, 1), 32)))
 
 //// Valency
 
@@ -204,8 +219,6 @@ module LLL-XEVM
     rule valency($with(X, V, E)) => valency(E) when valency(V) ==K 1
 
     rule valency($seq(S1, S2)) => valency(S2)
-
-//  rule valency($multi(
 
     rule valency($lll(S1, S2)) => 1
 
@@ -273,11 +286,17 @@ module LLL-XEVM
          <with> W' </with>
 
     syntax KItem ::= "assertTrue"
-    rule assertTrue
-      => ISZERO ~> JUMPI(pc)
+    rule assertTrue => assertNonZero
 
     syntax KItem ::= "assertFalse"
-    rule assertFalse
+    rule assertFalse => assertZero
+
+    syntax KItem ::= "assertNonZero"
+    rule assertNonZero
+      => ISZERO ~> JUMPI(pc)
+
+    syntax KItem ::= "assertZero"
+    rule assertZero
       => JUMPI(pc)
 
 endmodule
