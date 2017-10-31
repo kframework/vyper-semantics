@@ -14,6 +14,10 @@ module LLL-XEVM
       <xevm> .List </xevm> // XEVM*
       <height> 0 </height>
       <with> .Map </with> // Var -> StackLoc
+      <b> // NOTE: mean break, but parser confuses with <br>
+        <b-label> emptyLabel </b-label>
+        <b-height> emptyHeight </b-height>
+      </b>
     </T>
 
     syntax KResult ::= XEVM
@@ -97,12 +101,12 @@ module LLL-XEVM
     rule $repeat(L, I, N:Int, S) => repeat(L, I, N, S, newLabel, newLabel)    syntax KItem ::= "repeat" "(" LLLExp "," LLLExp "," LLLExp "," LLLExp "," Label "," Label ")"
     rule <k> repeat(L, I, N:Int, S, LBegin, LEnd)
           => L
-          ~> ctx(I, H +Int 1, W)
+          ~> ctx(I, H +Int 1, W, BL, BH)
           ~> push(N) // NOTE: no need to consider zero case
           ~> DUP(2) ~> DUP(4) ~> MSTORE // L := I
           ~> ADD // I + N
           ~> JUMPDEST(LBegin)
-          ~> ctx(S, H +Int 2, W) // TODO:DJ: break
+          ~> ctx(S, H +Int 2, W, LEnd, H +Int 2)
           ~> DUP(2) ~> MLOAD // L
           ~> PUSH(1, 1) ~> ADD // L + 1
           ~> DUP(1) ~> DUP(4) ~> MSTORE // L := L + 1
@@ -112,6 +116,8 @@ module LLL-XEVM
          ... </k>
          <height> H </height>
          <with> W </with>
+         <b-label> BL </b-label>
+         <b-height> BH </b-height>
     when N >Int 0
     /* TODO:DJ: clean semantics
       L := I
@@ -134,23 +140,32 @@ module LLL-XEVM
              )
     */
 
-//  rule $break( // TODO:
+    rule <k> $break
+          => pop(H -Int BH)
+          ~> JUMP(BL)
+         ... </k>
+         <height> H </height>
+         <b-label> BL </b-label>
+         <b-height> BH </b-height>
+    when BL =/=K emptyLabel andBool BH =/=K emptyHeight
 
     // let X = V in E
     rule <k> $with(X, V, E)
           => V
-          ~> ctx(E, H +Int 1, W[X <- H])
+          ~> ctx(E, H +Int 1, W[X <- H], BL, BH)
           ~> #if valency(E) ==K 1 #then SWAP(1) #else . #fi
           ~> POP
          ... </k>
          <height> H </height>
          <with> W </with>
+         <b-label> BL </b-label>
+         <b-height> BH </b-height>
 
     rule $lll(S1, S2) => lll(S1, S2, newLabel, newLabel)    syntax KItem ::= "lll" "(" LLLExp "," LLLExp "," Label "," Label ")"
     rule <k> lll(S1, S2, LBegin, LEnd)
           => JUMP(LEnd)
           ~> JUMPDEST(LBegin)
-          ~> ctx(S1, 0, .Map)
+          ~> ctx(S1, 0, .Map, emptyLabel, emptyHeight)
           ~> JUMPDEST(LEnd)
           ~> PUSH(LBegin) ~> PUSH(LEnd) ~> SUB
           ~> PUSH(LBegin)
@@ -256,6 +271,12 @@ module LLL-XEVM
     syntax Label ::= "newLabel" [function]
     rule newLabel => label(!N:Int)
 
+    syntax Label ::= "emptyLabel" [function]
+    rule emptyLabel => label(-1) // TODO:DJ: check if -1 doesn't conflict
+
+    syntax Int ::= "emptyHeight" [function]
+    rule emptyHeight => -1 // TODO:DJ: check if -1 doesn't conflict
+
     syntax KItem ::= "push" "(" Int ")"
                    | "push" "(" Int "," Int "," Bytes ")"
     rule push(N) => push(N modInt (2 ^Int 256)) // two's complement representation for negative numbers
@@ -269,6 +290,10 @@ module LLL-XEVM
     rule push(N, S, B) => push(N /Int 256, S +Int 1, (N %Int 256) B)
     when N >Int 0
 
+    syntax KItem ::= "pop" "(" Int ")"
+    rule pop(N) => POP ~> pop(N -Int 1) when N >Int 0
+    rule pop(0) => .
+
     syntax KItem ::= "height" "(" Int ")"
     rule <k> height(H) => . ... </k>
          <height> _ => H </height>
@@ -277,14 +302,21 @@ module LLL-XEVM
     rule <k> with(W) => . ... </k>
          <with> _ => W </with>
 
-    syntax KItem ::= "ctx" "(" K "," Int "," Map ")"
-    rule <k> ctx(K, H, W)
-          => height(H) ~> with(W)
+    syntax KItem ::= "break" "(" Label "," Int ")"
+    rule <k> break(L, H) => . ... </k>
+         <b-label> _ => L </b-label>
+         <b-height> _ => H </b-height>
+
+    syntax KItem ::= "ctx" "(" K "," Int "," Map "," Label "," Int ")"
+    rule <k> ctx(K, H, W, BL, BH)
+          => height(H) ~> with(W) ~> break(BL, BH)
           ~> K
-          ~> height(H') ~> with(W')
+          ~> height(H') ~> with(W') ~> break(BL', BH')
          ... </k>
          <height> H' </height>
          <with> W' </with>
+         <b-label> BL' </b-label>
+         <b-height> BH' </b-height>
 
     syntax KItem ::= "assertTrue"
     rule assertTrue => assertNonZero
