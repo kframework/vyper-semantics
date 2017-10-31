@@ -23,7 +23,7 @@ module VIPER-SYNTAX
                       | "%if"        "(" Expr "," Stmts "," Stmts ")"
                       | "%if"        "(" Expr "," Stmts ")"
                       | "%for"       "(" Id "," Int "," Stmts ")"
-                      | "%for"       "(" Id "," Expr "," Int "," Stmts ")"
+                      | "%for"       "(" Id "," Expr "," Expr "," Stmts ")"
                       | "%pass"
                       | "%return"
                       | "%break"

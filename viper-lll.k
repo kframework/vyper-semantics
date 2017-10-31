@@ -111,9 +111,10 @@ module VIPER-LLL
                                     #resolveStmts(STMTS),
                                     #generateMethodId(NAME, PARAMS),
                                     #isInitFunc(NAME))
-                 ~> #env(ENV, LOC, ISCONSTANT, ISPAYABLE) ... </k>
+                 ~> #env(ENV, LOC, FORNAMES, ISCONSTANT, ISPAYABLE) ... </k>
          <env> ENV </env>
          <nextMem> LOC </nextMem>
+         <forvar> FORNAMES </forvar>
          <constant> ISCONSTANT </constant>
          <payable> ISPAYABLE </payable>
 
@@ -219,9 +220,21 @@ module VIPER-LLL
 
     rule #resolveStmt(%if(TEST, THENSTMTS)) => #if(#resolveExpr(TEST), #resolveStmts(THENSTMTS))
 
+    // e.g. for i in range(10): ...
+    rule #resolveStmt(%for(NAME, ROUNDS, STMTS)) => #for(#allocForVar(NAME), @tlll(%num, 0), ROUNDS, #resolveStmts(STMTS))
+
+    // e.g. for i in range(100, 110): ...
+    rule #resolveStmt(%for(NAME, START:Int, END:Int, STMTS))
+             => #for(#allocForVar(NAME), @tlll(%num, START), END -Int START, #resolveStmts(STMTS))
+
+    // e.g. for i in range(x, x + 10): ...
+    rule #resolveStmt(%for(NAME, %var(V), %binop(+, %var(V), ROUNDS:Int), STMTS))
+             => #for(#allocForVar(NAME), #resolveExpr(%var(V)), ROUNDS, #resolveStmts(STMTS))
+
     rule #resolveStmt(%throw) => $assert(0);.LLLExps
 
 
+    // Assign
     syntax CLLLExps ::= "#assign"    "(" Var                             ","
                                          CTypedLLLExp  /*compiled Expr*/
                                      ")"                         [strict(2)]
@@ -241,6 +254,7 @@ module VIPER-LLL
          <constant> ISCONSTANT </constant>
 
 
+    // Augassign
     syntax CLLLExps ::= "#augassign"    "(" AugAssignOp                     ","
                                             CTypedAddr /*variable address*/ ","
                                             CTypedLLLExp  /*compiled Expr*/
@@ -270,6 +284,7 @@ module VIPER-LLL
     rule #augassignAux(@taddr(_, LOC, false, _), CODE) => $with($mloc, LOC, $mstore($mloc, CODE));.LLLExps
 
 
+    // if
     syntax CLLLExps ::= "#if" "(" CTypedLLLExp /*TEST*/ ","
                                   CLLLExps     /*Then*/ ","
                                   CLLLExps     /*Else*/
@@ -277,9 +292,21 @@ module VIPER-LLL
     syntax CLLLExps ::= "#if" "(" CTypedLLLExp /*TEST*/ ","
                                   CLLLExps     /*Then*/
                               ")"               [seqstrict]
- // --------------------------------------------------------
+ // -------------------------------------------------------
     rule #if(@tlll(_, CODE), THEN:LLLExps, ELSE:LLLExps) => $if(CODE, $%seq(THEN), $%seq(ELSE));.LLLExps
+
     rule #if(@tlll(_, CODE), THEN:LLLExps, ELSE) => $if(CODE, $%seq(THEN));.LLLExps
+
+
+    // for
+    syntax CLLLExps ::= "#for" "(" CTypedAddr             ","
+                                   CTypedLLLExp /*start*/ ","
+                                   Int         /*rounds*/ ","
+                                   CLLLExps
+                               ")"         [seqstrict(1,2,4)]
+ // ---------------------------------------------------------
+    rule #for(@taddr(%num, LOC:Int, _, _), @tlll(_, STARTCODE), ROUNDS, BODYCODE:LLLExps)
+             => $repeat(LOC, STARTCODE, ROUNDS, $%seq(BODYCODE));.LLLExps
 
 
     syntax CTypedAddr ::= "#lookupVar" "(" Var ")"
@@ -293,9 +320,9 @@ module VIPER-LLL
       requires notBool %var(NAME) in keys(ENV)
 
 
-    syntax KItem  ::= "#allocVar" "(" Var "," Type ")"
+    syntax CTypedAddr ::= "#allocVar" "(" Var "," Type ")"
  // --------------------------------------------------
-    rule <k> #allocVar(%var(NAME), T) => . ...</k>
+    rule <k> #allocVar(%var(NAME), T) => @taddr(T, LOC, false, true) ...</k>
          <env> ENV => #updateEnv(%var(NAME), T, LOC, ENV, true) </env>
          <nextMem> LOC => LOC +Int #sizeOfType(T) </nextMem>
       requires notBool %var(NAME) in keys(ENV)
@@ -306,14 +333,24 @@ module VIPER-LLL
       requires %var(NAME) in keys(ENV)
 
 
+    syntax CTypedAddr ::= "#allocForVar" "(" Id ")"
+ // --------------------------------------------------
+    rule <k> #allocForVar(NAME) => #lookupVar(%var(NAME)) ... </k>
+         <forvar> FORNAMES </forvar>
+      requires NAME in FORNAMES
+
+    rule <k> #allocForVar(NAME) => #allocVar(%var(NAME), %num) ... </k>
+         <forvar> FORNAMES (.Set => SetItem(NAME)) </forvar>
+      requires notBool NAME in FORNAMES
+
+
     syntax CTypedAddr ::= "#lookupOrAllocVar" "(" Var "," Type ")"
  // --------------------------------------------------------------
     rule <k> #lookupOrAllocVar(%var(NAME), _) => TADDR ... </k>
          <env> %var(NAME) |-> TADDR:TypedAddr ENV </env>
 
-    rule <k> #lookupOrAllocVar(%var(NAME), T) => @taddr(T, LOC, false, true) ...</k>
-         <env> ENV => #updateEnv(%var(NAME), T, LOC, ENV, true) </env>
-         <nextMem> LOC => LOC +Int #sizeOfType(T) </nextMem>
+    rule <k> #lookupOrAllocVar(%var(NAME), T) => #allocVar(%var(NAME), T) ... </k>
+         <env> ENV </env>
       requires notBool %var(NAME) in keys(ENV)
 
     rule <k> #lookupOrAllocVar(%svar(NAME), _) => TADDR ... </k>
@@ -495,11 +532,12 @@ module VIPER-LLL
     rule #convertToLLLExps(CODE) => CODE;.LLLExps
 
 
-    syntax KItem       ::= "#env" "(" Map "," Int "," Bool "," Bool ")"
- // -----------------------------------------------------------------
-    rule <k> CODE:LLLExps ~> (#env(ENV, LOC, ISCONSTANT, ISPAYABLE) => .) ...</k>
+    syntax KItem       ::= "#env" "(" Map "," Int "," Set "," Bool "," Bool ")"
+ // ---------------------------------------------------------------------------
+    rule <k> CODE:LLLExps ~> (#env(ENV, LOC, FORNAMES, ISCONSTANT, ISPAYABLE) => .) ...</k>
          <env> _ => ENV </env>
          <nextMem> _ => LOC </nextMem>
+         <forvar> _ => FORNAMES </forvar>
          <constant> _ => ISCONSTANT </constant>
          <payable> _ => ISPAYABLE </payable>                [structural]
 
