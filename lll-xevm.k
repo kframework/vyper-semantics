@@ -189,6 +189,7 @@ module LLL-XEVM
     rule $clamp_nonzero(X)
       => X ~> DUP(1) ~> assertNonZero
 
+    // TODO:DJ: viper could be wrong in  the order of arguments
     rule $sha3_32(X) => X ~> PUSH(1, FREE_VAR_SPACE) ~> MSTORE ~> PUSH(1, FREE_VAR_SPACE) ~> PUSH(1, 32) ~> SHA3
 
     rule  $ne(X, Y) => $iszero( $eq(X, Y))
