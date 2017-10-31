@@ -189,7 +189,7 @@ module LLL-XEVM
     rule $clamp_nonzero(X)
       => X ~> DUP(1) ~> assertNonZero
 
-//  rule $sha3_32
+    rule $sha3_32(X) => X ~> PUSH(1, FREE_VAR_SPACE) ~> MSTORE ~> PUSH(1, FREE_VAR_SPACE) ~> PUSH(1, 32) ~> SHA3
 
     rule  $ne(X, Y) => $iszero( $eq(X, Y))
 
@@ -298,5 +298,20 @@ module LLL-XEVM
     syntax KItem ::= "assertZero"
     rule assertZero
       => JUMPI(pc)
+
+    syntax Int ::= "FREE_VAR_SPACE" [function]
+    rule FREE_VAR_SPACE => 192
+
+    /* TODO:DJ: pre-occupied memory locations
+    rule RESERVED_MEMORY => 320
+    rule ADDRSIZE => 32
+    rule MAXNUM => 64
+    rule MINNUM => 96
+    rule MAXDECIMAL => 128
+    rule MINDECIMAL => 160
+    rule FREE_VAR_SPACE => 192
+    rule BLANK_SPACE => 224
+    rule FREE_LOOP_INDEX => 256
+    */
 
 endmodule
