@@ -19,12 +19,12 @@ module LLL-XEVM
     syntax KResult ::= XEVM
                      | Label
 
-////
+//// XEVM
 
     rule <k> S:XEVM => . ... </k>
          <xevm> ... (.List => ListItem(S)) </xevm>
 
-////
+//// LLLEVM
 
     // L := V
     rule $mstore(L, V) => V ~> L ~> MSTORE
@@ -44,7 +44,7 @@ module LLL-XEVM
     // return mem[L..L+S]
     rule $return(L, S) => S ~> L ~> RETURN
 
-////
+//// LLLExp
 
     rule N:Int => push(N)
     when -1 *Int (2 ^Int 255) <=Int N andBool N <Int (2 ^Int 256)
@@ -85,7 +85,7 @@ module LLL-XEVM
     rule <k> $with(X, V, E)
           => V
           ~> ctx(E, H +Int 1, W[X <- H])
-//        ~> #if valency(E) == 0 #then SWAP(1) #else . #fi // TODO:
+          ~> #if valency(E) ==K 1 #then SWAP(1) #else . #fi
           ~> POP
          ... </k>
          <height> H </height>
@@ -108,7 +108,7 @@ module LLL-XEVM
 
     rule $seq(S1, S2)
       => S1
-//    ~> #if valency(S1) == 1 #then POP #else . #fi // TODO
+      ~> #if valency(S1) ==K 1 #then POP #else . #fi
       ~> S2
 
     rule $assert(C)
@@ -131,7 +131,54 @@ module LLL-XEVM
       => LB ~> X ~> DUP(1) ~> UB ~> SWAP(1) ~> SGT ~> assertFalse /* X <= UB */
             ~> DUP(1) ~> SWAP(2) ~> SWAP(1) ~> SLT ~> assertFalse /* X >= LB */
 
-////
+//// Valency
+
+    syntax Int /* 0 or 1 */ ::= "valency" "(" LLLExp ")" [function]
+
+    rule valency(_:Int) => 1
+
+    rule valency($if(C, T, F)) => valency(T) when valency(C) ==K 1 andBool valency(T) ==K valency(F)
+    rule valency($if(C, T   )) => valency(T) when valency(C) ==K 1 andBool valency(T) ==K 0
+
+    rule valency($repeat(X, I, N:Int, S)) => 0 when valency(X) ==K 1 andBool N >Int 0 andBool valency(I) ==K 1 andBool valency(S) ==K 0
+
+    rule valency($with(X, V, E)) => valency(E) when valency(V) ==K 1
+
+    rule valency($seq(S1, S2)) => valency(S2)
+
+//  rule valency($multi(
+
+    rule valency($lll(S1, S2)) => 1
+
+    rule valency(_:Id) => 1
+
+    rule valency($mstore(A,B)    ) => 0 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($mload(A)       ) => 1 when valency(A) ==K 1
+    rule valency($calldataload(A)) => 1 when valency(A) ==K 1
+    rule valency($callvalue      ) => 1
+    rule valency($eq(A,B)        ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($add(A,B)       ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($iszero(A)      ) => 1 when valency(A) ==K 1
+    rule valency($stop           ) => 0
+    rule valency($return(A,B)    ) => 0 when valency(A) ==K 1 andBool valency(B) ==K 1
+
+    rule valency($set(A,B)       ) => 0 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($pass           ) => 0
+    rule valency($assert(A)      ) => 0 when valency(A) ==K 1
+
+    rule valency($uclamplt(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($uclample(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency( $clamplt(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency( $clample(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($uclampgt(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($uclampge(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency( $clampgt(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency( $clampge(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+
+    rule valency($uclamp(A,B,C)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1
+    rule valency( $clamp(A,B,C)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1
+
+//// Utils
 
     syntax Label ::= "newLabel" [function]
     rule newLabel => label(!N:Int)
