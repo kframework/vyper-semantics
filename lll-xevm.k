@@ -1,6 +1,7 @@
 require "lll-syntax.k"
 require "xevm-syntax.k"
-require "xevm-evm.k"
+require "evm-syntax.k"
+//require "xevm-evm.k"
 
 module LLL-XEVM-SYNTAX
     imports LLL-SYNTAX
@@ -9,7 +10,8 @@ endmodule
 module LLL-XEVM
     imports LLL-XEVM-SYNTAX
     imports XEVM-SYNTAX
-    imports XEVM-EVM-SYNTAX
+    imports EVM-SYNTAX
+//  imports XEVM-EVM
 
     configuration <T>
       <k> $PGM:LLLExp ~> xevm2evm </k>
@@ -21,6 +23,8 @@ module LLL-XEVM
         <b-label> emptyLabel </b-label>
         <b-height> emptyHeight </b-height>
       </b>
+      <labelTbl> .Map </labelTbl>
+      <pos> 0 </pos>
     </T>
 
     syntax KResult ::= XEVM
@@ -349,5 +353,137 @@ module LLL-XEVM
     rule BLANK_SPACE => 224
     rule FREE_LOOP_INDEX => 256
     */
+
+////
+////
+////
+
+    syntax KItem ::= "xevm2evm"
+    rule <k> xevm2evm => xevm2evm(Code) ... </k>
+         <xevm> Code /* XEVM* */ </xevm>
+
+    syntax KItem ::= "xevm2evm" "(" List /* XEVM* */ ")"
+    rule xevm2evm(Code) => genSymTbl(Code) ~> decode(Code)
+
+////
+
+    rule genSymTbl(.List) => .
+
+    rule <k> genSymTbl(ListItem(_:EVMCORE) Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
+    rule <k> genSymTbl(ListItem(DUP(_))    Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
+    rule <k> genSymTbl(ListItem(SWAP(_))   Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
+    rule <k> genSymTbl(ListItem(PUSH(N,_)) Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int N </pos>
+    rule <k> genSymTbl(ListItem(PUSH(_))   Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 2 </pos> // label: 2 bytes
+    rule <k> genSymTbl(ListItem(JUMP(_))   Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 3 </pos> // push(label)
+    rule <k> genSymTbl(ListItem(JUMPI(_))  Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 3 </pos> // push(label)
+
+    rule <k> genSymTbl(ListItem(CODELEN)   Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 3 </pos> // push(label)
+
+    rule <k> genSymTbl(ListItem(JUMPDEST(L)) Code) => genSymTbl(Code) ... </k>
+         <labelTbl> M => M[L <- POS] </labelTbl>
+         <pos> POS </pos>
+
+////
+
+    syntax KItem ::= "decode" "(" List /* XEVM* */ ")"
+
+    rule decode(.List) => .
+
+    rule <k> decode(ListItem(C:EVM)   Code) => decode(Code) ... </k> <evm> ... (.List => ListItem(C)) </evm>
+
+    rule <k> decode(ListItem(DUP(N))      Code) => decode(Code) ... </k> <evm> ... (.List => ListItem(decode1(DUP(N)))) </evm>
+    rule <k> decode(ListItem(SWAP(N))     Code) => decode(Code) ... </k> <evm> ... (.List => ListItem(decode1(SWAP(N)))) </evm>
+    rule <k> decode(ListItem(PUSH(N, B))  Code) => decodeBytes(B) ~> decode(Code) ... </k> <evm> ... (.List => ListItem(decode1(PUSH(N,B)))) </evm>
+
+    rule <k> decode(ListItem(PUSH(L))     Code) => decodeInt(M[L]:>Int) ~> decode(                Code) ... </k> <labelTbl> M </labelTbl> when L in keys(M)
+    rule <k> decode(ListItem(JUMP(L))     Code) => decodeInt(M[L]:>Int) ~> decode(ListItem(JUMP)  Code) ... </k> <labelTbl> M </labelTbl> when L in keys(M)
+    rule <k> decode(ListItem(JUMPI(label(L)))    Code) => decodeInt(M[label(L)]:>Int) ~> decode(ListItem(JUMPI) Code) ... </k> <labelTbl> M </labelTbl> when label(L) in keys(M)
+    rule <k> decode(ListItem(JUMPI(pc))   Code) => decode(ListItem(PC) ListItem(JUMPI) Code) ... </k>
+    rule     decode(ListItem(JUMPDEST(_)) Code) =>                         decode(                Code)
+    rule <k> decode(ListItem(CODELEN)     Code) => decodeInt(POS) ~>       decode(ListItem(JUMPI) Code) ... </k> <pos> POS </pos>
+
+    syntax KItem ::= "decodeInt" "(" Int ")"
+    rule <k> decodeInt(N) => . ... </k>
+         <evm> ... (.List => ListItem(PUSH2) ListItem(N /Int 256) ListItem(N %Int 256)) </evm>
+    when 0 <=Int N andBool N <Int (2 ^Int 16)
+
+    syntax KItem ::= "decodeBytes" "(" Bytes ")"
+    rule <k> decodeBytes(B Bs) => decodeBytes(Bs) ... </k>
+         <evm> ... (.List => ListItem(B)) </evm>
+    rule decodeBytes(.Bytes) => .
+
+////
+
+    syntax EVM ::= "decode1" "(" XEVM ")" [function]
+
+    rule decode1(DUP(1 )) => DUP1
+    rule decode1(DUP(2 )) => DUP2
+    rule decode1(DUP(3 )) => DUP3
+    rule decode1(DUP(4 )) => DUP4
+    rule decode1(DUP(5 )) => DUP5
+    rule decode1(DUP(6 )) => DUP6
+    rule decode1(DUP(7 )) => DUP7
+    rule decode1(DUP(8 )) => DUP8
+    rule decode1(DUP(9 )) => DUP9
+    rule decode1(DUP(10)) => DUP10
+    rule decode1(DUP(11)) => DUP11
+    rule decode1(DUP(12)) => DUP12
+    rule decode1(DUP(13)) => DUP13
+    rule decode1(DUP(14)) => DUP14
+    rule decode1(DUP(15)) => DUP15
+    rule decode1(DUP(16)) => DUP16
+
+    rule decode1(SWAP(1 )) => SWAP1
+    rule decode1(SWAP(2 )) => SWAP2
+    rule decode1(SWAP(3 )) => SWAP3
+    rule decode1(SWAP(4 )) => SWAP4
+    rule decode1(SWAP(5 )) => SWAP5
+    rule decode1(SWAP(6 )) => SWAP6
+    rule decode1(SWAP(7 )) => SWAP7
+    rule decode1(SWAP(8 )) => SWAP8
+    rule decode1(SWAP(9 )) => SWAP9
+    rule decode1(SWAP(10)) => SWAP10
+    rule decode1(SWAP(11)) => SWAP11
+    rule decode1(SWAP(12)) => SWAP12
+    rule decode1(SWAP(13)) => SWAP13
+    rule decode1(SWAP(14)) => SWAP14
+    rule decode1(SWAP(15)) => SWAP15
+    rule decode1(SWAP(16)) => SWAP16
+
+    rule decode1(PUSH(1 , _)) => PUSH1
+    rule decode1(PUSH(2 , _)) => PUSH2
+    rule decode1(PUSH(3 , _)) => PUSH3
+    rule decode1(PUSH(4 , _)) => PUSH4
+    rule decode1(PUSH(5 , _)) => PUSH5
+    rule decode1(PUSH(6 , _)) => PUSH6
+    rule decode1(PUSH(7 , _)) => PUSH7
+    rule decode1(PUSH(8 , _)) => PUSH8
+    rule decode1(PUSH(9 , _)) => PUSH9
+    rule decode1(PUSH(10, _)) => PUSH10
+    rule decode1(PUSH(11, _)) => PUSH11
+    rule decode1(PUSH(12, _)) => PUSH12
+    rule decode1(PUSH(13, _)) => PUSH13
+    rule decode1(PUSH(14, _)) => PUSH14
+    rule decode1(PUSH(15, _)) => PUSH15
+    rule decode1(PUSH(16, _)) => PUSH16
+    rule decode1(PUSH(17, _)) => PUSH17
+    rule decode1(PUSH(18, _)) => PUSH18
+    rule decode1(PUSH(19, _)) => PUSH19
+    rule decode1(PUSH(20, _)) => PUSH20
+    rule decode1(PUSH(21, _)) => PUSH21
+    rule decode1(PUSH(22, _)) => PUSH22
+    rule decode1(PUSH(23, _)) => PUSH23
+    rule decode1(PUSH(24, _)) => PUSH24
+    rule decode1(PUSH(25, _)) => PUSH25
+    rule decode1(PUSH(26, _)) => PUSH26
+    rule decode1(PUSH(27, _)) => PUSH27
+    rule decode1(PUSH(28, _)) => PUSH28
+    rule decode1(PUSH(29, _)) => PUSH29
+    rule decode1(PUSH(30, _)) => PUSH30
+    rule decode1(PUSH(31, _)) => PUSH31
+    rule decode1(PUSH(32, _)) => PUSH32
+
+
+
 
 endmodule

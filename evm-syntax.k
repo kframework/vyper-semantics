@@ -4,6 +4,7 @@ module EVM-SYNTAX
     imports EVM-CORE-SYNTAX
 
     syntax EVM ::= EVMCORE
+                  | Int
                   // 0x0*
                 //  "STOP"
                 //| "ADD"
