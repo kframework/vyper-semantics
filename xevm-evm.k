@@ -31,7 +31,7 @@ module XEVM-EVM
 
     rule <k> genLabelTbl(ListItem(CODELEN)   Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 3 </pos> // push(label)
 
-    rule <k> genLabelTbl(ListItem(JUMPDEST(L)) Code) => genLabelTbl(Code) ... </k>
+    rule <k> genLabelTbl(ListItem(JUMPDEST(label(L))) Code) => genLabelTbl(Code) ... </k>
          <labelTbl> M => M[L <- POS] </labelTbl>
          <pos> POS => POS +Int 1 </pos>
 
@@ -41,18 +41,19 @@ module XEVM-EVM
 
     rule decode(.List) => .
 
-    rule <k> decode(ListItem(C:EVM)   Code) => decode(Code) ... </k> <evm> ... (.List => ListItem(C)) </evm>
+    rule <k> decode(ListItem(C:EVM) Code) => decode(Code) ... </k>
+         <evm> ... (.List => ListItem(C)) </evm>
 
-    rule <k> decode(ListItem(DUP(N))      Code) => decode(Code) ... </k> <evm> ... (.List => ListItem(decode1(DUP(N)))) </evm>
-    rule <k> decode(ListItem(SWAP(N))     Code) => decode(Code) ... </k> <evm> ... (.List => ListItem(decode1(SWAP(N)))) </evm>
-    rule <k> decode(ListItem(PUSH(N, B))  Code) => decodeBytes(B) ~> decode(Code) ... </k> <evm> ... (.List => ListItem(decode1(PUSH(N,B)))) </evm>
+    rule     decode(ListItem(DUP(N))          Code) => decode(ListItem(decode1(DUP(N))))    ~>                   decode(Code)
+    rule     decode(ListItem(SWAP(N))         Code) => decode(ListItem(decode1(SWAP(N))))   ~>                   decode(Code)
+    rule     decode(ListItem(PUSH(N, B))      Code) => decode(ListItem(decode1(PUSH(N,B)))) ~> decodeBytes(B) ~> decode(Code)
 
-    rule <k> decode(ListItem(PUSH(L))     Code) => decodeInt(M[L]:>Int) ~> decode(                Code) ... </k> <labelTbl> M </labelTbl> when L in keys(M)
-    rule <k> decode(ListItem(JUMP(L))     Code) => decodeInt(M[L]:>Int) ~> decode(ListItem(JUMP)  Code) ... </k> <labelTbl> M </labelTbl> when L in keys(M)
-    rule <k> decode(ListItem(JUMPI(label(L)))    Code) => decodeInt(M[label(L)]:>Int) ~> decode(ListItem(JUMPI) Code) ... </k> <labelTbl> M </labelTbl> when label(L) in keys(M)
-    rule <k> decode(ListItem(JUMPI(pc))   Code) => decode(ListItem(PC) ListItem(JUMPI) Code) ... </k>
-    rule     decode(ListItem(JUMPDEST(_)) Code) =>                         decode(                Code)
-    rule <k> decode(ListItem(CODELEN)     Code) => decodeInt(POS) ~>       decode(ListItem(JUMPI) Code) ... </k> <pos> POS </pos>
+    rule <k> decode(ListItem(CODELEN)         Code) => decodeInt(POS) ~>       decode(                   Code) ... </k> <pos> POS </pos>
+    rule <k> decode(ListItem(PUSH (label(L))) Code) => decodeInt(M[L]:>Int) ~> decode(                   Code) ... </k> <labelTbl> M </labelTbl> when L in keys(M)
+    rule <k> decode(ListItem(JUMP (label(L))) Code) => decodeInt(M[L]:>Int) ~> decode(ListItem(JUMP)     Code) ... </k> <labelTbl> M </labelTbl> when L in keys(M)
+    rule <k> decode(ListItem(JUMPI(label(L))) Code) => decodeInt(M[L]:>Int) ~> decode(ListItem(JUMPI)    Code) ... </k> <labelTbl> M </labelTbl> when L in keys(M)
+    rule     decode(ListItem(JUMPI(pc))       Code) =>            decode(ListItem(PC) ListItem(JUMPI)    Code)
+    rule     decode(ListItem(JUMPDEST(_))     Code) =>                         decode(ListItem(JUMPDEST) Code)
 
     syntax KItem ::= "decodeInt" "(" Int ")"
     rule <k> decodeInt(N) => . ... </k>
