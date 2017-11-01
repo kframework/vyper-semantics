@@ -22,27 +22,27 @@ module LLL-XEVM
 //// LLLEVM
 
     // L := V
-    rule $mstore(L, V) => V ~> L ~> MSTORE
+    rule $mstore(L, V) => do(V L) ~> MSTORE
 
-    rule $mload(L) => L ~> MLOAD
+    rule $mload(L) => do(L) ~> MLOAD
 
-    rule $calldataload(L) => L ~> CALLDATALOAD
+    rule $calldataload(L) => do(L) ~> CALLDATALOAD
     rule $callvalue => CALLVALUE
 
-    rule $eq(X, Y) => Y ~> X ~> EQ
-    rule $add(X, Y) => Y ~> X ~> ADD
+    rule $eq(X, Y) => do(Y X) ~> EQ
+    rule $add(X, Y) => do(Y X) ~> ADD
 
-    rule $iszero(X) => X ~> ISZERO
+    rule $iszero(X) => do(X) ~> ISZERO
 
     rule $stop => STOP
 
     // return mem[L..L+S]
-    rule $return(L, S) => S ~> L ~> RETURN
+    rule $return(L, S) => do(S L) ~> RETURN
 
-    rule  $lt(X, Y) => Y ~> X ~>  LT
-    rule  $gt(X, Y) => Y ~> X ~>  GT
-    rule $slt(X, Y) => Y ~> X ~> SLT
-    rule $sgt(X, Y) => Y ~> X ~> SGT
+    rule  $lt(X, Y) => do(Y X) ~>  LT
+    rule  $gt(X, Y) => do(Y X) ~>  GT
+    rule $slt(X, Y) => do(Y X) ~> SLT
+    rule $sgt(X, Y) => do(Y X) ~> SGT
 
 //// LLLExp
 
@@ -175,22 +175,22 @@ module LLL-XEVM
     rule $assert(C)
       => C ~> assertTrue
 
-    rule $uclamplt(X, UB) => X ~> UB ~> DUP(2) ~>  LT ~> assertTrue   /* X <  UB */
-    rule $uclample(X, UB) => X ~> UB ~> DUP(2) ~>  GT ~> assertFalse  /* X <= UB */
-    rule  $clamplt(X, UB) => X ~> UB ~> DUP(2) ~> SLT ~> assertTrue   /* X <  UB */
-    rule  $clample(X, UB) => X ~> UB ~> DUP(2) ~> SGT ~> assertFalse  /* X <= UB */
+    rule $uclamplt(X, UB) => do(X UB) ~> DUP(2) ~>  LT ~> assertTrue   /* X <  UB */
+    rule $uclample(X, UB) => do(X UB) ~> DUP(2) ~>  GT ~> assertFalse  /* X <= UB */
+    rule  $clamplt(X, UB) => do(X UB) ~> DUP(2) ~> SLT ~> assertTrue   /* X <  UB */
+    rule  $clample(X, UB) => do(X UB) ~> DUP(2) ~> SGT ~> assertFalse  /* X <= UB */
 
-    rule $uclampgt(X, LB) => X ~> LB ~> DUP(2) ~>  GT ~> assertTrue   /* X >  LB */
-    rule $uclampge(X, LB) => X ~> LB ~> DUP(2) ~>  LT ~> assertFalse  /* X >= LB */
-    rule  $clampgt(X, LB) => X ~> LB ~> DUP(2) ~> SGT ~> assertTrue   /* X >  LB */
-    rule  $clampge(X, LB) => X ~> LB ~> DUP(2) ~> SLT ~> assertFalse  /* X >= LB */
+    rule $uclampgt(X, LB) => do(X LB) ~> DUP(2) ~>  GT ~> assertTrue   /* X >  LB */
+    rule $uclampge(X, LB) => do(X LB) ~> DUP(2) ~>  LT ~> assertFalse  /* X >= LB */
+    rule  $clampgt(X, LB) => do(X LB) ~> DUP(2) ~> SGT ~> assertTrue   /* X >  LB */
+    rule  $clampge(X, LB) => do(X LB) ~> DUP(2) ~> SLT ~> assertFalse  /* X >= LB */
 
     rule $uclamp(LB, X, UB)
-      => LB ~> X ~> DUP(1) ~> UB ~> SWAP(1) ~>  GT ~> assertFalse /* X <= UB */
-            ~> DUP(1) ~> SWAP(2) ~> SWAP(1) ~>  LT ~> assertFalse /* X >= LB */
+      => do(LB X) ~> DUP(1) ~> doh(UB,3) ~> SWAP(1) ~>  GT ~> assertFalse /* X <= UB */
+                    ~> DUP(1) ~> SWAP(2) ~> SWAP(1) ~>  LT ~> assertFalse /* X >= LB */
     rule  $clamp(LB, X, UB)
-      => LB ~> X ~> DUP(1) ~> UB ~> SWAP(1) ~> SGT ~> assertFalse /* X <= UB */
-            ~> DUP(1) ~> SWAP(2) ~> SWAP(1) ~> SLT ~> assertFalse /* X >= LB */
+      => do(LB X) ~> DUP(1) ~> doh(UB,3) ~> SWAP(1) ~> SGT ~> assertFalse /* X <= UB */
+                    ~> DUP(1) ~> SWAP(2) ~> SWAP(1) ~> SLT ~> assertFalse /* X >= LB */
 
     rule $clamp_nonzero(X)
       => X ~> DUP(1) ~> assertNonZero
@@ -337,5 +337,20 @@ module LLL-XEVM
     rule BLANK_SPACE => 224
     rule FREE_LOOP_INDEX => 256
     */
+
+    // TODO:DJ: cleaner?
+    syntax Ls ::= List{LLLExp,""}
+    syntax KItem ::= "do" "(" Ls ")"
+                   | "do" "(" Ls "," Int ")"
+                   | "doh" "(" Ls "," Int ")"
+    rule <k> do(Es) => do(Es, H) ... </k>
+         <height> H </height>
+    rule <k> do(E Es, H) => ctx(E, H, W, BL, BH) ~> do(Es, H +Int 1) ... </k>
+         <with> W </with>
+         <b-label> BL </b-label>
+         <b-height> BH </b-height>
+    rule do(.Ls, _) => .
+    rule <k> doh(Es, HInc) => do(Es, H +Int HInc) ... </k>
+         <height> H </height>
 
 endmodule
