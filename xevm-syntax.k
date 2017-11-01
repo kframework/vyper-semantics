@@ -12,6 +12,7 @@ module XEVM-SYNTAX
                   | "JUMP"      "(" Label ")"
                   | "JUMPI"     "(" Label ")"
                   | "JUMPDEST"  "(" Label ")"
+                  | "BLANK"     "(" Label ")"
                   | "CODELEN"
 
     syntax Label ::= "label" "(" Int ")"

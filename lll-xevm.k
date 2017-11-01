@@ -155,7 +155,7 @@ module LLL-XEVM
     rule $lll(S1, S2) => lll(S1, S2, newLabel, newLabel)    syntax KItem ::= "lll" "(" LLLExp "," LLLExp "," Label "," Label ")"
     rule <k> lll(S1, S2, LBegin, LEnd)
           => JUMP(LEnd)
-          ~> JUMPDEST(LBegin)
+          ~> BLANK(LBegin)
           ~> ctx(S1, 0, .Map, emptyLabel, emptyHeight)
           ~> JUMPDEST(LEnd)
           ~> PUSH(LBegin) ~> PUSH(LEnd) ~> SUB
