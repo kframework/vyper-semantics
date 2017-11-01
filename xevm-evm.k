@@ -1,14 +1,15 @@
+require "xevm-evm-interface.k"
 require "xevm-syntax.k"
 require "evm-syntax.k"
-
-module XEVM-EVM-SYNTAX
-    syntax KItem ::= "xevm2evm"
-endmodule
+require "lll-evm-config.k"
 
 module XEVM-EVM
+    imports XEVM-EVM-INTERFACE
+
+    imports LLL-EVM-CONFIG
+
     imports XEVM-SYNTAX
     imports EVM-SYNTAX
-    imports XEVM-EVM-SYNTAX
 
     rule <k> xevm2evm => xevm2evm(Code) ... </k>
          <xevm> Code /* XEVM* */ </xevm>
@@ -38,27 +39,32 @@ module XEVM-EVM
 
     syntax KItem ::= "decode" "(" List /* XEVM* */ ")"
 
-    rule <k> decode(ListItem(C:EVMCORE)   Code) => decode(Code) ... </k> <evm> ... (.List => ListItem(C)) </evm>
+    rule decode(.List) => .
 
-    rule <k> decode(ListItem(DUP(N))      Code) => decode(Code) ... </k> <evm> ... (.List => decode1(DUP(N))) </evm>
-    rule <k> decode(ListItem(SWAP(N))     Code) => decode(Code) ... </k> <evm> ... (.List => decode1(SWAP(N))) </evm>
-    rule <k> decode(ListItem(PUSH(N, B))  Code) => decode(Code) ... </k> <evm> ... (.List => decode1(PUSH(N,B)) decodeBytes(B)) </evm>
+    rule <k> decode(ListItem(C:EVM)   Code) => decode(Code) ... </k> <evm> ... (.List => ListItem(C)) </evm>
 
-    rule <k> decode(ListItem(PUSH(L))     Code) => decode(Code) ... </k> <evm> ... (.List => decodeInt(M[L]))                 </evm> <labelTbl> M </labelTbl>
-    rule <k> decode(ListItem(JUMP(L))     Code) => decode(Code) ... </k> <evm> ... (.List => decodeInt(M[L]) ListItem(JUMP))  </evm> <labelTbl> M </labelTbl>
-    rule <k> decode(ListItem(JUMPI(L))    Code) => decode(Code) ... </k> <evm> ... (.List => decodeInt(M[L]) ListItem(JUMPI)) </evm> <labelTbl> M </labelTbl>
-    rule     decode(ListItem(JUMPDEST(_)) Code) => decode(Code)
-    rule <k> decode(ListItem(CODELEN)     Code) => decode(Code) ... </k> <evm> ... (.List => decodeInt(POS)  ListItem(JUMPI)) </evm> <pos> POS </pos>
+    rule <k> decode(ListItem(DUP(N))      Code) => decode(Code) ... </k> <evm> ... (.List => ListItem(decode1(DUP(N)))) </evm>
+    rule <k> decode(ListItem(SWAP(N))     Code) => decode(Code) ... </k> <evm> ... (.List => ListItem(decode1(SWAP(N)))) </evm>
+    rule <k> decode(ListItem(PUSH(N, B))  Code) => decodeBytes(B) ~> decode(Code) ... </k> <evm> ... (.List => ListItem(decode1(PUSH(N,B)))) </evm>
 
-////
+    rule <k> decode(ListItem(PUSH(L))     Code) => decodeInt(M[L]:>Int) ~> decode(                Code) ... </k> <labelTbl> M </labelTbl> when L in keys(M)
+    rule <k> decode(ListItem(JUMP(L))     Code) => decodeInt(M[L]:>Int) ~> decode(ListItem(JUMP)  Code) ... </k> <labelTbl> M </labelTbl> when L in keys(M)
+    rule <k> decode(ListItem(JUMPI(label(L)))    Code) => decodeInt(M[label(L)]:>Int) ~> decode(ListItem(JUMPI) Code) ... </k> <labelTbl> M </labelTbl> when label(L) in keys(M)
+    rule <k> decode(ListItem(JUMPI(pc))   Code) => decode(ListItem(PC) ListItem(JUMPI) Code) ... </k>
+    rule     decode(ListItem(JUMPDEST(_)) Code) =>                         decode(                Code)
+    rule <k> decode(ListItem(CODELEN)     Code) => decodeInt(POS) ~>       decode(ListItem(JUMPI) Code) ... </k> <pos> POS </pos>
 
-    syntax List ::= "decodeInt" "(" Int ")" [function]
-    rule decodeInt(N) => ListItem(PUSH2) ListItem(N /Int 256) ListItem(N %Int 256)
+    syntax KItem ::= "decodeInt" "(" Int ")"
+    rule <k> decodeInt(N) => . ... </k>
+         <evm> ... (.List => ListItem(PUSH2) ListItem(N /Int 256) ListItem(N %Int 256)) </evm>
     when 0 <=Int N andBool N <Int (2 ^Int 16)
 
-    syntax List ::= "decodeBytes" "(" Bytes ")" [function]
-    rule decodeBytes(B Bs) => ListItem(B) decodeBytes(Bs)
-    rule decodeBytes(.Bytes) => .List
+    syntax KItem ::= "decodeBytes" "(" Bytes ")"
+    rule <k> decodeBytes(B Bs) => decodeBytes(Bs) ... </k>
+         <evm> ... (.List => ListItem(B)) </evm>
+    rule decodeBytes(.Bytes) => .
+
+////
 
     syntax EVM ::= "decode1" "(" XEVM ")" [function]
 
