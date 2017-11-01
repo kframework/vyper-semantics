@@ -21,15 +21,16 @@ module XEVM-EVM
 
     rule genLabelTbl(.List) => .
 
-    rule <k> genLabelTbl(ListItem(_:EVMCORE) Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
-    rule <k> genLabelTbl(ListItem(DUP(_))    Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
-    rule <k> genLabelTbl(ListItem(SWAP(_))   Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
-    rule <k> genLabelTbl(ListItem(PUSH(N,_)) Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int N </pos>
-    rule <k> genLabelTbl(ListItem(PUSH(_))   Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 2 </pos> // label: 2 bytes
-    rule <k> genLabelTbl(ListItem(JUMP(_))   Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 3 </pos> // push(label)
-    rule <k> genLabelTbl(ListItem(JUMPI(_))  Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 3 </pos> // push(label)
+    rule <k> genLabelTbl(ListItem(_:EVMCORE)       Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
+    rule <k> genLabelTbl(ListItem(DUP(_))          Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
+    rule <k> genLabelTbl(ListItem(SWAP(_))         Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
+    rule <k> genLabelTbl(ListItem(PUSH(N,_))       Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int N </pos> // N bytes
+    rule <k> genLabelTbl(ListItem(PUSH (label(_))) Code) => genLabelTbl(Code) ... </k> <pos> POS => POS        +Int 3 </pos> // PUSH2 highbits lowbits
+    rule <k> genLabelTbl(ListItem(JUMP (label(_))) Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 3 </pos> // PUSH2 highbits lowbits
+    rule <k> genLabelTbl(ListItem(JUMPI(label(_))) Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 3 </pos> // PUSH2 highbits lowbits
+    rule <k> genLabelTbl(ListItem(JUMPI(pc))       Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 1 </pos> // PC
 
-    rule <k> genLabelTbl(ListItem(CODELEN)   Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 3 </pos> // push(label)
+    rule <k> genLabelTbl(ListItem(CODELEN)         Code) => genLabelTbl(Code) ... </k> <pos> POS => POS        +Int 3 </pos> // PUSH2 highbits lowbits
 
     rule <k> genLabelTbl(ListItem(JUMPDEST(label(L))) Code) => genLabelTbl(Code) ... </k>
          <labelTbl> M => M[L <- POS] </labelTbl>
