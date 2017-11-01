@@ -33,7 +33,7 @@ module XEVM-EVM
 
     rule <k> genLabelTbl(ListItem(JUMPDEST(L)) Code) => genLabelTbl(Code) ... </k>
          <labelTbl> M => M[L <- POS] </labelTbl>
-         <pos> POS </pos>
+         <pos> POS => POS +Int 1 </pos>
 
 ////
 
