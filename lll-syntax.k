@@ -58,7 +58,7 @@ module LLL-SYNTAX
                     | "$caller"
                     | "$address"
 
-    syntax Id     ::= "$stloc"
-                    | "$mloc"
+    syntax Id     ::= "$stloc" | "$mloc" | "$loc"
+
 
 endmodule

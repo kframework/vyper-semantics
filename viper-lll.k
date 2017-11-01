@@ -111,12 +111,8 @@ module VIPER-LLL
                                     #resolveStmts(STMTS),
                                     #generateMethodId(NAME, PARAMS),
                                     #isInitFunc(NAME))
-                 ~> #env(ENV, LOC, FORNAMES, ISCONSTANT, ISPAYABLE) ... </k>
-         <env> ENV </env>
-         <nextMem> LOC </nextMem>
-         <forvar> FORNAMES </forvar>
-         <constant> ISCONSTANT </constant>
-         <payable> ISPAYABLE </payable>
+                 ~> #cleanConfig ... </k>
+         <return> _ => T </return>
 
 
     rule #resolveFuncAux(COPYINPUT, CHECKDECS, FILLPARAMS, STMTS, _, true)
@@ -231,6 +227,20 @@ module VIPER-LLL
     rule #resolveStmt(%for(NAME, %var(V), %binop(+, %var(V), ROUNDS:Int), STMTS))
              => #for(#allocForVar(NAME), #resolveExpr(%var(V)), ROUNDS, #resolveStmts(STMTS))
 
+    rule #resolveStmt(%break) => $break; .LLLExps
+
+    rule #resolveStmt(%pass) => $pass;.LLLExps
+
+    rule <k> #resolveStmt(%return) => #ifThenElse(T =/=K %void,
+                                                  #exception("Expecting to return a value"),
+                                                  .LLLExps) ... </k>
+         <return> T </return>
+
+    rule <k> #resolveStmt(%return(E)) => #ifThenElse(T =/=K %void,
+                                                     #return(#resolveExpr(E), T),
+                                                     #exception("Not expecting to return a value")) ... </k>
+         <return> T </return>
+
     rule #resolveStmt(%throw) => $assert(0);.LLLExps
 
 
@@ -309,6 +319,20 @@ module VIPER-LLL
              => $repeat(LOC, STARTCODE, ROUNDS, $%seq(BODYCODE));.LLLExps
 
 
+    // return
+    syntax CLLLExps ::= "#return" "(" CTypedLLLExp "," Type /*return type*/ ")"  [strict(1)]
+    syntax CLLLExps ::= "#returnBase" "(" TypedLLLExp "," Type ")"
+ // ----------------------------------------------------------------------------------------
+    rule #return(@tlll(T, CODE), RETURNTYPE) => #returnBase(@tlll(T, CODE), RETURNTYPE)
+      requires isBaseType(T)
+
+    rule #returnBase(@tlll(T, CODE), RETURNTYPE)
+             => #ifThenElse(T ==K RETURNTYPE,
+                            $%seq($mstore(0, CODE); $return(0, 32);.LLLExps);.LLLExps,
+                            #exception("Unsupported type conversion."))
+
+
+
     syntax CTypedAddr ::= "#lookupVar" "(" Var ")"
  // ----------------------------------------------
     rule <k> #lookupVar(%var(NAME)) => TADDR ... </k>
@@ -365,17 +389,17 @@ module VIPER-LLL
     syntax CLLLExp ::= "#mkSetter"    "(" TypedAddr    /*left variable address*/   ","
                                           TypedLLLExp  /*right compiled Expr*/
                                       ")"
-    syntax CLLLExp ::= "#mkSetterForBase" "("TypedAddr "," CLLLExp "," Type ")"    [strict(2)]
+    syntax CLLLExp ::= "#mkSetterBase" "("TypedAddr "," CLLLExp "," Type ")"    [strict(2)]
  // ------------------------------------------------------------------------------------------
     rule #mkSetter(@taddr(LEFTT, LOC, ISGLOBAL, ISMUTABLE), @tlll(RIGHTT, CODE))
-             => #mkSetterForBase(@taddr(LEFTT, LOC, ISGLOBAL, ISMUTABLE),
+             => #mkSetterBase(@taddr(LEFTT, LOC, ISGLOBAL, ISMUTABLE),
                                  #baseTypeConvertL(CODE, RIGHTT, LEFTT),
                                  RIGHTT)
       requires isBaseType(LEFTT)
 
-    rule #mkSetterForBase(@taddr(_, LOC, true, _), CODE, _) => $sstore(LOC, CODE)
+    rule #mkSetterBase(@taddr(_, LOC, true, _), CODE, _) => $sstore(LOC, CODE)
 
-    rule #mkSetterForBase(@taddr(_, LOC, false, _), CODE, _) => $mstore(LOC, CODE)
+    rule #mkSetterBase(@taddr(_, LOC, false, _), CODE, _) => $mstore(LOC, CODE)
 
 
     syntax CTypedLLLExp ::= "#convertToBinaryArith" "(" AugAssignOp           ","
@@ -441,6 +465,15 @@ module VIPER-LLL
                               @tlll(%decimal, $add($mul(LCODE, #decimalDivisor), RCODE)),
                     #ifThenElse(LT ==K %decimal andBool RT ==K %num,
                                 @tlll(%decimal, $add(LCODE, $mul(RCODE, #decimalDivisor))),
+                                #exception("How did I get here?"))))
+
+    rule #binOpAux(-, @tlll(LT, LCODE), @tlll(RT, RCODE))
+             => #ifThenElse(LT ==K RT,
+                            @tlll(LT, $sub(LCODE, RCODE)),
+                  #ifThenElse(LT ==K %num andBool RT ==K %decimal,
+                              @tlll(%decimal, $sub($mul(LCODE, #decimalDivisor), RCODE)),
+                    #ifThenElse(LT ==K %decimal andBool RT ==K %num,
+                                @tlll(%decimal, $sub(LCODE, $mul(RCODE, #decimalDivisor))),
                                 #exception("How did I get here?"))))
 
     // Compare
@@ -532,14 +565,15 @@ module VIPER-LLL
     rule #convertToLLLExps(CODE) => CODE;.LLLExps
 
 
-    syntax KItem       ::= "#env" "(" Map "," Int "," Set "," Bool "," Bool ")"
+    syntax KItem       ::= "#cleanConfig"
  // ---------------------------------------------------------------------------
-    rule <k> CODE:LLLExps ~> (#env(ENV, LOC, FORNAMES, ISCONSTANT, ISPAYABLE) => .) ...</k>
-         <env> _ => ENV </env>
-         <nextMem> _ => LOC </nextMem>
-         <forvar> _ => FORNAMES </forvar>
-         <constant> _ => ISCONSTANT </constant>
-         <payable> _ => ISPAYABLE </payable>                [structural]
+    rule <k> CODE:LLLExps ~> (#cleanConfig => .) ...</k>
+         <env> _ => .Map </env>
+         <nextMem> _ => #reservedMemPos </nextMem>
+         <forvar> _ => .Set </forvar>
+         <return> _ => %void </return>
+         <constant> _ => false </constant>
+         <payable> _ => false </payable>                       [structural]
 
 
     syntax KItem       ::= "#exception" "(" String ")"

@@ -1,10 +1,8 @@
 require "viper-lll-interface.k"
-require "lll-evm-interface.k"
 require "utils.k"
 
 module VIPER-CONFIG
     imports VIPER-LLL-INTERFACE
-    imports LLL-EVM-INTERFACE
     imports VIPER-SYNTAX
     imports LLL-SYNTAX
     imports UTILS
@@ -18,6 +16,7 @@ module VIPER-CONFIG
         <nextStorage> 0 </nextStorage>
         <nextMem> #reservedMemPos </nextMem>
         <forvar> .Set </forvar>
+        <return> %void </return>
         <constant> false </constant>
         <payable> false </payable>
     </T>
