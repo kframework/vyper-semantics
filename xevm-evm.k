@@ -12,26 +12,26 @@ module XEVM-EVM
     imports EVM-SYNTAX
 
     rule <k> xevm2evm => xevm2evm(Code) ... </k>
-         <xevm> Code /* XEVM* */ </xevm>
+         <xevm> Code </xevm> // XEVM*
 
     syntax KItem ::= "xevm2evm" "(" List /* XEVM* */ ")"
-    rule xevm2evm(Code) => genSymTbl(Code) ~> decode(Code)
+    rule xevm2evm(Code) => genLabelTbl(Code) ~> decode(Code)
 
 ////
 
-    rule genSymTbl(.List) => .
+    rule genLabelTbl(.List) => .
 
-    rule <k> genSymTbl(ListItem(_:EVMCORE) Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
-    rule <k> genSymTbl(ListItem(DUP(_))    Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
-    rule <k> genSymTbl(ListItem(SWAP(_))   Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
-    rule <k> genSymTbl(ListItem(PUSH(N,_)) Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int N </pos>
-    rule <k> genSymTbl(ListItem(PUSH(_))   Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 2 </pos> // label: 2 bytes
-    rule <k> genSymTbl(ListItem(JUMP(_))   Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 3 </pos> // push(label)
-    rule <k> genSymTbl(ListItem(JUMPI(_))  Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 3 </pos> // push(label)
+    rule <k> genLabelTbl(ListItem(_:EVMCORE) Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
+    rule <k> genLabelTbl(ListItem(DUP(_))    Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
+    rule <k> genLabelTbl(ListItem(SWAP(_))   Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 </pos>
+    rule <k> genLabelTbl(ListItem(PUSH(N,_)) Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int N </pos>
+    rule <k> genLabelTbl(ListItem(PUSH(_))   Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 2 </pos> // label: 2 bytes
+    rule <k> genLabelTbl(ListItem(JUMP(_))   Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 3 </pos> // push(label)
+    rule <k> genLabelTbl(ListItem(JUMPI(_))  Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 1 +Int 3 </pos> // push(label)
 
-    rule <k> genSymTbl(ListItem(CODELEN)   Code) => genSymTbl(Code) ... </k> <pos> POS => POS +Int 3 </pos> // push(label)
+    rule <k> genLabelTbl(ListItem(CODELEN)   Code) => genLabelTbl(Code) ... </k> <pos> POS => POS +Int 3 </pos> // push(label)
 
-    rule <k> genSymTbl(ListItem(JUMPDEST(L)) Code) => genSymTbl(Code) ... </k>
+    rule <k> genLabelTbl(ListItem(JUMPDEST(L)) Code) => genLabelTbl(Code) ... </k>
          <labelTbl> M => M[L <- POS] </labelTbl>
          <pos> POS </pos>
 
