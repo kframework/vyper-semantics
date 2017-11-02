@@ -46,12 +46,12 @@ module VIPER-SYNTAX
 
     syntax Expr     ::= Const
                       | Var
-                      | "%binop"    "(" BinOp     "," Expr "," Expr ")"
-                      | "%compare"  "(" CompareOp "," Expr "," Expr ")"
-                      | "%boolop"   "(" BoolOp    "," Expr "," Expr ")"
-                      | "%unaryop"  "(" UnaryOp   "," Expr ")"
-                      | "%typecast" "(" BaseType  "," Expr ")"
-                      | "%floor"    "(" Expr ")"
+                      | "%binop"     "(" BinOp     "," Expr "," Expr ")"
+                      | "%compareop" "(" CompareOp "," Expr "," Expr ")"
+                      | "%boolop"    "(" BoolOp    "," Expr "," Expr ")"
+                      | "%unaryop"   "(" UnaryOp   "," Expr ")"
+                      | "%typecast"  "(" BaseType  "," Expr ")"
+                      | "%floor"     "(" Expr ")"
 
     syntax Const    ::= Int
                       | String
@@ -78,9 +78,9 @@ module VIPER-SYNTAX
 
     syntax CompareOp     ::= "%lt" | "%le" | "%gt" | "%ge" | "%eq" | "%ne"
 
-    syntax BoolOp        ::= "and" | "or"
+    syntax BoolOp        ::= "%and" | "%or"
 
-    syntax UnaryOp       ::= "not"
+    syntax UnaryOp       ::= "%not"
 
     syntax Id            ::= "__init__"
 

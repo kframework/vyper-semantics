@@ -456,7 +456,9 @@ module VIPER-LLL
 
     rule #resolveExpr(%binop(BOP, LEFTE, RIGHTE)) => #binOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
 
-    rule #resolveExpr(%compare(COP, LEFTE, RIGHTE)) => #compareOp(COP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+    rule #resolveExpr(%compareop(COP, LEFTE, RIGHTE)) => #compareOp(COP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+
+    rule #resolveExpr(%boolop(BOP, LEFTE, RIGHTE)) => #boolOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
 
 
     // Number
@@ -558,8 +560,28 @@ module VIPER-LLL
                               #exception("Unsupported types for comparison"))))
 
 
+    // Bool
+    syntax CTypedLLLExp ::= "#boolOp" "(" BoolOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
+    syntax CTypedLLLExp ::= "#boolOpAux" "(" BoolOp "," TypedLLLExp "," TypedLLLExp ")"
+ // ----------------------------------------------------------------------------------------------------
+    rule #boolOp(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE))
+             => #boolOpAux(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE))
+      requires LT ==K %bool andBool RT ==K %bool
+
+    rule #boolOp(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE))
+             => #exception("Boolean operations can only be between booleans!")
+      requires notBool(LT ==K %bool andBool RT ==K %bool)
+
+    rule #boolOpAux(%and, @tlll(LT, LCODE), @tlll(RT, RCODE))
+             => @tlll(%bool, $and(LCODE, RCODE))
+
+    rule #boolOpAux(%or, @tlll(LT, LCODE), @tlll(RT, RCODE))
+             => @tlll(%bool, $or(LCODE, RCODE))
+
+
+
     syntax CTypedLLLExp ::= "#clampArithResult" "(" CTypedLLLExp ")"                     [strict]
- // --------------------------------------------------------------------------------------------------
+ // ---------------------------------------------------------------------------------------------
     rule #clampArithResult(@tlll(%num, CODE))
               => @tlll(%num, $clamp($mload(#minNumPos), CODE, $mload(#maxNumPos)))
 

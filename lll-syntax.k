@@ -52,6 +52,8 @@ module LLL-SYNTAX
                     | "$sgt"           "(" LLLExp "," LLLExp ")"
                     | "$slt"           "(" LLLExp "," LLLExp ")"
                     | "$eq"            "(" LLLExp "," LLLExp ")"
+                    | "$and"           "(" LLLExp "," LLLExp ")"
+                    | "$or"            "(" LLLExp "," LLLExp ")"
                     | "$return"        "(" LLLExp "," LLLExp ")"
                     | "$stop"
                     | "$callvalue"
