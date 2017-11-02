@@ -14,6 +14,8 @@ module XEVM-SYNTAX
                   | "JUMPDEST"  "(" Label ")"
                   | "BLANK"     "(" Label ")"
                   | "CODELEN"
+                  //
+                  | "LLLBEGIN" | "LLLEND" // for code inside code
 
     syntax Label ::= "label" "(" Int ")"
                    | "pc"

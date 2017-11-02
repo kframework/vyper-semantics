@@ -40,6 +40,14 @@ module XEVM-EVM
          <labelTbl> M => M[L <- POS] </labelTbl>
          <pos> POS </pos>
 
+    rule <k> genLabelTbl(ListItem(LLLBEGIN) Code) => genLabelTbl(Code) ... </k>
+         <pos> POS => 0 </pos>
+         <posStack> (.List => ListItem(POS)) ... </posStack>
+
+    rule <k> genLabelTbl(ListItem(LLLEND) Code) => genLabelTbl(Code) ... </k>
+         <pos> POS => POS +Int POS' </pos>
+         <posStack> (ListItem(POS') => .List) ... </posStack>
+
 ////
 
     syntax KItem ::= "decode" "(" List /* XEVM* */ ")"
@@ -60,6 +68,9 @@ module XEVM-EVM
     rule     decode(ListItem(JUMPI(pc))       Code) =>            decode(ListItem(PC) ListItem(JUMPI)    Code)
     rule     decode(ListItem(JUMPDEST(_))     Code) =>                         decode(ListItem(JUMPDEST) Code)
     rule     decode(ListItem(BLANK(_))        Code) =>                         decode(                   Code)
+
+    rule     decode(ListItem(LLLBEGIN)        Code) =>                         decode(                   Code)
+    rule     decode(ListItem(LLLEND)          Code) =>                         decode(                   Code)
 
     syntax KItem ::= "decodeInt" "(" Int ")"
     rule <k> decodeInt(N) => . ... </k>

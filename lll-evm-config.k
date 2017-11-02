@@ -18,6 +18,7 @@ module LLL-EVM-CONFIG
       </b>
       <labelTbl> .Map </labelTbl>
       <pos> 0 </pos>
+      <posStack> .List </posStack>
     </T>
 
 endmodule

@@ -156,7 +156,9 @@ module LLL-XEVM
     rule <k> lll(S1, S2, LBegin, LEnd)
           => JUMP(LEnd)
           ~> BLANK(LBegin)
+          ~> LLLBEGIN
           ~> ctx(S1, 0, .Map, emptyLabel, emptyHeight)
+          ~> LLLEND
           ~> JUMPDEST(LEnd)
           ~> PUSH(LBegin) ~> PUSH(LEnd) ~> SUB
           ~> PUSH(LBegin)
