@@ -80,7 +80,7 @@ module VIPER-SYNTAX
 
     syntax BoolOp        ::= "%and" | "%or"
 
-    syntax UnaryOp       ::= "%not"
+    syntax UnaryOp       ::= "%not" | "%neg"
 
     syntax Id            ::= "__init__"
 

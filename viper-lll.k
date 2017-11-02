@@ -460,6 +460,8 @@ module VIPER-LLL
 
     rule #resolveExpr(%boolop(BOP, LEFTE, RIGHTE)) => #boolOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
 
+    rule #resolveExpr(%unaryop(UOP, EXPR)) => #unaryOp(UOP, #resolveExpr(EXPR))
+
 
     // Number
     rule #resolveExpr(I:Int) => #ifThenElse(
@@ -579,6 +581,21 @@ module VIPER-LLL
              => @tlll(%bool, $or(LCODE, RCODE))
 
 
+    // Unary
+    syntax CTypedLLLExp ::= "#unaryOp" "(" UnaryOp "," CTypedLLLExp ")"    [strict(2)]
+ // ----------------------------------------------------------------------------------
+    rule #unaryOp(%not, @tlll(T, CODE)) => @tlll(%bool, $iszero(CODE))
+
+    rule #unaryOp(%neg, @tlll(T, CODE)) => @tlll(T, $sub(0, CODE))
+      requires isNumericType(T)
+
+    rule #unaryOp(%neg, @tlll(T, CODE)) => #exception("Unsupported type for negation.")
+      requires notBool isNumericType(T)
+
+
+    // Var
+    rule #resolveExpr(V:Var) => #unwrapLocation(#lookupVar(V))
+
 
     syntax CTypedLLLExp ::= "#clampArithResult" "(" CTypedLLLExp ")"                     [strict]
  // ---------------------------------------------------------------------------------------------
@@ -587,10 +604,6 @@ module VIPER-LLL
 
     rule #clampArithResult(@tlll(%decimal, CODE))
               => @tlll(%decimal, $clamp($mload(#minDecimalPos), CODE, $mload(#maxDecimalPos)))
-
-
-    // Var
-    rule #resolveExpr(V:Var) => #unwrapLocation(#lookupVar(V))
 
 
     syntax CTypedLLLExp ::= "#unwrapLocation" "(" CTypedAddr ")"  [strict]
