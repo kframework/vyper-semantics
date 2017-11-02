@@ -40,37 +40,42 @@ module VIPER-LLL
    
 
     syntax KItem    ::= "#compileViperToLLL"    "(" Pgm ")"
-    syntax KItem    ::= "#compileViperToLLLAux" "(" CLLLExps /*initializer*/ ","
-                                                    CLLLExps /*init func*/   ","
-                                                    CLLLExps /*regular func*/
-                                                 ")"                 [seqstrict]
-    syntax KItem    ::= "#compileViperToLLLAux" "(" CLLLExps /*initializer*/ ","
-                                                    CLLLExps /*regular func*/
-                                                ")"                  [seqstrict]
+    syntax KItem    ::= "#compileViperToLLLAux" "(" CLLLExps /*initializer*/  ","
+                                                    CLLLExps /*init func*/    ","
+                                                    CLLLExps /*regular func*/ ","
+                                                    CLLLExps /*public getter*/
+                                                 ")"                  [seqstrict]
+    syntax KItem    ::= "#compileViperToLLLAux" "(" CLLLExps /*initializer*/  ","
+                                                    CLLLExps /*regular func*/ ","
+                                                    CLLLExps /*public getter*/
+                                                ")"                   [seqstrict]
  // ----------------------------------------------------------------------------
     rule #compileViperToLLL(%pgm(GS, INIT, DEFS)) => #resolveGlobals(GS)
                                                   ~> #compileViperToLLLAux(
                                                          #initializer_lll,
                                                          #resolveFunc(INIT),
-                                                         #resolveFuncs(DEFS))
+                                                         #resolveFuncs(DEFS),
+                                                         #resolveFuncs(#mkPublicGetters(GS, .Defs)))
 
     rule #compileViperToLLL(%pgm(GS, DEFS)) => #resolveGlobals(GS)
                                             ~> #compileViperToLLLAux(
                                                    #initializer_lll,
-                                                   #resolveFuncs(DEFS))
+                                                   #resolveFuncs(DEFS),
+                                                   #resolveFuncs(#mkPublicGetters(GS, .Defs)))
 
-    rule <k> #compileViperToLLLAux(INITIALIZER, INITFUNC, OTHERFUNCS) => . ... </k>
+
+    rule <k> #compileViperToLLLAux(INITIALIZER, INITFUNC, OTHERFUNCS, PUBLICGETTERS) => . ... </k>
          <lll> _ => $%seq(
                       $%seq(INITIALIZER) ++LLL INITFUNC ++LLL
                       $return(
                         0,
-                        $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0)))</lll>
+                        $lll($%seq(INITIALIZER ++LLL OTHERFUNCS ++LLL PUBLICGETTERS), 0));.LLLExps) </lll>
 
-    rule <k> #compileViperToLLLAux(INITIALIZER, OTHERFUNCS) => . ... </k>
+    rule <k> #compileViperToLLLAux(INITIALIZER, OTHERFUNCS, PUBLICGETTERS) => . ... </k>
          <lll> _ => $%seq(
                       $return(
                         0,
-                        $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0));.LLLExps)</lll>
+                        $lll($%seq(INITIALIZER ++LLL OTHERFUNCS ++LLL PUBLICGETTERS ), 0));.LLLExps) </lll>
 
 
     syntax KItem     ::= "#resolveGlobals" "(" Globals ")"
@@ -82,9 +87,9 @@ module VIPER-LLL
          <nextStorage> LOC => LOC +Int 1 </nextStorage>
 
 
-    syntax CLLLExps ::= "#append" "(" CLLLExps "," CLLLExps ")"       [seqstrict]
+    syntax CLLLExps ::= "#extendLLL" "(" CLLLExps "," CLLLExps ")"       [seqstrict]
  // -----------------------------------------------------------------------------
-    rule #append(C1:LLLExps, C2:LLLExps) => C1 ++LLL C2
+    rule #extendLLL(C1:LLLExps, C2:LLLExps) => C1 ++LLL C2
 
 
     syntax CLLLExps ::= "#resolveFuncs"    "(" Defs ")"
@@ -92,7 +97,7 @@ module VIPER-LLL
  // -----------------------------------------------------------------------------
     rule #resolveFuncs(DEFS) => #resolveFuncsAux(DEFS, .LLLExps)
     rule #resolveFuncsAux(.Defs, CODE) => CODE
-    rule #resolveFuncsAux(DEF DEFS, CODE) => #resolveFuncsAux(DEFS, #append(CODE, #resolveFunc(DEF)))
+    rule #resolveFuncsAux(DEF DEFS, CODE) => #resolveFuncsAux(DEFS, #extendLLL(CODE, #resolveFunc(DEF)))
 
 
     syntax CLLLExps ::= "#resolveFunc"    "(" Def  ")"
@@ -125,16 +130,20 @@ module VIPER-LLL
 
 
     syntax CLLLExps ::= "#copyInput" "(" Params "," Bool /*is init?*/ ")"
- // -------------------------------------------------------------------------
+ // ---------------------------------------------------------------------
+    rule #copyInput(.Params, _) => $pass;.LLLExps
+
     rule <k> #copyInput(PARAMS, true) => $codecopy(#reservedMemPos,
                                                    $codelen, 
                                                    #sizeOfParams(PARAMS));.LLLExps ... </k>
          <nextMem> M => M +Int #sizeOfParams(PARAMS) </nextMem>
+      requires #sizeOfParams(PARAMS) >Int 0
 
     rule <k> #copyInput(PARAMS, false) => $calldatacopy(#reservedMemPos, 
                                                         4, 
                                                         #sizeOfParams(PARAMS));.LLLExps ... </k>
          <nextMem> M => M +Int #sizeOfParams(PARAMS) </nextMem>
+      requires #sizeOfParams(PARAMS) >Int 0
 
 
     syntax CLLLExps ::= "#checkDecorators" "(" Decorators ")"
@@ -142,9 +151,9 @@ module VIPER-LLL
     syntax CLLLExps ::= "#checkPayable"    "(" Decorators ")"
     syntax CLLLExps ::= "#checkInternal"   "(" Decorators ")"
  // -------------------------------------------------------------
-    rule #checkDecorators(DECS) => #append(
+    rule #checkDecorators(DECS) => #extendLLL(
                                        #checkConstant(DECS),
-                                       #append(
+                                       #extendLLL(
                                            #checkPayable(DECS),
                                            #checkInternal(DECS)))
 
@@ -186,7 +195,7 @@ module VIPER-LLL
     rule #fillParams(.Params, _, _) => .LLLExps
 
     rule #fillParams(P PS, DATAPOS, ISINIT)
-             => #append(#fillParam(P, DATAPOS, ISINIT), #fillParams(PS, DATAPOS +Int #sizeOfParam(P), ISINIT))
+             => #extendLLL(#fillParam(P, DATAPOS, ISINIT), #fillParams(PS, DATAPOS +Int #sizeOfParam(P), ISINIT))
 
 
  ///////////////////////////////////////////////////////////////////////////////
@@ -201,7 +210,7 @@ module VIPER-LLL
 
     rule #resolveStmtsAux(.Stmts, CODE) => CODE
 
-    rule #resolveStmtsAux(STMT STMTS, CODE) => #resolveStmtsAux(STMTS, #append(CODE, #resolveStmt(STMT)))
+    rule #resolveStmtsAux(STMT STMTS, CODE) => #resolveStmtsAux(STMTS, #extendLLL(CODE, #resolveStmt(STMT)))
 
 
     syntax CLLLExps ::= "#resolveStmt"     "(" Stmt ")"
@@ -305,7 +314,7 @@ module VIPER-LLL
  // -------------------------------------------------------
     rule #if(@tlll(_, CODE), THEN:LLLExps, ELSE:LLLExps) => $if(CODE, $%seq(THEN), $%seq(ELSE));.LLLExps
 
-    rule #if(@tlll(_, CODE), THEN:LLLExps, ELSE) => $if(CODE, $%seq(THEN));.LLLExps
+    rule #if(@tlll(_, CODE), THEN:LLLExp) => $if(CODE, $%seq(THEN));.LLLExps
 
 
     // for
@@ -342,6 +351,14 @@ module VIPER-LLL
                  => #exception("Undeclared Variable:" +String Id2String(NAME)) ... </k>
          <env> ENV </env>
       requires notBool %var(NAME) in keys(ENV)
+
+    rule <k> #lookupVar(%svar(NAME)) => TADDR ... </k>
+         <global> %svar(NAME) |-> TADDR:TypedAddr GLOBAL </global>
+
+    rule <k> #lookupVar(%svar(NAME))
+                 => #exception("Persistent variable undeclared:" +String Id2String(NAME)) ... </k>
+         <global> GLOBAL </global>
+      requires notBool %svar(NAME) in keys(GLOBAL)
 
 
     syntax CTypedAddr ::= "#allocVar" "(" Var "," Type ")"
@@ -767,6 +784,32 @@ module VIPER-LLL
  // ----------------------------------------------------------------------------------------
     rule #ifThenElse(true, THENCLAUSE, ELSECLAUSE) => THENCLAUSE
     rule #ifThenElse(false, THENCLAUSE, ELSECLAUSE) => ELSECLAUSE
+
+
+    syntax Defs   ::= "#mkPublicGetters" "(" Globals "," Defs ")"    [function]
+    syntax Defs   ::= "#mkPublicGetter" "(" Id "," Type ")"          [function]
+ // ---------------------------------------------------------------------------
+    rule #mkPublicGetters(.Globals, DEFS) => DEFS
+
+    rule #mkPublicGetters(%svdecl(NAME, T, %public) GS, DEFS)
+           => #mkPublicGetters(GS, DEFS ++Def #mkPublicGetter(NAME, T))
+
+    rule #mkPublicGetters(%svdecl(_, _, %private) GS, DEFS)
+           => #mkPublicGetters(GS, DEFS)
+
+    rule #mkPublicGetter(NAME, T)
+           => %fdecl(%@constant .Decorators,
+                     String2Id("get_" +String Id2String(NAME)),
+                     .Params,
+                     T,
+                     %return(%svar(NAME)) .Stmts) .Defs
+      requires isBaseType(T)
+
+
+    syntax Defs   ::= Defs "++Def" Defs                    [function]
+ // -----------------------------------------------------------------
+    rule .Defs ++Def DEFS:Defs => DEFS
+    rule (DEF DEFS1) ++Def DEFS2:Defs => DEF (DEFS1 ++Def DEFS2)
 
 
 endmodule
