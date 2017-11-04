@@ -59,6 +59,13 @@ module LLL-SYNTAX
                     | "$callvalue"
                     | "$caller"
                     | "$address"
+                    | "$gas"
+                    | "$difficulty"
+                    | "$timestamp"
+                    | "$coinbase"
+                    | "$number"
+                    | "$blockhash"     "(" LLLExp ")"
+                    | "$origin"
 
     syntax Id     ::= "$stloc" | "$mloc" | "$loc"
 

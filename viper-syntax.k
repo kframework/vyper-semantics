@@ -38,14 +38,11 @@ module VIPER-SYNTAX
 
     syntax AugAssignOp ::= "+=" | "-=" | "*=" | "/=" | "%="
 
-    syntax Var      ::= "%var"  "(" Id ")"
-                      | "%svar" "(" Id ")"
-                      | "%mem"  "(" Var "," Id ")"
-                      | "%arr"  "(" Var "," Expr ")"
-                      | "%self"
-
     syntax Expr     ::= Const
                       | Var
+                      | ReservedExpr
+                      | ReservedFunc
+                      | "%self"
                       | "%binop"     "(" BinOp     "," Expr "," Expr ")"
                       | "%compareop" "(" CompareOp "," Expr "," Expr ")"
                       | "%boolop"    "(" BoolOp    "," Expr "," Expr ")"
@@ -53,9 +50,32 @@ module VIPER-SYNTAX
                       | "%typecast"  "(" BaseType  "," Expr ")"
                       | "%floor"     "(" Expr ")"
 
+    syntax Var      ::= "%var"      "(" Id ")"
+                      | "%svar"     "(" Id ")"
+                      | "%mem"      "(" Var "," Id ")"     /*field access*/
+                      | "%listelem" "(" Var "," Expr ")"   /*list element*/
+                      | "%mapelem"  "(" Var "," Expr ")"   /*map element*/
+
     syntax Const    ::= Int
                       | String
                       | Bool
+
+    syntax ReservedExpr  ::= "%msg.sender" | "%msg.value" | "%msg.gas"
+                           | "%block.difficulty" | "%block.timestamp" | "%block.coinbase" | "%block.number" | "%block.prevhash"
+                           | "%tx.origin"
+
+    syntax ReservedFunc  ::= "%as_num256"  "(" Expr ")"
+                           | "%num256_add" "(" Expr "," Expr ")"
+
+
+    syntax Unit          ::=  BaseUnit
+                           |  Unit "*" Unit       [left]
+                           |  Unit "/" Unit       [left]
+
+
+    syntax BaseUnit      ::= "%wei" | "%currency" | "%currency1" | "%currency2"
+                           | "%sec" | "%m"        | "%kg"
+
 
     syntax Type          ::= "%void"
                            | BaseType
@@ -64,7 +84,13 @@ module VIPER-SYNTAX
                            | MappingType
                            | StructType
 
-    syntax BaseType      ::= "%num" | "%decimal" | "%bool" | "%address" | "%bytes32"
+    syntax BaseType      ::= NumericType
+                           | "%bytes32" | "%num256" | "%bool" | "%address"
+
+    syntax NumericType   ::= "%num" | "%decimal"
+                           | UnitType
+
+    syntax UnitType      ::= "%unit" "(" NumericType "," Unit "," Bool /*positional*/ ")"
 
     syntax ByteArrayType ::= "%bytes"  "(" Int ")"
 
