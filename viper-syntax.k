@@ -27,8 +27,8 @@ module VIPER-SYNTAX
                       | "%break"
                       | "%pass"
                       | "%return"
-                      | "%return" "(" Expr ")"
-                      | "%send" "(" Expr "," Expr ")"
+                      | "%return"    "(" Expr ")"
+                      | "%send"      "(" Expr "," Expr ")"
                       | "%selfdestruct" "(" Expr ")"
                       | "%throw"
     syntax Stmts    ::= List{Stmt, ""}
@@ -64,8 +64,11 @@ module VIPER-SYNTAX
                            | "%block.difficulty" | "%block.timestamp" | "%block.coinbase" | "%block.number" | "%block.prevhash"
                            | "%tx.origin"
 
-    syntax ReservedFunc  ::= "%as_num256"  "(" Expr ")"
-                           | "%num256_add" "(" Expr "," Expr ")"
+    syntax ReservedFunc  ::= "%as_num128"    "(" Expr ")"
+                           | "%as_num256"    "(" Expr ")"
+                           | "%as_wei_value" "(" Expr "," Id   ")"
+                           | "%num256_add"   "(" Expr "," Expr ")"
+                           | "%num256_sub"   "(" Expr "," Expr ")"
 
 
     syntax Unit          ::=  BaseUnit
@@ -109,5 +112,7 @@ module VIPER-SYNTAX
     syntax UnaryOp       ::= "%not" | "%neg"
 
     syntax Id            ::= "__init__"
+                           | "wei"    | "kwei" | "ada"   | "lovelace" | "babbage"
+                           | "shannon"| "gwei" | "szabo" | "finney"   | "ether"
 
 endmodule

@@ -253,6 +253,12 @@ module VIPER-LLL
                                                      #exception("Not expecting to return a value")) ... </k>
          <return> T </return>
 
+    rule <k> #resolveStmt(%send(TO, VALUE))
+                 => #ifThenElse(CONSTANT ==K false,
+                                #send(#resolveExpr(TO), #resolveExpr(VALUE)),
+                                #exception("Cannot send ether inside a constant function")) ... </k>
+         <constant> CONSTANT </constant>
+
     rule #resolveStmt(%throw) => $assert(0);.LLLExps
 
 
@@ -409,6 +415,13 @@ module VIPER-LLL
                             #exception("Unsupported type conversion."))
 
 
+    // send
+    syntax CLLLExps ::= "#send"    "(" CTypedLLLExp /*to*/ "," CTypedLLLExp /*value*/ ")"  [seqstrict]
+ // --------------------------------------------------------------------------------------------------
+    rule #send(@tlll(%address, TOCODE), @tlll(%unit(%num, %wei, _), VALUECODE))
+             => $assert($call(0, TOCODE, VALUECODE, 0, 0, 0, 0)); .LLLExps
+
+
     // Type convert
     syntax CTypedLLLExp ::= "#baseTypeConvert" "(" CTypedLLLExp "," Type /*to*/ ")"  [strict(1)]
  // --------------------------------------------------------------------------------------------
@@ -431,14 +444,6 @@ module VIPER-LLL
  // -----------------------------------------------------------------------------------------------
     rule #resolveExpr(%self) => @tlll(%address, $address)
 
-    rule #resolveExpr(%binop(BOP, LEFTE, RIGHTE)) => #binOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
-
-    rule #resolveExpr(%compareop(COP, LEFTE, RIGHTE)) => #compareOp(COP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
-
-    rule #resolveExpr(%boolop(BOP, LEFTE, RIGHTE)) => #boolOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
-
-    rule #resolveExpr(%unaryop(UOP, EXPR)) => #unaryOp(UOP, #resolveExpr(EXPR))
-
 
     // Number
     rule #resolveExpr(I:Int) => #ifThenElse(
@@ -446,6 +451,12 @@ module VIPER-LLL
                                   @tlll(%num, I),
                                   #exception("Number out of range")
                                 )
+
+
+    // Bool
+    rule #resolveExpr(true)  => @tlll(%bool, 1)
+
+    rule #resolveExpr(false)  => @tlll(%bool, 0)
 
 
     // Var
@@ -513,14 +524,31 @@ module VIPER-LLL
 
 
     // Reserved Func
+    rule #resolveExpr(%as_num128(EXPR)) => #asNum128(#resolveExpr(EXPR))
+
     rule #resolveExpr(%as_num256(EXPR)) => #asNum256(#resolveExpr(EXPR))
 
+    rule #resolveExpr(%as_wei_value(EXPR, UNIT)) => #asWeiValue(#resolveExpr(EXPR), UNIT)
+
     rule #resolveExpr(%num256_add(LEFTE, RIGHTE)) => #num256Add(#resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+
+    rule #resolveExpr(%num256_sub(LEFTE, RIGHTE)) => #num256Sub(#resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+
+
+    syntax CTypedLLLExp ::= "#asNum128"    "(" CTypedLLLExp ")"    [strict]
+    syntax CTypedLLLExp ::= "#asNum128Aux" "(" LLLExp ")"
+ // -----------------------------------------------------------------------
+    rule #asNum128(@tlll(T, CODE))
+             => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %address),
+                            #asNum128Aux(CODE),
+                            #exception("Function arg type does not match expected type."))
+
+    rule #asNum128Aux(CODE) => @tlll(%num, $clamp($mload(#minNumPos), CODE, $mload(#maxNumPos)))
 
 
     syntax CTypedLLLExp ::= "#asNum256"    "(" CTypedLLLExp ")"    [strict]
     syntax CTypedLLLExp ::= "#asNum256Aux" "(" TypedLLLExp ")"
-    syntax CTypedLLLExp ::= "#asNum256ForIntLiteral" "(" LLLExp ")"
+    syntax CTypedLLLExp ::= "#asNum256ForNumber" "(" LLLExp ")"
     syntax CTypedLLLExp ::= "#asNum256ForLLLExp" "(" LLLExp ")"
  // -----------------------------------------------------------------------
     rule #asNum256(@tlll(T, CODE))
@@ -529,14 +557,35 @@ module VIPER-LLL
                             #exception("Function arg type does not match expected type."))
 
     rule #asNum256Aux(@tlll(T, CODE)) => #ifThenElse(isInt(CODE),
-                                                     #asNum256ForIntLiteral(CODE),
+                                                     #asNum256ForNumber(CODE),
                                                      #asNum256ForLLLExp(CODE))
 
-    rule #asNum256ForIntLiteral(I:Int) => #ifThenElse((I >=Int 0) andBool (I <=Int 2^Int 256 -Int 1),
-                                                      @tlll(%num256, I),
-                                                      #exception("Number out of range"))
+    rule #asNum256ForNumber(I:Int) => #ifThenElse((I >=Int 0) andBool (I <=Int 2^Int 256 -Int 1),
+                                                   @tlll(%num256, I),
+                                                   #exception("Number out of range"))
 
     rule #asNum256ForLLLExp(CODE) => @tlll(%num256, CODE)
+
+
+    syntax CTypedLLLExp ::= "#asWeiValue"    "(" CTypedLLLExp "," Id  ")"                [strict(1)]
+    syntax CTypedLLLExp ::= "#asWeiValueAux" "(" TypedLLLExp  "," Int ")"
+    syntax CTypedLLLExp ::= "#asWeiValueForNumber" "(" LLLExp      "," Int ")"
+    syntax CTypedLLLExp ::= "#asWeiValueForLLLExp" "(" TypedLLLExp "," Int ")"
+ // ------------------------------------------------------------------------------------------------
+    rule #asWeiValue(@tlll(T, CODE), UNIT)
+             => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %decimal),
+                            #asWeiValueAux(@tlll(T, CODE), #convertToWei(UNIT)),
+                            #exception("Function arg type does not match expected type."))
+
+    rule #asWeiValueAux(@tlll(T, CODE), DENOMINATION)
+             => #ifThenElse(isInt(CODE),
+                            #asWeiValueForNumber(CODE, DENOMINATION),
+                            #asWeiValueForLLLExp(@tlll(T, CODE), DENOMINATION))
+
+    rule #asWeiValueForLLLExp(@tlll(%num, CODE), DENOMINATION) => @tlll(%unit(%num, %wei, false), $mul(CODE, DENOMINATION))
+
+    rule #asWeiValueForLLLExp(@tlll(%decimal, CODE), DENOMINATION)
+             => @tlll(%unit(%num, %wei, false), $div($mul(CODE, DENOMINATION), #decimalDivisor))
 
 
     syntax CTypedLLLExp ::= "#num256Add"    "(" CTypedLLLExp "," CTypedLLLExp ")"        [seqstrict]
@@ -553,10 +602,26 @@ module VIPER-LLL
                                  $add(LCODE, RCODE);.LLLExps))
 
 
+    syntax CTypedLLLExp ::= "#num256Sub"    "(" CTypedLLLExp "," CTypedLLLExp ")"        [seqstrict]
+    syntax CTypedLLLExp ::= "#num256SubAux" "(" LLLExp "," LLLExp ")"
+ // ------------------------------------------------------------------------------------------------
+    rule #num256Sub(@tlll(LT, LCODE), @tlll(RT, RCODE))
+            => #ifThenElse(#isTypeOf(LT, %num256) andBool #isTypeOf(RT, %num256),
+                           #num256SubAux(LCODE, RCODE),
+                           #exception("Function arg type does not match expected type."))
+
+    rule #num256SubAux(LCODE, RCODE)
+             => @tlll(%num256, $%seq(
+                                 $assert($ge(LCODE, RCODE));
+                                 $sub(LCODE, RCODE);.LLLExps))
+
+
     // Arithmetic
     syntax CTypedLLLExp ::= "#binOp"    "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
     syntax CTypedLLLExp ::= "#binOpAux" "(" BinOp "," TypedLLLExp "," TypedLLLExp ")"
  // -----------------------------------------------------------------------------------------------------
+    rule #resolveExpr(%binop(BOP, LEFTE, RIGHTE)) => #binOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+
     rule #binOp(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE))
              => #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
                         #exception("Unsupported types for arithmetic op"))
@@ -583,7 +648,9 @@ module VIPER-LLL
     // Compare
     syntax CTypedLLLExp ::= "#compareOp"    "(" CompareOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
     syntax CTypedLLLExp ::= "#compareOpAux" "(" CompareOp "," TypedLLLExp "," TypedLLLExp ")"
- // ----------------------------------------------------------------------------------------------------------
+ // -------------------------------------------------------------------------------------------------------------
+    rule #resolveExpr(%compareop(COP, LEFTE, RIGHTE)) => #compareOp(COP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+
     rule #compareOp(COP, @tlll(LT, LCODE), @tlll(RT, RCODE))
            => #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
                 #ifThen(COP =/=K %eq andBool COP =/=K %ne,
@@ -649,6 +716,8 @@ module VIPER-LLL
     syntax CTypedLLLExp ::= "#boolOp" "(" BoolOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
     syntax CTypedLLLExp ::= "#boolOpAux" "(" BoolOp "," TypedLLLExp "," TypedLLLExp ")"
  // ----------------------------------------------------------------------------------------------------
+    rule #resolveExpr(%boolop(BOP, LEFTE, RIGHTE)) => #boolOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+
     rule #boolOp(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE))
              => #ifThenElse((LT ==K %bool) andBool (RT ==K %bool),
                             #boolOpAux(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE)),
@@ -664,6 +733,8 @@ module VIPER-LLL
     // Unary
     syntax CTypedLLLExp ::= "#unaryOp" "(" UnaryOp "," CTypedLLLExp ")"    [strict(2)]
  // ----------------------------------------------------------------------------------
+    rule #resolveExpr(%unaryop(UOP, EXPR)) => #unaryOp(UOP, #resolveExpr(EXPR))
+
     rule #unaryOp(%not, @tlll(T, CODE)) => @tlll(%bool, $iszero(CODE))
 
     rule #unaryOp(%neg, @tlll(T, CODE)) => #ifThenElse(isNumericType(T),
@@ -766,15 +837,6 @@ module VIPER-LLL
     rule #ceil32(I) => I +Int 31 -Int (I -Int 1) %Int 32
 
 
-    syntax Bool      ::= "#inDecorators" "(" Decorator "," Decorators ")"      [function]
- // -------------------------------------------------------------------------------------
-    rule #inDecorators(D, .Decorators) => false
-
-    rule #inDecorators(D, DEC DECS) => true                     requires D ==K DEC
-
-    rule #inDecorators(D, DEC DECS) => #inDecorators(D, DECS)   requires D =/=K DEC
-
-
     syntax String    ::= "#canonicalizeType" "(" Type ")"  [function]
  // -----------------------------------------------------------------
     rule #canonicalizeType(%bytes(L)) => "bytes"
@@ -790,9 +852,9 @@ module VIPER-LLL
    
     rule #canonicalizeType(%bool) => "bool"
  
-    rule #canonicalizetype(%address) => "address"
+    rule #canonicalizeType(%address) => "address"
  
-    rule #canonicalizetype(%bytes32) => "bytes32"
+    rule #canonicalizeType(%bytes32) => "bytes32"
 
 
     syntax Bool     ::= "#isTypeOf" "(" Type "," Type /*target type*/ ")"    [function]
@@ -810,6 +872,15 @@ module VIPER-LLL
 
     rule #isUnitTypeOf(%unit(T, _, _), TARGET) => false
       requires T =/=K TARGET
+
+
+    syntax Bool      ::= "#inDecorators" "(" Decorator "," Decorators ")"      [function]
+ // -------------------------------------------------------------------------------------
+    rule #inDecorators(D, .Decorators) => false
+
+    rule #inDecorators(D, DEC DECS) => true                     requires D ==K DEC
+
+    rule #inDecorators(D, DEC DECS) => #inDecorators(D, DECS)   requires D =/=K DEC
 
 
     syntax String   ::= "#generateSignature" "(" String "," Params ")"  [function]
@@ -837,6 +908,7 @@ module VIPER-LLL
     syntax LLLExps  ::= LLLExps "++LLL" LLLExps      [left, function]
  // -----------------------------------------------------------------
     rule .LLLExps    ++LLL LES:LLLExps => LES
+
     rule (LE ; LES1) ++LLL LES2        => LE ; (LES1 ++LLL LES2)
 
 
@@ -850,6 +922,8 @@ module VIPER-LLL
                                                         #mkDataDecl(DPOS, ISINIT),
                                                         $mload(#maxNumPos)
                                                       );.LLLExps
+
+    rule #mkClamper(%num256  , _, _, _ ) => $pass;.LLLExps
 
     rule #mkClamper(%bool    , DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), 2);.LLLExps
 
@@ -895,6 +969,29 @@ module VIPER-LLL
                              );.LLLExps
 
 
+    syntax Int    ::= "#convertToWei" "(" Id ")"    [function]
+ // ----------------------------------------------------------
+    rule #convertToWei(wei)      => 1
+
+    rule #convertToWei(kwei)     => 10 ^Int 3
+
+    rule #convertToWei(ada)      => 10 ^Int 3
+
+    rule #convertToWei(lovelace) => 10 ^Int 3
+
+    rule #convertToWei(babbage)  => 10 ^Int 6
+
+    rule #convertToWei(shannon)  => 10 ^Int 9
+
+    rule #convertToWei(gwei)     => 10 ^Int 9
+
+    rule #convertToWei(szabo)    => 10 ^Int 12
+
+    rule #convertToWei(finney)   => 10 ^Int 15
+
+    rule #convertToWei(ether)    => 10 ^Int 18
+
+
     syntax KItem  ::= "#ifThen" "(" Bool /*condition*/ "," K /*then*/ ")"
  // ---------------------------------------------------------------------
     rule #ifThen(true, THENCLAUSE) => THENCLAUSE
@@ -930,6 +1027,7 @@ module VIPER-LLL
     syntax Defs   ::= Defs "++Def" Defs                    [function]
  // -----------------------------------------------------------------
     rule .Defs ++Def DEFS:Defs => DEFS
+
     rule (DEF DEFS1) ++Def DEFS2:Defs => DEF (DEFS1 ++Def DEFS2)
 
 
