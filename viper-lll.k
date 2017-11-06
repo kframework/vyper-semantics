@@ -229,15 +229,15 @@ module VIPER-LLL
     rule #resolveStmt(%if(TEST, THENSTMTS)) => #if(#resolveExpr(TEST), #resolveStmts(THENSTMTS))
 
     // e.g. for i in range(10): ...
-    rule #resolveStmt(%for(NAME, ROUNDS, STMTS)) => #for(#allocForVar(NAME), @tlll(%num, 0), ROUNDS, #resolveStmts(STMTS))
+    rule #resolveStmt(%for(NAME, ROUNDS, STMTS)) => #for(#allocLoopVar(NAME), @tlll(%num, 0), ROUNDS, #resolveStmts(STMTS))
 
     // e.g. for i in range(100, 110): ...
     rule #resolveStmt(%for(NAME, START:Int, END:Int, STMTS))
-             => #for(#allocForVar(NAME), @tlll(%num, START), END -Int START, #resolveStmts(STMTS))
+             => #for(#allocLoopVar(NAME), @tlll(%num, START), END -Int START, #resolveStmts(STMTS))
 
     // e.g. for i in range(x, x + 10): ...
     rule #resolveStmt(%for(NAME, %var(V), %binop(+, %var(V), ROUNDS:Int), STMTS))
-             => #for(#allocForVar(NAME), #resolveExpr(%var(V)), ROUNDS, #resolveStmts(STMTS))
+             => #for(#allocLoopVar(NAME), #resolveExpr(%var(V)), ROUNDS, #resolveStmts(STMTS))
 
     rule #resolveStmt(%break) => $break; .LLLExps
 
@@ -266,14 +266,60 @@ module VIPER-LLL
  // ------------------------------------------------------------------------
     rule #assign(V, @tlll(T, CODE)) => #assignAux(#lookupOrAllocVar(V, T), @tlll(T, CODE))
 
-    rule <k> #assignAux(@taddr(LEFTT, LOC, ISGLOBAL, ISMUTABLE), CODE)
+    rule <k> #assignAux(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE), RTCODE)
                  => #ifThen((ISGLOBAL ==K true andBool ISCONSTANT ==K true),
                             #exception("Cannot modify storage inside a constant function!"))
                  ~> #ifThen(ISMUTABLE ==K false,
                             #exception("Cannot modify function argument"))
-                 ~> #convertToLLLExps(#mkSetter(@taddr(LEFTT, LOC, ISGLOBAL, ISMUTABLE), CODE))
+                 ~> #convertToLLLExps(#mkSetter(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE), RTCODE))
                  ... </k>
          <constant> ISCONSTANT </constant>
+
+
+    syntax CTypedAddr ::= "#lookupOrAllocVar" "(" Var "," Type ")"
+ // --------------------------------------------------------------
+    rule <k> #lookupOrAllocVar(%var(NAME), _) => TADDR ... </k>
+         <env> %var(NAME) |-> TADDR:TypedAddr ENV </env>
+
+    rule <k> #lookupOrAllocVar(%var(NAME), T) => #allocVar(%var(NAME), T) ... </k>
+         <env> ENV </env>
+      requires notBool %var(NAME) in keys(ENV)
+
+    rule <k> #lookupOrAllocVar(%svar(NAME), _) => TADDR ... </k>
+         <global> %svar(NAME) |-> TADDR:TypedAddr GLOBAL </global>
+
+    rule <k> #lookupOrAllocVar(%svar(NAME), _)
+                 => #exception("Persistent variable undeclared: " +String Id2String(NAME)) ... </k>
+         <global> GLOBAL </global>
+      requires notBool %svar(NAME) in keys(GLOBAL)
+
+
+    syntax CTypedAddr ::= "#allocVar" "(" Var "," Type ")"
+ // --------------------------------------------------
+    rule <k> #allocVar(%var(NAME), T) => @taddr(T, LOC, false, true) ...</k>
+         <env> ENV => #updateEnv(%var(NAME), T, LOC, ENV, true) </env>
+         <nextMem> LOC => LOC +Int #sizeOfType(T) </nextMem>
+      requires notBool %var(NAME) in keys(ENV)
+
+    rule <k> #allocVar(%var(NAME), T)
+                 => #exception("Duplicate variable name: " +String Id2String(NAME)) ...</k>
+         <env> ENV </env>
+      requires %var(NAME) in keys(ENV)
+
+
+    syntax CLLLExp ::= "#mkSetter"    "(" TypedAddr    /*left variable address*/   ","
+                                          TypedLLLExp  /*right compiled Expr*/
+                                      ")"
+    syntax CLLLExp ::= "#mkSetterForBase" "("TypedAddr "," CTypedLLLExp ")"    [strict(2)]
+ // --------------------------------------------------------------------------------------
+    rule #mkSetter(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE), RTCODE)
+             => #mkSetterForBase(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE),
+                                 #baseTypeConvert(RTCODE, LT))
+      requires isBaseType(LT)
+
+    rule #mkSetterForBase(@taddr(_, LOC, true, _), @tlll(_, CODE)) => $sstore(LOC, CODE)
+
+    rule #mkSetterForBase(@taddr(_, LOC, false, _), @tlll(_, CODE)) => $mstore(LOC, CODE)
 
 
     // Augassign
@@ -282,28 +328,40 @@ module VIPER-LLL
                                             CTypedLLLExp  /*compiled Expr*/
                                         ")"                    [seqstrict(2,3)]
     syntax CLLLExps ::= "#augassignAux" "(" TypedAddr /*variable address*/  ","
-                                            CLLLExp   /*compiled Expr*/
+                                            CTypedLLLExp  /*compiled Expr*/
                                         ")"                         [strict(2)]
  // -----------------------------------------------------------------------------
-    rule <k> #augassign(OP, @taddr(LT, LOC, true, _), @tlll(RT, CODE))
-               => #exception("Cannot modify storage inside a constant function!") ... </k>
+    rule <k> #augassign(OP, @taddr(LT, LOC, true, _), RTCODE)
+                 => #exception("Cannot modify storage inside a constant function!") ... </k>
          <constant> true </constant>
 
-    rule #augassign(OP, @taddr(LT, LOC, true, ISMUTABLE), @tlll(RT, CODE))
-             => #augassignAux(@taddr(LT, LOC, true, ISMUTABLE),
-                              #baseTypeConvertTL(
-                                  #convertToBinaryArith(OP, @tlll(LT, $sload($stloc)), @tlll(RT, CODE)),
-                                  LT))
+    rule <k> #augassign(OP, @taddr(LT, LOC, true, ISMUTABLE), RTCODE)
+                 => #augassignAux(@taddr(LT, LOC, true, ISMUTABLE),
+                                  #baseTypeConvert(
+                                      #convertToBinaryArith(OP, @tlll(LT, $sload($stloc)), RTCODE),
+                                      LT)) ... </k>
+         <constant> false </constant>
 
-    rule #augassign(OP, @taddr(LT, LOC, false, ISMUTABLE), @tlll(RT, CODE))
-             => #augassignAux(@taddr(LT, LOC, false, ISMUTABLE),
-                              #baseTypeConvertTL(
-                                  #convertToBinaryArith(OP, @tlll(LT, $mload($mloc)), @tlll(RT, CODE)),
-                                  LT))
+    rule <k> #augassign(OP, @taddr(LT, LOC, false, ISMUTABLE), RTCODE)
+                 => #augassignAux(@taddr(LT, LOC, false, ISMUTABLE),
+                                  #baseTypeConvert(
+                                      #convertToBinaryArith(OP, @tlll(LT, $mload($mloc)), RTCODE),
+                                      LT)) ... </k>
+          <constant> false </constant>
 
-    rule #augassignAux(@taddr(_, LOC, true, _), CODE) => $with($stloc, LOC, $sstore($stloc, CODE));.LLLExps
+    rule #augassignAux(@taddr(_, LOC, true, _), @tlll(_, CODE))
+             => $with($stloc, LOC, $sstore($stloc, CODE));.LLLExps
 
-    rule #augassignAux(@taddr(_, LOC, false, _), CODE) => $with($mloc, LOC, $mstore($mloc, CODE));.LLLExps
+    rule #augassignAux(@taddr(_, LOC, false, _), @tlll(_, CODE))
+             => $with($mloc, LOC, $mstore($mloc, CODE));.LLLExps
+
+
+    syntax CTypedLLLExp ::= "#convertToBinaryArith" "(" AugAssignOp           ","
+                                                        TypedLLLExp  /*left*/ ","
+                                                        TypedLLLExp  /*right*/
+                                                    ")"
+ // ------------------------------------------------------------------------------
+    rule #convertToBinaryArith(+=, LEXP, REXP) => #binOp(+, LEXP, REXP)
 
 
     // if
@@ -331,6 +389,17 @@ module VIPER-LLL
              => $repeat(LOC, STARTCODE, ROUNDS, $%seq(BODYCODE));.LLLExps
 
 
+    syntax CTypedAddr ::= "#allocLoopVar" "(" Id ")"
+ // --------------------------------------------------
+    rule <k> #allocLoopVar(NAME) => #lookupVar(%var(NAME)) ... </k>
+         <forvar> FORNAMES </forvar>
+      requires NAME in FORNAMES
+
+    rule <k> #allocLoopVar(NAME) => #allocVar(%var(NAME), %num) ... </k>
+         <forvar> FORNAMES (.Set => SetItem(NAME)) </forvar>
+      requires notBool NAME in FORNAMES
+
+
     // return
     syntax CLLLExps ::= "#return" "(" CTypedLLLExp "," Type /*return type*/ ")"  [strict(1)]
     syntax CLLLExps ::= "#returnBase" "(" TypedLLLExp "," Type ")"
@@ -344,108 +413,17 @@ module VIPER-LLL
                             #exception("Unsupported type conversion."))
 
 
-
-    syntax CTypedAddr ::= "#lookupVar" "(" Var ")"
- // ----------------------------------------------
-    rule <k> #lookupVar(%var(NAME)) => TADDR ... </k>
-         <env> %var(NAME) |-> TADDR:TypedAddr ENV </env>
-
-    rule <k> #lookupVar(%var(NAME))
-                 => #exception("Undeclared Variable:" +String Id2String(NAME)) ... </k>
-         <env> ENV </env>
-      requires notBool %var(NAME) in keys(ENV)
-
-    rule <k> #lookupVar(%svar(NAME)) => TADDR ... </k>
-         <global> %svar(NAME) |-> TADDR:TypedAddr GLOBAL </global>
-
-    rule <k> #lookupVar(%svar(NAME))
-                 => #exception("Persistent variable undeclared:" +String Id2String(NAME)) ... </k>
-         <global> GLOBAL </global>
-      requires notBool %svar(NAME) in keys(GLOBAL)
-
-
-    syntax CTypedAddr ::= "#allocVar" "(" Var "," Type ")"
- // --------------------------------------------------
-    rule <k> #allocVar(%var(NAME), T) => @taddr(T, LOC, false, true) ...</k>
-         <env> ENV => #updateEnv(%var(NAME), T, LOC, ENV, true) </env>
-         <nextMem> LOC => LOC +Int #sizeOfType(T) </nextMem>
-      requires notBool %var(NAME) in keys(ENV)
-
-    rule <k> #allocVar(%var(NAME), T)
-                 => #exception("Duplicate variable name: " +String Id2String(NAME)) ...</k>
-         <env> ENV </env>
-      requires %var(NAME) in keys(ENV)
-
-
-    syntax CTypedAddr ::= "#allocForVar" "(" Id ")"
- // --------------------------------------------------
-    rule <k> #allocForVar(NAME) => #lookupVar(%var(NAME)) ... </k>
-         <forvar> FORNAMES </forvar>
-      requires NAME in FORNAMES
-
-    rule <k> #allocForVar(NAME) => #allocVar(%var(NAME), %num) ... </k>
-         <forvar> FORNAMES (.Set => SetItem(NAME)) </forvar>
-      requires notBool NAME in FORNAMES
-
-
-    syntax CTypedAddr ::= "#lookupOrAllocVar" "(" Var "," Type ")"
- // --------------------------------------------------------------
-    rule <k> #lookupOrAllocVar(%var(NAME), _) => TADDR ... </k>
-         <env> %var(NAME) |-> TADDR:TypedAddr ENV </env>
-
-    rule <k> #lookupOrAllocVar(%var(NAME), T) => #allocVar(%var(NAME), T) ... </k>
-         <env> ENV </env>
-      requires notBool %var(NAME) in keys(ENV)
-
-    rule <k> #lookupOrAllocVar(%svar(NAME), _) => TADDR ... </k>
-         <global> %svar(NAME) |-> TADDR:TypedAddr GLOBAL </global>
-
-    rule <k> #lookupOrAllocVar(%svar(NAME), _)
-                 => #exception("Persistent variable undeclared: " +String Id2String(NAME)) ... </k>
-         <global> GLOBAL </global>
-      requires notBool %svar(NAME) in keys(GLOBAL)
-
-
-    syntax CLLLExp ::= "#mkSetter"    "(" TypedAddr    /*left variable address*/   ","
-                                          TypedLLLExp  /*right compiled Expr*/
-                                      ")"
-    syntax CLLLExp ::= "#mkSetterForBase" "("TypedAddr "," CLLLExp "," Type ")"    [strict(2)]
- // ------------------------------------------------------------------------------------------
-    rule #mkSetter(@taddr(LEFTT, LOC, ISGLOBAL, ISMUTABLE), @tlll(RIGHTT, CODE))
-             => #mkSetterForBase(@taddr(LEFTT, LOC, ISGLOBAL, ISMUTABLE),
-                                 #baseTypeConvertL(CODE, RIGHTT, LEFTT),
-                                 RIGHTT)
-      requires isBaseType(LEFTT)
-
-    rule #mkSetterForBase(@taddr(_, LOC, true, _), CODE, _) => $sstore(LOC, CODE)
-
-    rule #mkSetterForBase(@taddr(_, LOC, false, _), CODE, _) => $mstore(LOC, CODE)
-
-
-    syntax CTypedLLLExp ::= "#convertToBinaryArith" "(" AugAssignOp           ","
-                                                        TypedLLLExp  /*left*/ ","
-                                                        TypedLLLExp  /*right*/
-                                                    ")"
- // ------------------------------------------------------------------------------
-    rule #convertToBinaryArith(+=, LEXP, REXP) => #binOp(+, LEXP, REXP)
-
-
-    syntax CLLLExp ::= "#baseTypeConvertL" "(" CLLLExp "," Type /*from*/ "," Type /*to*/ ")"  [strict(1)]
- // -----------------------------------------------------------------------------------------------------
-    rule #baseTypeConvertL(CODE, FROMT, TOT)
+    // Type convert
+    syntax CTypedLLLExp ::= "#baseTypeConvert" "(" CTypedLLLExp "," Type /*to*/ ")"  [strict(1)]
+ // --------------------------------------------------------------------------------------------
+    rule #baseTypeConvert(@tlll(FROMT, CODE), TOT)
              => #ifThenElse(notBool(isBaseType(FROMT)) orBool notBool(isBaseType(TOT)),
                             #exception("Base type conversion from or to non-base type."),
                   #ifThenElse(FROMT ==K TOT,
-                              CODE,
+                              @tlll(TOT, CODE),
                     #ifThenElse(FROMT ==K %num andBool TOT ==K %decimal,
-                                $mul(CODE, #decimalDivisor),
+                                @tlll(TOT, $mul(CODE, #decimalDivisor)),
                                 #exception("Typecasting unavailable"))))
-
-
-    syntax CLLLExp ::= "#baseTypeConvertTL" "(" CTypedLLLExp "," Type /*to*/ ")"  [strict(1)]
- // -----------------------------------------------------------------------------------------
-    rule #baseTypeConvertTL(@tlll(FROMT, CODE), TOT)
-             => #baseTypeConvertL(CODE, FROMT, TOT)
 
 
  ///////////////////////////////////////////////////////////////////////////////
@@ -475,8 +453,41 @@ module VIPER-LLL
 
 
     // Var
-    rule #resolveExpr(%var(V)) => #unwrapLocation(#lookupVar(%var(V)))
-    rule #resolveExpr(%mapelem(V, EXPR)) => #lookupMap
+    rule #resolveExpr(V) => #unwrapLocation(#lookupVar(V))
+
+
+    syntax CTypedAddr ::= "#lookupVar" "(" Var ")"
+ // ----------------------------------------------
+    rule <k> #lookupVar(%var(NAME)) => TADDR ... </k>
+         <env> %var(NAME) |-> TADDR:TypedAddr ENV </env>
+
+    rule <k> #lookupVar(%var(NAME))
+                 => #exception("Undeclared Variable: " +String Id2String(NAME)) ... </k>
+         <env> ENV </env>
+      requires notBool %var(NAME) in keys(ENV)
+
+    rule <k> #lookupVar(%svar(NAME)) => TADDR ... </k>
+         <global> %svar(NAME) |-> TADDR:TypedAddr GLOBAL </global>
+
+    rule <k> #lookupVar(%svar(NAME))
+                 => #exception("Persistent variable undeclared: " +String Id2String(NAME)) ... </k>
+         <global> GLOBAL </global>
+      requires notBool %svar(NAME) in keys(GLOBAL)
+
+    rule #lookupVar(%mapelem(V, EXPR))
+             => #computeVarOffset(#lookupVar(V), #resolveExpr(EXPR))
+
+
+    syntax CTypedAddr ::= "#computeVarOffset" "(" CTypedAddr   /*parent*/ ","
+                                                  CTypedLLLExp /*key*/
+                                              ")"                 [seqstrict]
+    syntax CTypedAddr ::= "#computeVarOffsetForMap" "(" CTypedAddr        ","
+                                                        CTypedLLLExp
+                                                    ")"           [strict(2)]
+ // -------------------------------------------------------------------------
+    rule #computeVarOffset(@taddr(%map(VT, KT), LOC, GLOBAL, MUTABLE), TCODE)
+             => #computeVarOffsetForMap(@taddr(%map(VT, KT), LOC, GLOBAL, MUTABLE),
+                                        #baseTypeConvert(TCODE, KT))
 
 
     // Reserved Expr
@@ -545,7 +556,7 @@ module VIPER-LLL
     syntax CTypedLLLExp ::= "#binOpAux" "(" BinOp "," TypedLLLExp "," TypedLLLExp ")"
  // -----------------------------------------------------------------------------------------------------
     rule #binOp(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE))
-             => #ifThen(notBool(#isNumericType(LT)) orBool notBool(#isNumericType(RT)),
+             => #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
                         #exception("Unsupported types for arithmetic op"))
              ~> #clampArithResult(#binOpAux(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE)))
 
@@ -572,7 +583,7 @@ module VIPER-LLL
     syntax CTypedLLLExp ::= "#compareOpAux" "(" CompareOp "," TypedLLLExp "," TypedLLLExp ")"
  // ----------------------------------------------------------------------------------------------------------
     rule #compareOp(COP, @tlll(LT, LCODE), @tlll(RT, RCODE))
-           => #ifThen(notBool(#isNumericType(LT)) orBool notBool(#isNumericType(RT)),
+           => #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
                 #ifThen(COP =/=K %eq andBool COP =/=K %ne,
                         #exception("Invalid type for comparison op")))
            ~> #compareOpAux(COP, @tlll(LT, LCODE), @tlll(RT, RCODE))
@@ -679,7 +690,7 @@ module VIPER-LLL
 
 
     syntax KItem       ::= "#cleanConfig"
- // ---------------------------------------------------------------------------
+ // -------------------------------------
     rule <k> CODE:LLLExps ~> (#cleanConfig => .) ...</k>
          <env> _ => .Map </env>
          <nextMem> _ => #reservedMemPos </nextMem>
