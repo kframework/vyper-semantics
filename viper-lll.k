@@ -15,8 +15,8 @@ module VIPER-LLL
 
     syntax TypedAddr ::= "@taddr" "(" Type ","
                                       LLLExp /*location*/ ","
-                                      Bool /*global*/     ","
-                                      Bool /*mutable*/    ")"
+                                      Bool   /*global*/   ","
+                                      Bool   /*mutable*/  ")"
 
     syntax TypedLLLExp  ::= "@tlll"  "(" Type "," LLLExp ")"
     syntax TypedLLLExps ::= "@tllls" "(" Type "," LLLExp ")"
@@ -285,13 +285,9 @@ module VIPER-LLL
          <env> ENV </env>
       requires notBool %var(NAME) in keys(ENV)
 
-    rule <k> #lookupOrAllocVar(%svar(NAME), _) => TADDR ... </k>
-         <global> %svar(NAME) |-> TADDR:TypedAddr GLOBAL </global>
+    rule #lookupOrAllocVar(%svar(NAME), _) => #lookupVar(%svar(NAME))
 
-    rule <k> #lookupOrAllocVar(%svar(NAME), _)
-                 => #exception("Persistent variable undeclared: " +String Id2String(NAME)) ... </k>
-         <global> GLOBAL </global>
-      requires notBool %svar(NAME) in keys(GLOBAL)
+    rule #lookupOrAllocVar(%mapelem(V, EXPR), _) => #lookupVar(%mapelem(V, EXPR))
 
 
     syntax CTypedAddr ::= "#allocVar" "(" Var "," Type ")"
@@ -488,6 +484,12 @@ module VIPER-LLL
     rule #computeVarOffset(@taddr(%map(VT, KT), LOC, GLOBAL, MUTABLE), TCODE)
              => #computeVarOffsetForMap(@taddr(%map(VT, KT), LOC, GLOBAL, MUTABLE),
                                         #baseTypeConvert(TCODE, KT))
+
+    rule #computeVarOffsetForMap(@taddr(%map(VT, KT), LOC, true, MUTABLE), @tlll(_, CODE))
+             => @taddr(VT, $add($sha3_32(LOC), CODE), true, MUTABLE)
+
+    rule #computeVarOffsetForMap(@taddr(%map(VT, KT), _, false, _), _)
+             => #exception("Can only have fixed-side arrays in memory, not mappings")
 
 
     // Reserved Expr
