@@ -23,11 +23,15 @@ module LLL-XEVM
 
     // L := V
     rule $mstore(L, V) => do(V L) ~> MSTORE
-
     rule $mload(L) => do(L) ~> MLOAD
 
+    rule $sstore(L, V) => do(V L) ~> SSTORE
+    rule $sload(L) => do(L) ~> SLOAD
+
+    rule $calldatacopy(X, Y, Z) => do(Z Y X) ~> CALLDATACOPY
     rule $calldataload(L) => do(L) ~> CALLDATALOAD
     rule $callvalue => CALLVALUE
+    rule $caller => CALLER
 
     rule $eq(X, Y) => do(Y X) ~> EQ
     rule $add(X, Y) => do(Y X) ~> ADD
@@ -43,6 +47,9 @@ module LLL-XEVM
     rule  $gt(X, Y) => do(Y X) ~>  GT
     rule $slt(X, Y) => do(Y X) ~> SLT
     rule $sgt(X, Y) => do(Y X) ~> SGT
+
+    rule $and(X, Y) => do(Y X) ~> AND
+    rule $or(X, Y) => do(Y X) ~> OR
 
 //// LLLExp
 
