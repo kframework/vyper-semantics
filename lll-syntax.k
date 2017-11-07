@@ -48,7 +48,12 @@ module LLL-SYNTAX
                     | "$sub"           "(" LLLExp "," LLLExp ")"
                     | "$mul"           "(" LLLExp "," LLLExp ")"
                     | "$div"           "(" LLLExp "," LLLExp ")"
+                    | "$sdiv"          "(" LLLExp "," LLLExp ")"
                     | "$mod"           "(" LLLExp "," LLLExp ")"
+                    | "$smod"          "(" LLLExp "," LLLExp ")"
+                    | "$addmod"        "(" LLLExp "," LLLExp "," LLLExp ")"
+                    | "$mulmod"        "(" LLLExp "," LLLExp "," LLLExp ")"
+                    | "$exp"           "(" LLLExp "," LLLExp ")"
                     | "$gt"            "(" LLLExp "," LLLExp ")"
                     | "$lt"            "(" LLLExp "," LLLExp ")"
                     | "$sgt"           "(" LLLExp "," LLLExp ")"
@@ -56,11 +61,14 @@ module LLL-SYNTAX
                     | "$eq"            "(" LLLExp "," LLLExp ")"
                     | "$and"           "(" LLLExp "," LLLExp ")"
                     | "$or"            "(" LLLExp "," LLLExp ")"
+                    | "$xor"           "(" LLLExp "," LLLExp ")"
+                    | "$not"           "(" LLLExp ")"
                     | "$return"        "(" LLLExp "," LLLExp ")"
                     | "$stop"
                     | "$callvalue"
                     | "$caller"
                     | "$address"
+                    | "$balance"
                     | "$gas"
                     | "$difficulty"
                     | "$timestamp"
@@ -68,8 +76,12 @@ module LLL-SYNTAX
                     | "$number"
                     | "$blockhash"     "(" LLLExp ")"
                     | "$origin"
+                    | "$extcodesize"   "(" LLLExp ")"
+                    | "$sha3"          "(" LLLExp "," LLLExp ")"
+                    | "$pop"           "(" LLLExp ")"
+                    | "selfdestruct"   "(" LLLExp ")"
 
-    syntax Id     ::= "$stloc" | "$mloc" | "$loc"
+    syntax Id     ::= "$stloc" [token] | "$mloc" [token] | "$loc" [token]
 
 
 endmodule
