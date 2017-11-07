@@ -1,0 +1,335 @@
+[seq,
+  [return,
+    0,
+    [lll,
+      [seq,
+        [seq,
+          [mstore, 28, [calldataload, 0]],
+          [mstore, 32, 1461501637330902918203684832716283019655932542976],
+          [mstore, 64, 170141183460469231731687303715884105727],
+          [mstore, 96, -170141183460469231731687303715884105728],
+          [mstore, 128, 1701411834604692317316873037158841057270000000000],
+          [mstore, 160, -1701411834604692317316873037158841057280000000000]],
+        # Line 19
+        [if,
+          [eq, [mload, 0], 3504541104 <deposit>],
+          [seq,
+            pass,
+            # Line 21
+            [mstore, 320 <_value>, callvalue],
+            # Line 22
+            [mstore, 352 <_sender>, caller],
+            # Line 23
+            [sstore,
+              [add, [sha3_32, 0 <self.balances>], [mload, 352 <_sender>]],
+              [seq,
+                # Line 23
+                [assert,
+                  [or,
+                    [iszero, [mload, 320 <_value>]],
+                    [gt,
+                      [add,
+                        [sload, [add, [sha3_32, 0 <self.balances>], [mload, 352 <_sender>]]],
+                        [mload, 320 <_value>]],
+                      [sload, [add, [sha3_32, 0 <self.balances>], [mload, 352 <_sender>]]]]]],
+                [add,
+                  [sload, [add, [sha3_32, 0 <self.balances>], [mload, 352 <_sender>]]],
+                  [mload, 320 <_value>]]]],
+            # Line 24
+            [sstore,
+              2 <self.num_issued>,
+              [seq,
+                # Line 24
+                [assert,
+                  [or,
+                    [iszero, [mload, 320 <_value>]],
+                    [gt,
+                      [add, [sload, 2 <self.num_issued>], [mload, 320 <_value>]],
+                      [sload, 2 <self.num_issued>]]]],
+                [add, [sload, 2 <self.num_issued>], [mload, 320 <_value>]]]],
+            # Line 26
+            [seq,
+              [seq, [mstore, 384, [mload, 320 <_value>]]],
+              seq,
+              [log3,
+                384,
+                32,
+                100389287136786176327247604509743168900146139575972864366142685224231313322991,
+                0,
+                [mload, 352 <_sender>]]],
+            # Line 19
+            stop]],
+        # Line 28
+        [if,
+          [eq, [mload, 0], 773487949 <withdraw>],
+          [seq,
+            [calldatacopy, 320, 4, 32],
+            [assert, [iszero, callvalue]],
+            pass,
+            # Line 29
+            [mstore, 352 <_sender>, caller],
+            # Line 32
+            [sstore,
+              [add, [sha3_32, 0 <self.balances>], [mload, 352 <_sender>]],
+              [seq,
+                # Line 32
+                [assert,
+                  [ge,
+                    [sload, [add, [sha3_32, 0 <self.balances>], [mload, 352 <_sender>]]],
+                    [mload, 320 <_value>]]],
+                [sub,
+                  [sload, [add, [sha3_32, 0 <self.balances>], [mload, 352 <_sender>]]],
+                  [mload, 320 <_value>]]]],
+            # Line 33
+            [sstore,
+              2 <self.num_issued>,
+              [seq,
+                # Line 33
+                [assert, [ge, [sload, 2 <self.num_issued>], [mload, 320 <_value>]]],
+                [sub, [sload, 2 <self.num_issued>], [mload, 320 <_value>]]]],
+            # Line 34
+            [assert,
+              [call,
+                0,
+                [mload, 352 <_sender>],
+                [mul, [clamp, [mload, 96], [mload, 320 <_value>], [mload, 64]], 1],
+                0,
+                0,
+                0,
+                0]],
+            # Line 36
+            [seq,
+              [seq, [mstore, 384, [mload, 320 <_value>]]],
+              seq,
+              [log3,
+                384,
+                32,
+                100389287136786176327247604509743168900146139575972864366142685224231313322991,
+                [mload, 352 <_sender>],
+                0]],
+            # Line 37
+            [seq, [mstore, 0, 1], [return, 0, 32]],
+            # Line 28
+            stop]],
+        # Line 39
+        [if,
+          [eq, [mload, 0], 404098525 <totalSupply>],
+          [seq,
+            pass,
+            [assert, [iszero, callvalue]],
+            # Line 41
+            [seq, [mstore, 0, [sload, 2 <self.num_issued>]], [return, 0, 32]],
+            # Line 39
+            stop]],
+        # Line 43
+        [if,
+          [eq, [mload, 0], 1889567281 <balanceOf>],
+          [seq,
+            [calldatacopy, 320, 4, 32],
+            [assert, [iszero, callvalue]],
+            /* checking address input */ 
+            [uclamplt,
+              [calldataload, [add, 4, 0]],
+              [mload, 32]],
+            # Line 45
+            [seq,
+              [mstore,
+                0,
+                [sload, [add, [sha3_32, 0 <self.balances>], [mload, 320 <_owner>]]]],
+              [return, 0, 32]],
+            # Line 43
+            stop]],
+        # Line 47
+        [if,
+          [eq, [mload, 0], 2835717307 <transfer>],
+          [seq,
+            [calldatacopy, 320, 4, 64],
+            [assert, [iszero, callvalue]],
+            /* checking address input */ 
+            [uclamplt,
+              [calldataload, [add, 4, 0]],
+              [mload, 32]],
+            pass,
+            # Line 48
+            [mstore, 384 <_sender>, caller],
+            # Line 50
+            [sstore,
+              [add, [sha3_32, 0 <self.balances>], [mload, 384 <_sender>]],
+              [seq,
+                # Line 50
+                [assert,
+                  [ge,
+                    [sload, [add, [sha3_32, 0 <self.balances>], [mload, 384 <_sender>]]],
+                    [mload, 352 <_value>]]],
+                [sub,
+                  [sload, [add, [sha3_32, 0 <self.balances>], [mload, 384 <_sender>]]],
+                  [mload, 352 <_value>]]]],
+            # Line 51
+            [sstore,
+              [add, [sha3_32, 0 <self.balances>], [mload, 320 <_to>]],
+              [seq,
+                # Line 51
+                [assert,
+                  [or,
+                    [iszero, [mload, 352 <_value>]],
+                    [gt,
+                      [add,
+                        [sload, [add, [sha3_32, 0 <self.balances>], [mload, 320 <_to>]]],
+                        [mload, 352 <_value>]],
+                      [sload, [add, [sha3_32, 0 <self.balances>], [mload, 320 <_to>]]]]]],
+                [add,
+                  [sload, [add, [sha3_32, 0 <self.balances>], [mload, 320 <_to>]]],
+                  [mload, 352 <_value>]]]],
+            # Line 53
+            [seq,
+              [seq, [mstore, 416, [mload, 352 <_value>]]],
+              seq,
+              [log3,
+                416,
+                32,
+                100389287136786176327247604509743168900146139575972864366142685224231313322991,
+                [mload, 384 <_sender>],
+                [mload, 320 <_to>]]],
+            # Line 54
+            [seq, [mstore, 0, 1], [return, 0, 32]],
+            # Line 47
+            stop]],
+        # Line 56
+        [if,
+          [eq, [mload, 0], 599290589 <transferFrom>],
+          [seq,
+            [calldatacopy, 320, 4, 96],
+            [assert, [iszero, callvalue]],
+            /* checking address input */ 
+            [uclamplt,
+              [calldataload, [add, 4, 0]],
+              [mload, 32]],
+            /* checking address input */ 
+            [uclamplt,
+              [calldataload, [add, 4, 32]],
+              [mload, 32]],
+            pass,
+            # Line 57
+            [mstore, 416 <_sender>, caller],
+            # Line 58
+            [mstore,
+              448 <allowance>,
+              [sload,
+                [add,
+                  [sha3_32, [add, [sha3_32, 1 <self.allowances>], [mload, 320 <_from>]]],
+                  [mload, 416 <_sender>]]]],
+            # Line 60
+            [sstore,
+              [add, [sha3_32, 0 <self.balances>], [mload, 320 <_from>]],
+              [seq,
+                # Line 60
+                [assert,
+                  [ge,
+                    [sload, [add, [sha3_32, 0 <self.balances>], [mload, 320 <_from>]]],
+                    [mload, 384 <_value>]]],
+                [sub,
+                  [sload, [add, [sha3_32, 0 <self.balances>], [mload, 320 <_from>]]],
+                  [mload, 384 <_value>]]]],
+            # Line 61
+            [sstore,
+              [add, [sha3_32, 0 <self.balances>], [mload, 352 <_to>]],
+              [seq,
+                # Line 61
+                [assert,
+                  [or,
+                    [iszero, [mload, 384 <_value>]],
+                    [gt,
+                      [add,
+                        [sload, [add, [sha3_32, 0 <self.balances>], [mload, 352 <_to>]]],
+                        [mload, 384 <_value>]],
+                      [sload, [add, [sha3_32, 0 <self.balances>], [mload, 352 <_to>]]]]]],
+                [add,
+                  [sload, [add, [sha3_32, 0 <self.balances>], [mload, 352 <_to>]]],
+                  [mload, 384 <_value>]]]],
+            # Line 62
+            [sstore,
+              [add,
+                [sha3_32, [add, [sha3_32, 1 <self.allowances>], [mload, 320 <_from>]]],
+                [mload, 416 <_sender>]],
+              [seq,
+                # Line 62
+                [assert, [ge, [mload, 448 <allowance>], [mload, 384 <_value>]]],
+                [sub, [mload, 448 <allowance>], [mload, 384 <_value>]]]],
+            # Line 64
+            [seq,
+              [seq, [mstore, 480, [mload, 384 <_value>]]],
+              seq,
+              [log3,
+                480,
+                32,
+                100389287136786176327247604509743168900146139575972864366142685224231313322991,
+                [mload, 320 <_from>],
+                [mload, 352 <_to>]]],
+            # Line 65
+            [seq, [mstore, 0, 1], [return, 0, 32]],
+            # Line 56
+            stop]],
+        # Line 67
+        [if,
+          [eq, [mload, 0], 157198259 <approve>],
+          [seq,
+            [calldatacopy, 320, 4, 64],
+            [assert, [iszero, callvalue]],
+            /* checking address input */ 
+            [uclamplt,
+              [calldataload, [add, 4, 0]],
+              [mload, 32]],
+            pass,
+            # Line 68
+            [mstore, 384 <_sender>, caller],
+            # Line 69
+            [sstore,
+              [add,
+                [sha3_32, [add, [sha3_32, 1 <self.allowances>], [mload, 384 <_sender>]]],
+                [mload, 320 <_spender>]],
+              [mload, 352 <_value>]],
+            # Line 71
+            [seq,
+              [seq, [mstore, 416, [mload, 352 <_value>]]],
+              seq,
+              [log3,
+                416,
+                32,
+                63486140976153616755203102783360879283472101686154884697241723088393386309925,
+                [mload, 384 <_sender>],
+                [mload, 320 <_spender>]]],
+            # Line 72
+            [seq, [mstore, 0, 1], [return, 0, 32]],
+            # Line 67
+            stop]],
+        # Line 74
+        [if,
+          [eq, [mload, 0], 3714247998 <allowance>],
+          [seq,
+            [calldatacopy, 320, 4, 64],
+            [assert, [iszero, callvalue]],
+            /* checking address input */ 
+            [uclamplt,
+              [calldataload, [add, 4, 0]],
+              [mload, 32]],
+            /* checking address input */ 
+            [uclamplt,
+              [calldataload, [add, 4, 32]],
+              [mload, 32]],
+            # Line 76
+            [seq,
+              [mstore,
+                0,
+                [sload,
+                  [add,
+                    [sha3_32, [add, [sha3_32, 1 <self.allowances>], [mload, 320 <_owner>]]],
+                    [mload, 352 <_spender>]]]],
+              [return, 0, 32]],
+            # Line 74
+            stop]]],
+      0]]]
+['_sym_2', 'JUMP', '_sym_1', 'BLANK', ['PUSH1', 0, 'CALLDATALOAD', 'PUSH1', 28, 'MSTORE', 'PUSH21', 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'PUSH1', 32, 'MSTORE', 'PUSH16', 127, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 'PUSH1', 64, 'MSTORE', 'PUSH32', 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'PUSH1', 96, 'MSTORE', 'PUSH21', 1, 42, 5, 241, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 253, 171, 244, 28, 0, 'PUSH1', 128, 'MSTORE', 'PUSH32', 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 213, 250, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'PUSH1', 160, 'MSTORE', 'PUSH4', 208, 227, 13, 176, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', '_sym_3', 'JUMPI', 'CALLVALUE', 'PUSH2', 1, 64, 'MSTORE', 'CALLER', 'PUSH2', 1, 96, 'MSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'ADD', 'GT', 'PUSH2', 1, 64, 'MLOAD', 'ISZERO', 'OR', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'ADD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH1', 2, 'SLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 2, 'SLOAD', 'ADD', 'GT', 'PUSH2', 1, 64, 'MLOAD', 'ISZERO', 'OR', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 2, 'SLOAD', 'ADD', 'PUSH1', 2, 'SSTORE', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 128, 'MSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH32', 221, 242, 82, 173, 27, 226, 200, 155, 105, 194, 176, 104, 252, 55, 141, 170, 149, 43, 167, 241, 99, 196, 161, 22, 40, 245, 90, 77, 245, 35, 179, 239, 'PUSH1', 32, 'PUSH2', 1, 128, 'LOG3', 'STOP', '_sym_3', 'JUMPDEST', 'PUSH4', 46, 26, 125, 77, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', '_sym_4', 'JUMPI', 'PUSH1', 32, 'PUSH1', 4, 'PUSH2', 1, 64, 'CALLDATACOPY', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'CALLER', 'PUSH2', 1, 96, 'MSTORE', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'LT', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'SUB', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 2, 'SLOAD', 'LT', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 2, 'SLOAD', 'SUB', 'PUSH1', 2, 'SSTORE', 'PUSH1', 0, 'PUSH1', 0, 'PUSH1', 0, 'PUSH1', 0, 'PUSH1', 1, 'PUSH1', 96, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'DUP1', 'PUSH1', 64, 'MLOAD', 'SWAP1', 'SGT', 'PC', 'JUMPI', 'DUP1', 'SWAP2', 'SWAP1', 'SLT', 'PC', 'JUMPI', 'MUL', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'CALL', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 128, 'MSTORE', 'PUSH1', 0, 'PUSH2', 1, 96, 'MLOAD', 'PUSH32', 221, 242, 82, 173, 27, 226, 200, 155, 105, 194, 176, 104, 252, 55, 141, 170, 149, 43, 167, 241, 99, 196, 161, 22, 40, 245, 90, 77, 245, 35, 179, 239, 'PUSH1', 32, 'PUSH2', 1, 128, 'LOG3', 'PUSH1', 1, 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', '_sym_4', 'JUMPDEST', 'PUSH4', 24, 22, 13, 221, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', '_sym_5', 'JUMPI', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH1', 2, 'SLOAD', 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', '_sym_5', 'JUMPDEST', 'PUSH4', 112, 160, 130, 49, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', '_sym_6', 'JUMPI', 'PUSH1', 32, 'PUSH1', 4, 'PUSH2', 1, 64, 'CALLDATACOPY', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH1', 0, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', '_sym_6', 'JUMPDEST', 'PUSH4', 169, 5, 156, 187, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', '_sym_7', 'JUMPI', 'PUSH1', 64, 'PUSH1', 4, 'PUSH2', 1, 64, 'CALLDATACOPY', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH1', 0, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'CALLER', 'PUSH2', 1, 128, 'MSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 128, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'LT', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 128, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'SUB', 'PUSH2', 1, 128, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'ADD', 'GT', 'PUSH2', 1, 96, 'MLOAD', 'ISZERO', 'OR', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'ADD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 160, 'MSTORE', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 128, 'MLOAD', 'PUSH32', 221, 242, 82, 173, 27, 226, 200, 155, 105, 194, 176, 104, 252, 55, 141, 170, 149, 43, 167, 241, 99, 196, 161, 22, 40, 245, 90, 77, 245, 35, 179, 239, 'PUSH1', 32, 'PUSH2', 1, 160, 'LOG3', 'PUSH1', 1, 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', '_sym_7', 'JUMPDEST', 'PUSH4', 35, 184, 114, 221, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', '_sym_8', 'JUMPI', 'PUSH1', 96, 'PUSH1', 4, 'PUSH2', 1, 64, 'CALLDATACOPY', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH1', 0, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'PUSH1', 32, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'CALLER', 'PUSH2', 1, 160, 'MSTORE', 'PUSH2', 1, 160, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 1, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'PUSH2', 1, 192, 'MSTORE', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'LT', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'SUB', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'ADD', 'GT', 'PUSH2', 1, 128, 'MLOAD', 'ISZERO', 'OR', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'ADD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 192, 'MLOAD', 'LT', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 192, 'MLOAD', 'SUB', 'PUSH2', 1, 160, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 1, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 224, 'MSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH32', 221, 242, 82, 173, 27, 226, 200, 155, 105, 194, 176, 104, 252, 55, 141, 170, 149, 43, 167, 241, 99, 196, 161, 22, 40, 245, 90, 77, 245, 35, 179, 239, 'PUSH1', 32, 'PUSH2', 1, 224, 'LOG3', 'PUSH1', 1, 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', '_sym_8', 'JUMPDEST', 'PUSH4', 9, 94, 167, 179, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', '_sym_9', 'JUMPI', 'PUSH1', 64, 'PUSH1', 4, 'PUSH2', 1, 64, 'CALLDATACOPY', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH1', 0, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'CALLER', 'PUSH2', 1, 128, 'MSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 128, 'MLOAD', 'PUSH1', 1, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 160, 'MSTORE', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 128, 'MLOAD', 'PUSH32', 140, 91, 225, 229, 235, 236, 125, 91, 209, 79, 113, 66, 125, 30, 132, 243, 221, 3, 20, 192, 247, 178, 41, 30, 91, 32, 10, 200, 199, 195, 185, 37, 'PUSH1', 32, 'PUSH2', 1, 160, 'LOG3', 'PUSH1', 1, 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', '_sym_9', 'JUMPDEST', 'PUSH4', 221, 98, 237, 62, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', '_sym_10', 'JUMPI', 'PUSH1', 64, 'PUSH1', 4, 'PUSH2', 1, 64, 'CALLDATACOPY', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH1', 0, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'PUSH1', 32, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 1, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', '_sym_10', 'JUMPDEST'], '_sym_2', 'JUMPDEST', '_sym_1', '_sym_2', 'SUB', '_sym_1', 'PUSH1', 0, 'CODECOPY', '_sym_1', '_sym_2', 'SUB', 'PUSH1', 0, 'RETURN']
+
+['PUSH2', 5, 253, 'JUMP', 'PUSH1', 0, 'CALLDATALOAD', 'PUSH1', 28, 'MSTORE', 'PUSH21', 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'PUSH1', 32, 'MSTORE', 'PUSH16', 127, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 'PUSH1', 64, 'MSTORE', 'PUSH32', 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'PUSH1', 96, 'MSTORE', 'PUSH21', 1, 42, 5, 241, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 253, 171, 244, 28, 0, 'PUSH1', 128, 'MSTORE', 'PUSH32', 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 213, 250, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'PUSH1', 160, 'MSTORE', 'PUSH4', 208, 227, 13, 176, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', 'PUSH2', 1, 86, 'JUMPI', 'CALLVALUE', 'PUSH2', 1, 64, 'MSTORE', 'CALLER', 'PUSH2', 1, 96, 'MSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'ADD', 'GT', 'PUSH2', 1, 64, 'MLOAD', 'ISZERO', 'OR', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'ADD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH1', 2, 'SLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 2, 'SLOAD', 'ADD', 'GT', 'PUSH2', 1, 64, 'MLOAD', 'ISZERO', 'OR', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 2, 'SLOAD', 'ADD', 'PUSH1', 2, 'SSTORE', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 128, 'MSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH32', 221, 242, 82, 173, 27, 226, 200, 155, 105, 194, 176, 104, 252, 55, 141, 170, 149, 43, 167, 241, 99, 196, 161, 22, 40, 245, 90, 77, 245, 35, 179, 239, 'PUSH1', 32, 'PUSH2', 1, 128, 'LOG3', 'STOP', 'JUMPDEST', 'PUSH4', 46, 26, 125, 77, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', 'PUSH2', 2, 54, 'JUMPI', 'PUSH1', 32, 'PUSH1', 4, 'PUSH2', 1, 64, 'CALLDATACOPY', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'CALLER', 'PUSH2', 1, 96, 'MSTORE', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'LT', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'SUB', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 2, 'SLOAD', 'LT', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 2, 'SLOAD', 'SUB', 'PUSH1', 2, 'SSTORE', 'PUSH1', 0, 'PUSH1', 0, 'PUSH1', 0, 'PUSH1', 0, 'PUSH1', 1, 'PUSH1', 96, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'DUP1', 'PUSH1', 64, 'MLOAD', 'SWAP1', 'SGT', 'PC', 'JUMPI', 'DUP1', 'SWAP2', 'SWAP1', 'SLT', 'PC', 'JUMPI', 'MUL', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'CALL', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 128, 'MSTORE', 'PUSH1', 0, 'PUSH2', 1, 96, 'MLOAD', 'PUSH32', 221, 242, 82, 173, 27, 226, 200, 155, 105, 194, 176, 104, 252, 55, 141, 170, 149, 43, 167, 241, 99, 196, 161, 22, 40, 245, 90, 77, 245, 35, 179, 239, 'PUSH1', 32, 'PUSH2', 1, 128, 'LOG3', 'PUSH1', 1, 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', 'JUMPDEST', 'PUSH4', 24, 22, 13, 221, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', 'PUSH2', 2, 86, 'JUMPI', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH1', 2, 'SLOAD', 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', 'JUMPDEST', 'PUSH4', 112, 160, 130, 49, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', 'PUSH2', 2, 154, 'JUMPI', 'PUSH1', 32, 'PUSH1', 4, 'PUSH2', 1, 64, 'CALLDATACOPY', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH1', 0, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', 'JUMPDEST', 'PUSH4', 169, 5, 156, 187, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', 'PUSH2', 3, 158, 'JUMPI', 'PUSH1', 64, 'PUSH1', 4, 'PUSH2', 1, 64, 'CALLDATACOPY', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH1', 0, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'CALLER', 'PUSH2', 1, 128, 'MSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 128, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'LT', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 128, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'SUB', 'PUSH2', 1, 128, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'ADD', 'GT', 'PUSH2', 1, 96, 'MLOAD', 'ISZERO', 'OR', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'ADD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 160, 'MSTORE', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 128, 'MLOAD', 'PUSH32', 221, 242, 82, 173, 27, 226, 200, 155, 105, 194, 176, 104, 252, 55, 141, 170, 149, 43, 167, 241, 99, 196, 161, 22, 40, 245, 90, 77, 245, 35, 179, 239, 'PUSH1', 32, 'PUSH2', 1, 160, 'LOG3', 'PUSH1', 1, 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', 'JUMPDEST', 'PUSH4', 35, 184, 114, 221, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', 'PUSH2', 5, 5, 'JUMPI', 'PUSH1', 96, 'PUSH1', 4, 'PUSH2', 1, 64, 'CALLDATACOPY', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH1', 0, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'PUSH1', 32, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'CALLER', 'PUSH2', 1, 160, 'MSTORE', 'PUSH2', 1, 160, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 1, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'PUSH2', 1, 192, 'MSTORE', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'LT', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'SUB', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'ADD', 'GT', 'PUSH2', 1, 128, 'MLOAD', 'ISZERO', 'OR', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'ADD', 'PUSH2', 1, 96, 'MLOAD', 'PUSH1', 0, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 192, 'MLOAD', 'LT', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 192, 'MLOAD', 'SUB', 'PUSH2', 1, 160, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 1, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 128, 'MLOAD', 'PUSH2', 1, 224, 'MSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH32', 221, 242, 82, 173, 27, 226, 200, 155, 105, 194, 176, 104, 252, 55, 141, 170, 149, 43, 167, 241, 99, 196, 161, 22, 40, 245, 90, 77, 245, 35, 179, 239, 'PUSH1', 32, 'PUSH2', 1, 224, 'LOG3', 'PUSH1', 1, 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', 'JUMPDEST', 'PUSH4', 9, 94, 167, 179, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', 'PUSH2', 5, 152, 'JUMPI', 'PUSH1', 64, 'PUSH1', 4, 'PUSH2', 1, 64, 'CALLDATACOPY', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH1', 0, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'CALLER', 'PUSH2', 1, 128, 'MSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 128, 'MLOAD', 'PUSH1', 1, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SSTORE', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 160, 'MSTORE', 'PUSH2', 1, 64, 'MLOAD', 'PUSH2', 1, 128, 'MLOAD', 'PUSH32', 140, 91, 225, 229, 235, 236, 125, 91, 209, 79, 113, 66, 125, 30, 132, 243, 221, 3, 20, 192, 247, 178, 41, 30, 91, 32, 10, 200, 199, 195, 185, 37, 'PUSH1', 32, 'PUSH2', 1, 160, 'LOG3', 'PUSH1', 1, 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', 'JUMPDEST', 'PUSH4', 221, 98, 237, 62, 'PUSH1', 0, 'MLOAD', 'EQ', 'ISZERO', 'PUSH2', 5, 248, 'JUMPI', 'PUSH1', 64, 'PUSH1', 4, 'PUSH2', 1, 64, 'CALLDATACOPY', 'CALLVALUE', 'ISZERO', 'ISZERO', 'PC', 'JUMPI', 'PUSH1', 0, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'PUSH1', 32, 'PUSH1', 4, 'ADD', 'CALLDATALOAD', 'PUSH1', 32, 'MLOAD', 'DUP2', 'LT', 'ISZERO', 'PC', 'JUMPI', 'POP', 'PUSH2', 1, 96, 'MLOAD', 'PUSH2', 1, 64, 'MLOAD', 'PUSH1', 1, 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'PUSH1', 192, 'MSTORE', 'PUSH1', 192, 'PUSH1', 32, 'SHA3', 'ADD', 'SLOAD', 'PUSH1', 0, 'MSTORE', 'PUSH1', 32, 'PUSH1', 0, 'RETURN', 'STOP', 'JUMPDEST', 'JUMPDEST', 'PUSH2', 0, 4, 'PUSH2', 5, 253, 'SUB', 'PUSH2', 0, 4, 'PUSH1', 0, 'CODECOPY', 'PUSH2', 0, 4, 'PUSH2', 5, 253, 'SUB', 'PUSH1', 0, 'RETURN']
+
+0x6105fd56600035601c52740100000000000000000000000000000000000000006020526f7fffffffffffffffffffffffffffffff6040527fffffffffffffffffffffffffffffffff8000000000000000000000000000000060605274012a05f1fffffffffffffffffffffffffdabf41c006080527ffffffffffffffffffffffffed5fa0e000000000000000000000000000000000060a05263d0e30db06000511415610156573461014052336101605261016051600060c05260c060202001546101405161016051600060c05260c0602020015401116101405115171558576101405161016051600060c05260c060202001540161016051600060c05260c06020200155600254610140516002540111610140511517155857610140516002540160025561014051610180526101605160007fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef6020610180a3005b632e1a7d4d6000511415610236576020600461014037341515585733610160526101405161016051600060c05260c0602020015410151558576101405161016051600060c05260c060202001540361016051600060c05260c0602020015561014051600254101515585761014051600254036002556000600060006000600160605161014051806040519013585780919012585702610160516000f115585761014051610180526000610160517fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef6020610180a3600160005260206000f3005b6318160ddd600051141561025657341515585760025460005260206000f3005b6370a08231600051141561029a576020600461014037341515585760006004013560205181101558575061014051600060c05260c0602020015460005260206000f3005b63a9059cbb600051141561039e576040600461014037341515585760006004013560205181101558575033610180526101605161018051600060c05260c0602020015410151558576101605161018051600060c05260c060202001540361018051600060c05260c0602020015561014051600060c05260c060202001546101605161014051600060c05260c0602020015401116101605115171558576101605161014051600060c05260c060202001540161014051600060c05260c06020200155610160516101a05261014051610180517fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef60206101a0a3600160005260206000f3005b6323b872dd60005114156105055760606004610140373415155857600060040135602051811015585750602060040135602051811015585750336101a0526101a05161014051600160c05260c06020200160c05260c060202001546101c0526101805161014051600060c05260c0602020015410151558576101805161014051600060c05260c060202001540361014051600060c05260c0602020015561016051600060c05260c060202001546101805161016051600060c05260c0602020015401116101805115171558576101805161016051600060c05260c060202001540161016051600060c05260c06020200155610180516101c0511015155857610180516101c051036101a05161014051600160c05260c06020200160c05260c06020200155610180516101e05261016051610140517fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef60206101e0a3600160005260206000f3005b63095ea7b3600051141561059857604060046101403734151558576000600401356020518110155857503361018052610160516101405161018051600160c05260c06020200160c05260c06020200155610160516101a05261014051610180517f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b92560206101a0a3600160005260206000f3005b63dd62ed3e60005114156105f857604060046101403734151558576000600401356020518110155857506020600401356020518110155857506101605161014051600160c05260c06020200160c05260c0602020015460005260206000f3005b5b6100046105fd036100046000396100046105fd036000f3
