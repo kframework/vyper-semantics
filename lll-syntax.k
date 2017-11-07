@@ -79,7 +79,12 @@ module LLL-SYNTAX
                     | "$extcodesize"   "(" LLLExp ")"
                     | "$sha3"          "(" LLLExp "," LLLExp ")"
                     | "$pop"           "(" LLLExp ")"
-                    | "selfdestruct"   "(" LLLExp ")"
+                    | "$selfdestruct"  "(" LLLExp ")"
+                    | "$log0"          "(" LLLExp "," LLLExp ")"
+                    | "$log1"          "(" LLLExp "," LLLExp "," LLLExp ")"
+                    | "$log2"          "(" LLLExp "," LLLExp "," LLLExp "," LLLExp ")"
+                    | "$log3"          "(" LLLExp "," LLLExp "," LLLExp "," LLLExp "," LLLExp ")"
+                    | "$log4"          "(" LLLExp "," LLLExp "," LLLExp "," LLLExp "," LLLExp "," LLLExp ")"
 
     syntax Id     ::= "$stloc" [token] | "$mloc" [token] | "$loc" [token]
 
