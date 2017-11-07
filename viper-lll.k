@@ -912,6 +912,15 @@ module VIPER-LLL
     rule (LE ; LES1) ++LLL LES2        => LE ; (LES1 ++LLL LES2)
 
 
+    syntax LLLExp   ::= "#convertSeqExp" "(" LLLExps ")"   [function]
+ // -----------------------------------------------------------------
+    rule $%seq(EXPRS) => #convertSeqExp(EXPRS)             [anywhere]
+
+    rule #convertSeqExp(EXPR; .LLLExps) => EXPR
+
+    rule #convertSeqExp(EXPR; (EXPR1; EXPRS)) => $seq(EXPR, #convertSeqExp(EXPR1; EXPRS))
+
+
     syntax LLLExps  ::= "#mkClamper"        "(" Type "," Int /*data pos*/ "," Int /*mem pos*/ "," Bool ")"    [function]
     syntax LLLExps  ::= "#mkClamperForList" "(" Int /*length*/ "," Type "," Int "," Int "," Bool ")"          [function]
     syntax LLLExp   ::= "#mkCopier"         "(" LLLExp "," LLLExp "," LLLExp "," Bool ")"                     [function]
