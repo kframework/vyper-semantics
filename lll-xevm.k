@@ -21,35 +21,75 @@ module LLL-XEVM
 
 //// LLLEVM
 
-    // L := V
-    rule $mstore(L, V) => do(V L) ~> MSTORE
-    rule $mload(L) => do(L) ~> MLOAD
-
-    rule $sstore(L, V) => do(V L) ~> SSTORE
-    rule $sload(L) => do(L) ~> SLOAD
-
-    rule $calldatacopy(X, Y, Z) => do(Z Y X) ~> CALLDATACOPY
-    rule $calldataload(L) => do(L) ~> CALLDATALOAD
-    rule $callvalue => CALLVALUE
-    rule $caller => CALLER
-
-    rule $eq(X, Y) => do(Y X) ~> EQ
-    rule $add(X, Y) => do(Y X) ~> ADD
-
-    rule $iszero(X) => do(X) ~> ISZERO
-
-    rule $stop => STOP
-
-    // return mem[L..L+S]
-    rule $return(L, S) => do(S L) ~> RETURN
-
-    rule  $lt(X, Y) => do(Y X) ~>  LT
-    rule  $gt(X, Y) => do(Y X) ~>  GT
-    rule $slt(X, Y) => do(Y X) ~> SLT
-    rule $sgt(X, Y) => do(Y X) ~> SGT
-
-    rule $and(X, Y) => do(Y X) ~> AND
-    rule $or(X, Y) => do(Y X) ~> OR
+    rule valency($stop                                         )  =>                                    STOP
+    rule valency($add           ( A , B )                      )  => do( B   A )                     ~> ADD
+    rule valency($mul           ( A , B )                      )  => do( B   A )                     ~> MUL
+    rule valency($sub           ( A , B )                      )  => do( B   A )                     ~> SUB
+    rule valency($div           ( A , B )                      )  => do( B   A )                     ~> DIV
+    rule valency($sdiv          ( A , B )                      )  => do( B   A )                     ~> SDIV
+    rule valency($mod           ( A , B )                      )  => do( B   A )                     ~> MOD
+    rule valency($smod          ( A , B )                      )  => do( B   A )                     ~> SMOD
+    rule valency($addmod        ( A , B , C )                  )  => do( C   B   A )                 ~> ADDMOD
+    rule valency($mulmod        ( A , B , C )                  )  => do( C   B   A )                 ~> MULMOD
+    rule valency($exp           ( A , B )                      )  => do( B   A )                     ~> EXP
+    rule valency($signextend    ( A , B )                      )  => do( B   A )                     ~> SIGNEXTEND
+    rule valency($lt            ( A , B )                      )  => do( B   A )                     ~> LT
+    rule valency($gt            ( A , B )                      )  => do( B   A )                     ~> GT
+    rule valency($slt           ( A , B )                      )  => do( B   A )                     ~> SLT
+    rule valency($sgt           ( A , B )                      )  => do( B   A )                     ~> SGT
+    rule valency($eq            ( A , B )                      )  => do( B   A )                     ~> EQ
+    rule valency($iszero        ( A )                          )  => do( A )                         ~> ISZERO
+    rule valency($and           ( A , B )                      )  => do( B   A )                     ~> AND
+    rule valency($or            ( A , B )                      )  => do( B   A )                     ~> OR
+    rule valency($xor           ( A , B )                      )  => do( B   A )                     ~> XOR
+    rule valency($not           ( A )                          )  => do( A )                         ~> NOT
+    rule valency($byte          ( A , B )                      )  => do( B   A )                     ~> BYTE
+    rule valency($sha3          ( A , B )                      )  => do( B   A )                     ~> SHA3
+    rule valency($address                                      )  =>                                    ADDRESS
+    rule valency($balance                                      )  =>                                    BALANCE
+    rule valency($origin                                       )  =>                                    ORIGIN
+    rule valency($caller                                       )  =>                                    CALLER
+    rule valency($callvalue                                    )  =>                                    CALLVALUE
+    rule valency($calldataload  ( A )                          )  => do( A )                         ~> CALLDATALOAD
+    rule valency($calldatasize                                 )  =>                                    CALLDATASIZE
+    rule valency($calldatacopy  ( A , B , C )                  )  => do( C   B   A )                 ~> CALLDATACOPY
+    rule valency($codesize                                     )  =>                                    CODESIZE
+    rule valency($codecopy      ( A , B , C )                  )  => do( C   B   A )                 ~> CODECOPY
+    rule valency($gasprice                                     )  =>                                    GASPRICE
+    rule valency($extcodesize   ( A )                          )  => do( A )                         ~> EXTCODESIZE
+    rule valency($extcodecopy   ( A , B , C , D )              )  => do( D   C   B   A )             ~> EXTCODECOPY
+    rule valency($blockhash     ( A )                          )  => do( A )                         ~> BLOCKHASH
+    rule valency($coinbase                                     )  =>                                    COINBASE
+    rule valency($timestamp                                    )  =>                                    TIMESTAMP
+    rule valency($number                                       )  =>                                    NUMBER
+    rule valency($difficulty                                   )  =>                                    DIFFICULTY
+    rule valency($gaslimit                                     )  =>                                    GASLIMIT
+    rule valency($pop           ( A )                          )  => do( A )                         ~> POP
+    rule valency($mload         ( A )                          )  => do( A )                         ~> MLOAD
+    rule valency($mstore        ( A , B )                      )  => do( B   A )                     ~> MSTORE
+    rule valency($mstore8       ( A , B )                      )  => do( B   A )                     ~> MSTORE8
+    rule valency($sload         ( A )                          )  => do( A )                         ~> SLOAD
+    rule valency($sstore        ( A , B )                      )  => do( B   A )                     ~> SSTORE
+  //rule valency($jump          ( A )                          )  => do( A )                         ~> JUMP
+  //rule valency($jumpi         ( A , B )                      )  => do( B   A )                     ~> JUMPI
+  //rule valency($pc                                           )  =>                                    PC
+    rule valency($msize                                        )  =>                                    MSIZE
+    rule valency($gas                                          )  =>                                    GAS
+  //rule valency($jumpdest                                     )  =>                                    JUMPDEST
+    rule valency($log0          ( A , B )                      )  => do( B   A )                     ~> LOG0
+    rule valency($log1          ( A , B , C )                  )  => do( C   B   A )                 ~> LOG1
+    rule valency($log2          ( A , B , C , D )              )  => do( D   C   B   A )             ~> LOG2
+    rule valency($log3          ( A , B , C , D , E )          )  => do( E   D   C   B   A )         ~> LOG3
+    rule valency($log4          ( A , B , C , D , E , F )      )  => do( F   E   D   C   B   A )     ~> LOG4
+    rule valency($create        ( A , B , C )                  )  => do( C   B   A )                 ~> CREATE
+    rule valency($call          ( A , B , C , D , E , F , G )  )  => do( G   F   E   D   C   B   A ) ~> CALL
+    rule valency($callcode      ( A , B , C , D , E , F , G )  )  => do( G   F   E   D   C   B   A ) ~> CALLCODE
+    rule valency($return        ( A , B )                      )  => do( B   A )                     ~> RETURN
+    rule valency($delegatecall  ( A , B , C , D , E , F )      )  => do( F   E   D   C   B   A )     ~> DELEGATECALL
+    rule valency($callblackbox  ( A , B , C , D , E , F , G )  )  => do( G   F   E   D   C   B   A ) ~> CALLBLACKBOX
+    rule valency($invalid                                      )  =>                                    INVALID
+    rule valency($suicide       ( A )                          )  => do( A )                         ~> SUICIDE
+    rule valency($selfdestruct  ( A )                          )  => do( A )                         ~> SELFDESTRUCT
 
 //// LLLExp
 
