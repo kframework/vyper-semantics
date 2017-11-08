@@ -40,7 +40,7 @@ module LLL-XEVM
     rule $eq            ( A , B )                      => do( B   A )                     ~> EQ
     rule $iszero        ( A )                          => do( A )                         ~> ISZERO
     rule $and           ( A , B )                      => do( B   A )                     ~> AND
-    rule $or            ( A , B )                      => do( B   A )                     ~> OR
+    rule $or            ( A , B )                      => do( B   A )                     ~> EVMOR
     rule $xor           ( A , B )                      => do( B   A )                     ~> XOR
     rule $not           ( A )                          => do( A )                         ~> NOT
     rule $byte          ( A , B )                      => do( B   A )                     ~> BYTE

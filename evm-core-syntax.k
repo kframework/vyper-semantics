@@ -22,7 +22,7 @@ module EVM-CORE-SYNTAX
                   | "EQ"
                   | "ISZERO"
                   | "AND"
-                  | "OR"
+                  |/*OR*/ "EVMOR" // workaround of parsing error
                   | "XOR"
                   | "NOT"
                   | "BYTE"
