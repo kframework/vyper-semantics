@@ -225,8 +225,6 @@ module LLL-XEVM
 
     syntax Int /* 0 or 1 */ ::= "valency" "(" LLLExp ")" [function]
 
-    rule valency(_:Int) => 1
-
     rule valency($if(C, T, F)) => valency(T) when valency(C) ==K 1 andBool valency(T) ==K valency(F)
     rule valency($if(C, T   )) => valency(T) when valency(C) ==K 1 andBool valency(T) ==K 0
 
@@ -236,35 +234,123 @@ module LLL-XEVM
 
     rule valency($seq(S1, S2)) => valency(S2)
 
-    rule valency($lll(S1, S2)) => 1
+    rule valency($lll(_, _)) => 1
 
+    rule valency(_:Int) => 1
     rule valency(_:Id) => 1
 
-    rule valency($mstore(A,B)    ) => 0 when valency(A) ==K 1 andBool valency(B) ==K 1
-    rule valency($mload(A)       ) => 1 when valency(A) ==K 1
-    rule valency($calldataload(A)) => 1 when valency(A) ==K 1
-    rule valency($callvalue      ) => 1
-    rule valency($eq(A,B)        ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
-    rule valency($add(A,B)       ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
-    rule valency($iszero(A)      ) => 1 when valency(A) ==K 1
-    rule valency($stop           ) => 0
-    rule valency($return(A,B)    ) => 0 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($break           ) => 0
+    rule valency($set(A,B)        ) => 0 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($pass            ) => 0
+    rule valency($assert(A)       ) => 0 when valency(A) ==K 1
 
-    rule valency($set(A,B)       ) => 0 when valency(A) ==K 1 andBool valency(B) ==K 1
-    rule valency($pass           ) => 0
-    rule valency($assert(A)      ) => 0 when valency(A) ==K 1
+    rule valency($ne (A,B)        ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($le (A,B)        ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($ge (A,B)        ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($sle(A,B)        ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($sge(A,B)        ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
 
-    rule valency($uclamplt(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
-    rule valency($uclample(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
-    rule valency( $clamplt(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
-    rule valency( $clample(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
-    rule valency($uclampgt(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
-    rule valency($uclampge(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
-    rule valency( $clampgt(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
-    rule valency( $clampge(A,B)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($uclamplt(A,B)   ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($uclample(A,B)   ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency( $clamplt(A,B)   ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency( $clample(A,B)   ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($uclampgt(A,B)   ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($uclampge(A,B)   ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency( $clampgt(A,B)   ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency( $clampge(A,B)   ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
 
-    rule valency($uclamp(A,B,C)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1
-    rule valency( $clamp(A,B,C)  ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1
+    rule valency($uclamp(A,B,C)   ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1
+    rule valency( $clamp(A,B,C)   ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1
+
+    rule valency($clamp_nonzero(A)) => 1 when valency(A) ==K 1
+    rule valency($ceil32 (A)      ) => 1 when valency(A) ==K 1
+    rule valency($sha3_32(A)      ) => 1 when valency(A) ==K 1
+    rule valency($codelen         ) => 1
+    rule valency($codeload(A)     ) => 1 when valency(A) ==K 1
+
+
+    rule valency($mstore(A,B)     ) => 0 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($mload(A)        ) => 1 when valency(A) ==K 1
+    rule valency($calldataload(A) ) => 1 when valency(A) ==K 1
+    rule valency($callvalue       ) => 1
+    rule valency($eq(A,B)         ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($add(A,B)        ) => 1 when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($iszero(A)       ) => 1 when valency(A) ==K 1
+    rule valency($stop            ) => 0
+    rule valency($return(A,B)     ) => 0 when valency(A) ==K 1 andBool valency(B) ==K 1
+
+    rule valency($stop                                         )  =>   0
+    rule valency($add           ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($mul           ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($sub           ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($div           ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($sdiv          ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($mod           ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($smod          ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($addmod        ( A , B , C )                  )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1
+    rule valency($mulmod        ( A , B , C )                  )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1
+    rule valency($exp           ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($signextend    ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($lt            ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($gt            ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($slt           ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($sgt           ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($eq            ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($iszero        ( A )                          )  =>   1   when valency(A) ==K 1
+    rule valency($and           ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($or            ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($xor           ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($not           ( A )                          )  =>   1   when valency(A) ==K 1
+    rule valency($byte          ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($sha3          ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($address                                      )  =>   1
+    rule valency($balance                                      )  =>   1
+    rule valency($origin                                       )  =>   1
+    rule valency($caller                                       )  =>   1
+    rule valency($callvalue                                    )  =>   1
+    rule valency($calldataload  ( A )                          )  =>   1   when valency(A) ==K 1
+    rule valency($calldatasize                                 )  =>   1
+    rule valency($calldatacopy  ( A , B , C )                  )  =>   0   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1
+    rule valency($codesize                                     )  =>   1
+    rule valency($codecopy      ( A , B , C )                  )  =>   0   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1
+    rule valency($gasprice                                     )  =>   1
+    rule valency($extcodesize   ( A )                          )  =>   1   when valency(A) ==K 1
+    rule valency($extcodecopy   ( A , B , C , D )              )  =>   0   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1 andBool valency(D) ==K 1
+    rule valency($blockhash     ( A )                          )  =>   1   when valency(A) ==K 1
+    rule valency($coinbase                                     )  =>   1
+    rule valency($timestamp                                    )  =>   1
+    rule valency($number                                       )  =>   1
+    rule valency($difficulty                                   )  =>   1
+    rule valency($gaslimit                                     )  =>   1
+    rule valency($pop           ( A )                          )  =>   0   when valency(A) ==K 1
+    rule valency($mload         ( A )                          )  =>   1   when valency(A) ==K 1
+    rule valency($mstore        ( A , B )                      )  =>   0   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($mstore8       ( A , B )                      )  =>   0   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($sload         ( A )                          )  =>   1   when valency(A) ==K 1
+    rule valency($sstore        ( A , B )                      )  =>   0   when valency(A) ==K 1 andBool valency(B) ==K 1
+  //rule valency(JUMP                                          )  =>   0
+  //rule valency(JUMPI                                         )  =>   0
+  //rule valency(PC                                            )  =>   1
+    rule valency($msize                                        )  =>   1
+    rule valency($gas                                          )  =>   1
+  //rule valency(JUMPDEST                                      )  =>   0
+  //rule valency(PUSH...                                       )  =>   1
+  //rule valency(DUP...                                        )  =>   1
+  //rule valency(SWAP...                                       )  =>   1
+    rule valency($log0          ( A , B )                      )  =>   0   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($log1          ( A , B , C )                  )  =>   0   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1
+    rule valency($log2          ( A , B , C , D )              )  =>   0   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1 andBool valency(D) ==K 1
+    rule valency($log3          ( A , B , C , D , E )          )  =>   0   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1 andBool valency(D) ==K 1 andBool valency(E) ==K 1
+    rule valency($log4          ( A , B , C , D , E , F )      )  =>   0   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1 andBool valency(D) ==K 1 andBool valency(E) ==K 1 andBool valency(F) ==K 1
+    rule valency($create        ( A , B , C )                  )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1
+    rule valency($call          ( A , B , C , D , E , F , G )  )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1 andBool valency(D) ==K 1 andBool valency(E) ==K 1 andBool valency(F) ==K 1 andBool valency(G) ==K 1
+    rule valency($callcode      ( A , B , C , D , E , F , G )  )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1 andBool valency(D) ==K 1 andBool valency(E) ==K 1 andBool valency(F) ==K 1 andBool valency(G) ==K 1
+    rule valency($return        ( A , B )                      )  =>   0   when valency(A) ==K 1 andBool valency(B) ==K 1
+    rule valency($delegatecall  ( A , B , C , D , E , F )      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1 andBool valency(D) ==K 1 andBool valency(E) ==K 1 andBool valency(F) ==K 1
+    rule valency($callblackbox  ( A , B , C , D , E , F , G )  )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1 andBool valency(D) ==K 1 andBool valency(E) ==K 1 andBool valency(F) ==K 1 andBool valency(G) ==K 1
+    rule valency($invalid                                      )  =>   0
+    rule valency($suicide       ( A )                          )  =>   0   when valency(A) ==K 1
+    rule valency($selfdestruct  ( A )                          )  =>   0   when valency(A) ==K 1
 
 //// Utils
 
