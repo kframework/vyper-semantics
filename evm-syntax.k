@@ -47,7 +47,12 @@ module EVM-SYNTAX
                 //| "EXTCODESIZE"
                 //| "EXTCODECOPY"
                   // 0x4*
-                //// ...
+                //| "BLOCKHASH"
+                //| "COINBASE"
+                //| "TIMESTAMP"
+                //| "NUMBER"
+                //| "DIFFICULTY"
+                //| "GASLIMIT"
                   // 0x5*
                 //| "POP"
                 //| "MLOAD"
@@ -129,13 +134,20 @@ module EVM-SYNTAX
                   | "SWAP15"
                   | "SWAP16"
                   // 0xa*
-                //| "LOG0"  | ... | "LOG4"
+                //| "LOG0"
+                //| "LOG1"
+                //| "LOG2"
+                //| "LOG3"
+                //| "LOG4"
                   // 0xf*
                 //| "CREATE"
                 //| "CALL"
                 //| "CALLCODE"
                 //| "RETURN"
                 //| "DELEGATECALL"
+                //| "CALLBLACKBOX"
+                //| "INVALID"
                 //| "SUICIDE"
+                //| "SELFDESTRUCT"
 
 endmodule
