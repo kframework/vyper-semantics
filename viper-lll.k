@@ -82,7 +82,7 @@ module VIPER-LLL
 
 
     syntax KItem     ::= "#resolveGlobals" "(" Globals ")"
- // -------------------------------------------------------------------------------------------
+ // ------------------------------------------------------
     rule #resolveGlobals(.Globals) => .
 
     rule <k> #resolveGlobals(%svdecl(NAME, T, _) GS) => #resolveGlobals(GS) ... </k>
@@ -91,7 +91,7 @@ module VIPER-LLL
 
 
     syntax CLLLExps ::= "#extendLLL" "(" CLLLExps "," CLLLExps ")"       [seqstrict]
- // -----------------------------------------------------------------------------
+ // --------------------------------------------------------------------------------
     rule #extendLLL(C1:LLLExps, C2:LLLExps) => C1 ++LLL C2
 
 
@@ -153,7 +153,7 @@ module VIPER-LLL
     syntax CLLLExps ::= "#checkConstant"   "(" Decorators ")"
     syntax CLLLExps ::= "#checkPayable"    "(" Decorators ")"
     syntax CLLLExps ::= "#checkInternal"   "(" Decorators ")"
- // -------------------------------------------------------------
+ // ---------------------------------------------------------
     rule #checkDecorators(DECS) => #extendLLL(
                                        #checkConstant(DECS),
                                        #extendLLL(
@@ -218,46 +218,9 @@ module VIPER-LLL
 
     syntax CLLLExps ::= "#resolveStmt"     "(" Stmt ")"
  // -------------------------------------------------------
-    rule #resolveStmt(%assign(V, E)) => #assign(V, #resolveExpr(E))
-
-    rule #resolveStmt(%augassign(OP, V, E)) => #augassign(OP, #lookupVar(V), #resolveExpr(E))
-
-    rule #resolveStmt(%if(TEST, THENSTMTS, ELSESTMTS)) => #if(#resolveExpr(TEST),
-                                                              #resolveStmts(THENSTMTS),
-                                                              #resolveStmts(ELSESTMTS))
-
-    rule #resolveStmt(%if(TEST, THENSTMTS)) => #if(#resolveExpr(TEST), #resolveStmts(THENSTMTS))
-
-    // e.g. for i in range(10): ...
-    rule #resolveStmt(%for(NAME, ROUNDS, STMTS)) => #for(#allocLoopVar(NAME), @tlll(%num, 0), ROUNDS, #resolveStmts(STMTS))
-
-    // e.g. for i in range(100, 110): ...
-    rule #resolveStmt(%for(NAME, START:Int, END:Int, STMTS))
-             => #for(#allocLoopVar(NAME), @tlll(%num, START), END -Int START, #resolveStmts(STMTS))
-
-    // e.g. for i in range(x, x + 10): ...
-    rule #resolveStmt(%for(NAME, %var(V), %binop(+, %var(V), ROUNDS:Int), STMTS))
-             => #for(#allocLoopVar(NAME), #resolveExpr(%var(V)), ROUNDS, #resolveStmts(STMTS))
-
     rule #resolveStmt(%break) => $break; .LLLExps
 
     rule #resolveStmt(%pass) => $pass;.LLLExps
-
-    rule <k> #resolveStmt(%return) => #ifThenElse(T =/=K %void,
-                                                  #exception("Expecting to return a value"),
-                                                  .LLLExps) ... </k>
-         <return> T </return>
-
-    rule <k> #resolveStmt(%return(E)) => #ifThenElse(T =/=K %void,
-                                                     #return(#resolveExpr(E), T),
-                                                     #exception("Not expecting to return a value")) ... </k>
-         <return> T </return>
-
-    rule <k> #resolveStmt(%send(TO, VALUE))
-                 => #ifThenElse(CONSTANT ==K false,
-                                #send(#resolveExpr(TO), #resolveExpr(VALUE)),
-                                #exception("Cannot send ether inside a constant function")) ... </k>
-         <constant> CONSTANT </constant>
 
     rule #resolveStmt(%throw) => $assert(0);.LLLExps
 
@@ -270,6 +233,8 @@ module VIPER-LLL
                                          TypedLLLExp
                                      ")"                         [strict(1)]
  // ------------------------------------------------------------------------
+    rule #resolveStmt(%assign(V, E)) => #assign(V, #resolveExpr(E))
+
     rule #assign(V, @tlll(T, CODE)) => #assignAux(#lookupOrAllocVar(V, T), @tlll(T, CODE))
 
     rule <k> #assignAux(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE), RTCODE)
@@ -297,7 +262,7 @@ module VIPER-LLL
 
 
     syntax CTypedAddr ::= "#allocVar" "(" Var "," Type ")"
- // --------------------------------------------------
+ // ------------------------------------------------------
     rule <k> #allocVar(%var(NAME), T) => @taddr(T, LOC, false, true) ...</k>
          <env> ENV => #updateEnv(%var(NAME), T, LOC, ENV, true) </env>
          <nextMem> LOC => LOC +Int #sizeOfType(T) </nextMem>
@@ -332,7 +297,9 @@ module VIPER-LLL
     syntax CLLLExps ::= "#augassignAux" "(" TypedAddr /*variable address*/  ","
                                             CTypedLLLExp  /*compiled Expr*/
                                         ")"                         [strict(2)]
- // -----------------------------------------------------------------------------
+ // ---------------------------------------------------------------------------
+    rule #resolveStmt(%augassign(OP, V, E)) => #augassign(OP, #lookupVar(V), #resolveExpr(E))
+
     rule <k> #augassign(OP, @taddr(LT, LOC, true, _), RTCODE)
                  => #exception("Cannot modify storage inside a constant function!") ... </k>
          <constant> true </constant>
@@ -375,6 +342,12 @@ module VIPER-LLL
                                   CLLLExps     /*Then*/
                               ")"               [seqstrict]
  // -------------------------------------------------------
+    rule #resolveStmt(%if(TEST, THENSTMTS, ELSESTMTS)) => #if(#resolveExpr(TEST),
+                                                              #resolveStmts(THENSTMTS),
+                                                              #resolveStmts(ELSESTMTS))
+
+    rule #resolveStmt(%if(TEST, THENSTMTS)) => #if(#resolveExpr(TEST), #resolveStmts(THENSTMTS))
+
     rule #if(@tlll(_, CODE), THEN:LLLExps, ELSE:LLLExps) => $if(CODE, $%seq(THEN), $%seq(ELSE));.LLLExps
 
     rule #if(@tlll(_, CODE), THEN:LLLExp) => $if(CODE, $%seq(THEN));.LLLExps
@@ -387,12 +360,23 @@ module VIPER-LLL
                                    CLLLExps
                                ")"         [seqstrict(1,2,4)]
  // ---------------------------------------------------------
+    // e.g. for i in range(10): ...
+    rule #resolveStmt(%for(NAME, ROUNDS, STMTS)) => #for(#allocLoopVar(NAME), @tlll(%num, 0), ROUNDS, #resolveStmts(STMTS))
+
+    // e.g. for i in range(100, 110): ...
+    rule #resolveStmt(%for(NAME, START:Int, END:Int, STMTS))
+             => #for(#allocLoopVar(NAME), @tlll(%num, START), END -Int START, #resolveStmts(STMTS))
+
+    // e.g. for i in range(x, x + 10): ...
+    rule #resolveStmt(%for(NAME, %var(V), %binop(+, %var(V), ROUNDS:Int), STMTS))
+             => #for(#allocLoopVar(NAME), #resolveExpr(%var(V)), ROUNDS, #resolveStmts(STMTS))
+
     rule #for(@taddr(%num, LOC:Int, _, _), @tlll(_, STARTCODE), ROUNDS, BODYCODE:LLLExps)
              => $repeat(LOC, STARTCODE, ROUNDS, $%seq(BODYCODE));.LLLExps
 
 
     syntax CTypedAddr ::= "#allocLoopVar" "(" Id ")"
- // --------------------------------------------------
+ // ------------------------------------------------
     rule <k> #allocLoopVar(NAME) => #lookupVar(%var(NAME)) ... </k>
          <forvar> FORNAMES </forvar>
       requires NAME in FORNAMES
@@ -406,6 +390,16 @@ module VIPER-LLL
     syntax CLLLExps ::= "#return" "(" CTypedLLLExp "," Type /*return type*/ ")"  [strict(1)]
     syntax CLLLExps ::= "#returnBase" "(" TypedLLLExp "," Type ")"
  // ----------------------------------------------------------------------------------------
+    rule <k> #resolveStmt(%return) => #ifThenElse(T =/=K %void,
+                                                  #exception("Expecting to return a value"),
+                                                  .LLLExps) ... </k>
+         <return> T </return>
+
+    rule <k> #resolveStmt(%return(E)) => #ifThenElse(T =/=K %void,
+                                                     #return(#resolveExpr(E), T),
+                                                     #exception("Not expecting to return a value")) ... </k>
+         <return> T </return>
+
     rule #return(@tlll(T, CODE), RETURNTYPE) => #returnBase(@tlll(T, CODE), RETURNTYPE)
       requires isBaseType(T)
 
@@ -418,6 +412,12 @@ module VIPER-LLL
     // send
     syntax CLLLExps ::= "#send"    "(" CTypedLLLExp /*to*/ "," CTypedLLLExp /*value*/ ")"  [seqstrict]
  // --------------------------------------------------------------------------------------------------
+    rule <k> #resolveStmt(%send(TO, VALUE))
+                 => #ifThenElse(CONSTANT ==K false,
+                                #send(#resolveExpr(TO), #resolveExpr(VALUE)),
+                                #exception("Cannot send ether inside a constant function")) ... </k>
+         <constant> CONSTANT </constant>
+
     rule #send(@tlll(%address, TOCODE), @tlll(%unit(%num, %wei, _), VALUECODE))
              => $assert($call(0, TOCODE, VALUECODE, 0, 0, 0, 0)); .LLLExps
 
@@ -441,7 +441,7 @@ module VIPER-LLL
 
 
     syntax CTypedLLLExp ::= "#resolveExpr" "(" Expr ")"
- // -----------------------------------------------------------------------------------------------
+ // ---------------------------------------------------
     rule #resolveExpr(%self) => @tlll(%address, $address)
 
 
@@ -910,15 +910,6 @@ module VIPER-LLL
     rule .LLLExps    ++LLL LES:LLLExps => LES
 
     rule (LE ; LES1) ++LLL LES2        => LE ; (LES1 ++LLL LES2)
-
-
-    syntax LLLExp   ::= "#convertSeqExp" "(" LLLExps ")"   [function]
- // -----------------------------------------------------------------
-    rule $%seq(EXPRS) => #convertSeqExp(EXPRS)             [anywhere]
-
-    rule #convertSeqExp(EXPR; .LLLExps) => EXPR
-
-    rule #convertSeqExp(EXPR; (EXPR1; EXPRS)) => $seq(EXPR, #convertSeqExp(EXPR1; EXPRS))
 
 
     syntax LLLExps  ::= "#mkClamper"        "(" Type "," Int /*data pos*/ "," Int /*mem pos*/ "," Bool ")"    [function]
