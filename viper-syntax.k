@@ -1,7 +1,13 @@
 module VIPER-SYNTAX
 
-    syntax Pgm ::= "%pgm" "(" Globals "," Defs ")"
-                 | "%pgm" "(" Globals "," Def /*Init function*/ "," Defs ")"
+    syntax Pgm ::= "%pgm" "(" Events "," Globals "," Defs ")"
+                 | "%pgm" "(" Events "," Globals "," Def /*Init function*/ "," Defs ")"
+
+    syntax Event    ::= "%event" "(" Id "," EventParams ")"
+    syntax Events   ::= List{Event, ""}
+
+    syntax EventParam  ::= "%eparam" "(" Id "," Type "," Bool ")"
+    syntax EventParams ::= List{EventParam, ""}
 
     syntax Global   ::= "%svdecl" "(" Id "," Type "," Visibility ")"
     syntax Globals  ::= List{Global, ""}
@@ -27,9 +33,10 @@ module VIPER-SYNTAX
                       | "%break"
                       | "%pass"
                       | "%return"
-                      | "%return"    "(" Expr ")"
-                      | "%send"      "(" Expr "," Expr ")"
+                      | "%return"    "(" Expr  ")"
+                      | "%send"      "(" Expr  "," Expr ")"
                       | "%selfdestruct" "(" Expr ")"
+                      | "%log"       "(" Id "," Exprs ")"
                       | "%throw"
     syntax Stmts    ::= List{Stmt, ""}
 
@@ -49,6 +56,7 @@ module VIPER-SYNTAX
                       | "%unaryop"   "(" UnaryOp   "," Expr ")"
                       | "%typecast"  "(" BaseType  "," Expr ")"
                       | "%floor"     "(" Expr ")"
+    syntax Exprs    ::= List{Expr, ","}
 
     syntax Var      ::= "%var"      "(" Id ")"
                       | "%svar"     "(" Id ")"
@@ -57,6 +65,7 @@ module VIPER-SYNTAX
                       | "%mapelem"  "(" Var "," Expr ")"   /*map element*/
 
     syntax Const    ::= Int
+                      | "%hex" "(" String ")"
                       | String
                       | Bool
 
@@ -93,15 +102,15 @@ module VIPER-SYNTAX
     syntax NumericType   ::= "%num" | "%decimal"
                            | UnitType
 
-    syntax UnitType      ::= "%unit" "(" NumericType "," Unit "," Bool /*positional*/ ")"
+    syntax UnitType      ::= "%unitT" "(" NumericType "," Unit "," Bool /*positional*/ ")"
 
-    syntax ByteArrayType ::= "%bytes"  "(" Int ")"
+    syntax ByteArrayType ::= "%bytesT"  "(" Int ")"
 
-    syntax ListType      ::= "%list"   "(" Type "," Int ")"
+    syntax ListType      ::= "%listT"   "(" Type "," Int ")"
 
-    syntax MappingType   ::= "%map"    "(" Type "," BaseType ")"
+    syntax MappingType   ::= "%mapT"    "(" Type "," BaseType ")"
 
-    syntax StructType    ::= "%struct" "(" VarDecls ")"
+    syntax StructType    ::= "%structT" "(" VarDecls ")"
 
     syntax BinOp         ::= "+" | "-" | "*" | "/" | "%"
 
