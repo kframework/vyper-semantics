@@ -99,10 +99,12 @@ module VIPER-SYNTAX
     syntax BaseType      ::= NumericType
                            | "%bytes32" | "%num256" | "%bool" | "%address"
 
-    syntax NumericType   ::= "%num" | "%decimal"
+    syntax NumericType   ::= PureNumType
                            | UnitType
 
-    syntax UnitType      ::= "%unitT" "(" NumericType "," Unit "," Bool /*positional*/ ")"
+    syntax PureNumType   ::= "%num" | "%decimal"
+
+    syntax UnitType      ::= "%unitT" "(" PureNumType "," Unit "," Bool /*positional*/ ")"
 
     syntax ByteArrayType ::= "%bytesT"  "(" Int ")"
 
