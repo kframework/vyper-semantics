@@ -114,7 +114,7 @@ module VIPER-SYNTAX
 
     syntax StructType    ::= "%structT" "(" VarDecls ")"
 
-    syntax BinOp         ::= "+" | "-" | "*" | "/" | "%"
+    syntax BinOp         ::= "+" | "-" | "*" | "/" | "%" | "**"
 
     syntax CompareOp     ::= "%lt" | "%le" | "%gt" | "%ge" | "%eq" | "%ne"
 
@@ -122,8 +122,15 @@ module VIPER-SYNTAX
 
     syntax UnaryOp       ::= "%not" | "%neg"
 
-    syntax Id            ::= "__init__"
-                           | "wei"    | "kwei" | "ada"   | "lovelace" | "babbage"
-                           | "shannon"| "gwei" | "szabo" | "finney"   | "ether"
+    syntax Id            ::= ReservedWord
+
+    syntax ReservedWord  ::= "__init__" [token]
+                           | "wei" [token]
+                           | "kwei" [token] | "ada" [token] | "lovelace" [token]
+                           | "babbage" [token]
+                           | "shannon" [token] | "gwei" [token]
+                           | "szabo" [token]
+                           | "finney" [token]
+                           | "ether" [token]
 
 endmodule

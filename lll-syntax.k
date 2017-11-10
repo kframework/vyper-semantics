@@ -108,5 +108,6 @@ module LLL-SYNTAX
                     | "$selfdestruct"  "(" LLLExp ")"
 
     syntax Id     ::= "$stloc" [token] | "$mloc" [token] | "$loc" [token]
+                    | "$l"     [token] | "$r"    [token] | "$ans" [token]
 
 endmodule

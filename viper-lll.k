@@ -376,6 +376,12 @@ module VIPER-LLL
  // ------------------------------------------------------------------------------
     rule #convertToBinaryArith(+=, LEXP, REXP) => #binOp(+, LEXP, REXP)
 
+    rule #convertToBinaryArith(-=, LEXP, REXP) => #binOp(-, LEXP, REXP)
+
+    rule #convertToBinaryArith(*=, LEXP, REXP) => #binOp(*, LEXP, REXP)
+
+    rule #convertToBinaryArith(/=, LEXP, REXP) => #binOp(/, LEXP, REXP)
+
 
     // if
     syntax CLLLExps ::= "#if" "(" CTypedLLLExp /*TEST*/ ","
@@ -787,16 +793,18 @@ module VIPER-LLL
 
     // Arithmetic
     syntax CTypedLLLExp ::= "#binOp"    "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
-    syntax CTypedLLLExp ::= "#binOpAux" "(" BinOp "," TypedLLLExp "," TypedLLLExp ")"
+    syntax CTypedLLLExp ::= "#binOpForPure" "(" BinOp "," TypedLLLExp "," TypedLLLExp ")"
  // -----------------------------------------------------------------------------------------------------
     rule #resolveExpr(%binop(BOP, LEFTE, RIGHTE)) => #binOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
 
     rule #binOp(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE))
              => #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
                         #exception("Unsupported types for arithmetic op"))
-             ~> #clampArithResult(#binOpAux(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE)))
+             ~> #ifThenElse(isPureNumType(LT) andBool isPureNumType(RT),
+                            #clampArithResult(#binOpForPure(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE))),
+                            #exception("Do not support unit type yet."))
 
-    rule #binOpAux(+, @tlll(LT, LCODE), @tlll(RT, RCODE))
+    rule #binOpForPure(+, @tlll(LT, LCODE), @tlll(RT, RCODE))
              => #ifThenElse(LT ==K RT,
                             @tlll(LT, $add(LCODE, RCODE)),
                   #ifThenElse(LT ==K %num andBool RT ==K %decimal,
@@ -805,7 +813,7 @@ module VIPER-LLL
                                 @tlll(%decimal, $add(LCODE, $mul(RCODE, #decimalDivisor))),
                                 #exception("How did I get here?"))))
 
-    rule #binOpAux(-, @tlll(LT, LCODE), @tlll(RT, RCODE))
+    rule #binOpForPure(-, @tlll(LT, LCODE), @tlll(RT, RCODE))
              => #ifThenElse(LT ==K RT,
                             @tlll(LT, $sub(LCODE, RCODE)),
                   #ifThenElse(LT ==K %num andBool RT ==K %decimal,
@@ -813,6 +821,35 @@ module VIPER-LLL
                     #ifThenElse(LT ==K %decimal andBool RT ==K %num,
                                 @tlll(%decimal, $sub(LCODE, $mul(RCODE, #decimalDivisor))),
                                 #exception("How did I get here?"))))
+
+    rule #binOpForPure(*, @tlll(LT, LCODE), @tlll(RT, RCODE))
+             => #ifThenElse(LT ==K RT andBool LT ==K %num,
+                            @tlll(%num, $mul(LCODE, RCODE)),
+                  #ifThenElse(LT ==K RT andBool LT ==K %decimal,
+                              @tlll(%decimal, $with($r, RCODE,
+                                                $with($l, LCODE,
+                                                  $with($ans, $mul($l, $r),
+                                                    $%seq(
+                                                      $assert($or($eq($sdiv($ans, $l), $r), $not($l)));
+                                                      $sdiv($ans, #decimalDivisor);.LLLExps))))),
+                    #ifThen((LT ==K %num andBool RT ==K %decimal) orBool (LT ==K %decimal andBool RT ==K %num),
+                            @tlll(%decimal, $with($r, RCODE,
+                                              $with($l, LCODE,
+                                                $with($ans, $mul($l, $r),
+                                                  $%seq(
+                                                    $assert($or($eq($sdiv($ans, $l), $r), $not($l)));
+                                                    $ans;.LLLExps))))))))
+
+    rule #binOpForPure(/, @tlll(LT, LCODE), @tlll(RT, RCODE))
+             => #ifThenElse(RT ==K %num,
+                            @tlll(LT, $sdiv(LCODE, $clamp_nonzero(RCODE))),
+                  #ifThenElse(LT ==K RT andBool LT ==K %decimal,
+                              @tlll(%decimal, $with($l, LCODE,
+                                                $with($r, $clamp_nonzero(RCODE),
+                                                  $sdiv($mul($l, #decimalDivisor), $r)))),
+                    #ifThen(LT ==K %num andBool RT ==K %decimal,
+                            @tlll(%decimal, $sdiv($mul(LCODE, #decimalDivisor ^Int 2), $clamp_nonzero(RCODE))))))
+
 
     // Compare
     syntax CTypedLLLExp ::= "#compareOp"    "(" CompareOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
