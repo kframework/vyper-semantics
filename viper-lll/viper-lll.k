@@ -24,7 +24,7 @@ module VIPER-LLL
         <event> .Map </event>
         <global> .Map </global>
         <nextStorage> 0 </nextStorage>
-        <nextMem> #reservedMemPos </nextMem>
+        <nextMem> @reservedMemPos </nextMem>
         <placeholder> 1 </placeholder>
         <forvar> .Set </forvar>
         <return> %void </return>
@@ -210,13 +210,13 @@ module VIPER-LLL
  // ---------------------------------------------------------------------
     rule #copyInput(.Params, _) => $pass;.LLLExps
 
-    rule <k> #copyInput(PARAMS, true) => $codecopy(#reservedMemPos,
+    rule <k> #copyInput(PARAMS, true) => $codecopy(@reservedMemPos,
                                                    $codelen, 
                                                    #sizeOfParams(PARAMS));.LLLExps ... </k>
          <nextMem> M => M +Int #sizeOfParams(PARAMS) </nextMem>
       requires #sizeOfParams(PARAMS) >Int 0
 
-    rule <k> #copyInput(PARAMS, false) => $calldatacopy(#reservedMemPos, 
+    rule <k> #copyInput(PARAMS, false) => $calldatacopy(@reservedMemPos,
                                                         4, 
                                                         #sizeOfParams(PARAMS));.LLLExps ... </k>
          <nextMem> M => M +Int #sizeOfParams(PARAMS) </nextMem>
@@ -265,7 +265,7 @@ module VIPER-LLL
          <nextMem> LOC => LOC +Int #sizeOfType(%bytesT(L)) </nextMem>
 
     rule <k> #fillParam(%param(NAME, T), DATAPOS, ISINIT) => #mkClamper(T, DATAPOS, LOC, ISINIT) ... </k>
-         <env> ENV => #updateEnv(%var(NAME), T, #reservedMemPos +Int DATAPOS, ENV, false) </env>
+         <env> ENV => #updateEnv(%var(NAME), T, @reservedMemPos +Int DATAPOS, ENV, false) </env>
          <nextMem> LOC </nextMem>
       requires notBool isByteArrayType(T)
 
@@ -630,7 +630,7 @@ module VIPER-LLL
                   #ifThenElse(FROMT ==K TOT,
                               @tlll(TOT, CODE),
                     #ifThenElse(FROMT ==K %num andBool TOT ==K %decimal,
-                                @tlll(TOT, $mul(CODE, #decimalDivisor)),
+                                @tlll(TOT, $mul(CODE, @decimalDivisor)),
                                 #exception("Typecasting unavailable"))))
 
 
@@ -748,7 +748,7 @@ module VIPER-LLL
                             #asNum128Aux(CODE),
                             #exception("Function arg type does not match expected type."))
 
-    rule #asNum128Aux(CODE) => @tlll(%num, $clamp($mload(#minNumPos), CODE, $mload(#maxNumPos)))
+    rule #asNum128Aux(CODE) => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)))
 
 
     syntax CTypedLLLExp ::= "#asNum256"    "(" CTypedLLLExp ")"    [strict]
@@ -790,7 +790,7 @@ module VIPER-LLL
     rule #asWeiValueForLLLExp(@tlll(%num, CODE), DENOMINATION) => @tlll(%unitT(%num, %wei, false), $mul(CODE, DENOMINATION))
 
     rule #asWeiValueForLLLExp(@tlll(%decimal, CODE), DENOMINATION)
-             => @tlll(%unitT(%num, %wei, false), $div($mul(CODE, DENOMINATION), #decimalDivisor))
+             => @tlll(%unitT(%num, %wei, false), $div($mul(CODE, DENOMINATION), @decimalDivisor))
 
 
     syntax CTypedLLLExp ::= "#num256Add"    "(" CTypedLLLExp "," CTypedLLLExp ")"        [seqstrict]
@@ -838,18 +838,18 @@ module VIPER-LLL
              => #ifThenElse(LT ==K RT,
                             @tlll(LT, $add(LCODE, RCODE)),
                   #ifThenElse(LT ==K %num andBool RT ==K %decimal,
-                              @tlll(%decimal, $add($mul(LCODE, #decimalDivisor), RCODE)),
+                              @tlll(%decimal, $add($mul(LCODE, @decimalDivisor), RCODE)),
                     #ifThenElse(LT ==K %decimal andBool RT ==K %num,
-                                @tlll(%decimal, $add(LCODE, $mul(RCODE, #decimalDivisor))),
+                                @tlll(%decimal, $add(LCODE, $mul(RCODE, @decimalDivisor))),
                                 #exception("How did I get here?"))))
 
     rule #binOpForPure(-, @tlll(LT, LCODE), @tlll(RT, RCODE))
              => #ifThenElse(LT ==K RT,
                             @tlll(LT, $sub(LCODE, RCODE)),
                   #ifThenElse(LT ==K %num andBool RT ==K %decimal,
-                              @tlll(%decimal, $sub($mul(LCODE, #decimalDivisor), RCODE)),
+                              @tlll(%decimal, $sub($mul(LCODE, @decimalDivisor), RCODE)),
                     #ifThenElse(LT ==K %decimal andBool RT ==K %num,
-                                @tlll(%decimal, $sub(LCODE, $mul(RCODE, #decimalDivisor))),
+                                @tlll(%decimal, $sub(LCODE, $mul(RCODE, @decimalDivisor))),
                                 #exception("How did I get here?"))))
 
     rule #binOpForPure(*, @tlll(LT, LCODE), @tlll(RT, RCODE))
@@ -861,7 +861,7 @@ module VIPER-LLL
                                                   $with($ans, $mul($l, $r),
                                                     $%seq(
                                                       $assert($or($eq($sdiv($ans, $l), $r), $not($l)));
-                                                      $sdiv($ans, #decimalDivisor);.LLLExps))))),
+                                                      $sdiv($ans, @decimalDivisor);.LLLExps))))),
                     #ifThen((LT ==K %num andBool RT ==K %decimal) orBool (LT ==K %decimal andBool RT ==K %num),
                             @tlll(%decimal, $with($r, RCODE,
                                               $with($l, LCODE,
@@ -876,9 +876,9 @@ module VIPER-LLL
                   #ifThenElse(LT ==K RT andBool LT ==K %decimal,
                               @tlll(%decimal, $with($l, LCODE,
                                                 $with($r, $clamp_nonzero(RCODE),
-                                                  $sdiv($mul($l, #decimalDivisor), $r)))),
+                                                  $sdiv($mul($l, @decimalDivisor), $r)))),
                     #ifThen(LT ==K %num andBool RT ==K %decimal,
-                            @tlll(%decimal, $sdiv($mul(LCODE, #decimalDivisor ^Int 2), $clamp_nonzero(RCODE))))))
+                            @tlll(%decimal, $sdiv($mul(LCODE, @decimalDivisor ^Int 2), $clamp_nonzero(RCODE))))))
 
 
     // Compare
@@ -897,54 +897,54 @@ module VIPER-LLL
            => #ifThenElse(LT ==K RT,
                           @tlll(%bool, $sgt(LCODE, RCODE)),
                 #ifThenElse(LT ==K %decimal andBool RT ==K %num,
-                            @tlll(%bool, $sgt(LCODE, $mul(RCODE, #decimalDivisor))),
+                            @tlll(%bool, $sgt(LCODE, $mul(RCODE, @decimalDivisor))),
                   #ifThenElse(LT ==K %num andBool RT ==K %decimal,
-                              @tlll(%bool, $sgt($mul(LCODE, #decimalDivisor), RCODE)),
+                              @tlll(%bool, $sgt($mul(LCODE, @decimalDivisor), RCODE)),
                               #exception("Unsupported types for comparison"))))
 
     rule #compareOpAux(%ge, @tlll(LT, LCODE), @tlll(RT, RCODE))
            => #ifThenElse(LT ==K RT,
                           @tlll(%bool, $sge(LCODE, RCODE)),
                 #ifThenElse(LT ==K %decimal andBool RT ==K %num,
-                            @tlll(%bool, $sge(LCODE, $mul(RCODE, #decimalDivisor))),
+                            @tlll(%bool, $sge(LCODE, $mul(RCODE, @decimalDivisor))),
                   #ifThenElse(LT ==K %num andBool RT ==K %decimal,
-                              @tlll(%bool, $sge($mul(LCODE, #decimalDivisor), RCODE)),
+                              @tlll(%bool, $sge($mul(LCODE, @decimalDivisor), RCODE)),
                               #exception("Unsupported types for comparison"))))
 
     rule #compareOpAux(%lt, @tlll(LT, LCODE), @tlll(RT, RCODE))
            => #ifThenElse(LT ==K RT,
                           @tlll(%bool, $slt(LCODE, RCODE)),
                 #ifThenElse(LT ==K %decimal andBool RT ==K %num,
-                            @tlll(%bool, $slt(LCODE, $mul(RCODE, #decimalDivisor))),
+                            @tlll(%bool, $slt(LCODE, $mul(RCODE, @decimalDivisor))),
                   #ifThenElse(LT ==K %num andBool RT ==K %decimal,
-                              @tlll(%bool, $slt($mul(LCODE, #decimalDivisor), RCODE)),
+                              @tlll(%bool, $slt($mul(LCODE, @decimalDivisor), RCODE)),
                               #exception("Unsupported types for comparison"))))
 
     rule #compareOpAux(%le, @tlll(LT, LCODE), @tlll(RT, RCODE))
            => #ifThenElse(LT ==K RT,
                           @tlll(%bool, $sle(LCODE, RCODE)),
                 #ifThenElse(LT ==K %decimal andBool RT ==K %num,
-                            @tlll(%bool, $sle(LCODE, $mul(RCODE, #decimalDivisor))),
+                            @tlll(%bool, $sle(LCODE, $mul(RCODE, @decimalDivisor))),
                   #ifThenElse(LT ==K %num andBool RT ==K %decimal,
-                              @tlll(%bool, $sle($mul(LCODE, #decimalDivisor), RCODE)),
+                              @tlll(%bool, $sle($mul(LCODE, @decimalDivisor), RCODE)),
                               #exception("Unsupported types for comparison"))))
 
     rule #compareOpAux(%eq, @tlll(LT, LCODE), @tlll(RT, RCODE))
            => #ifThenElse(LT ==K RT,
                           @tlll(%bool, $eq(LCODE, RCODE)),
                 #ifThenElse(LT ==K %decimal andBool RT ==K %num,
-                            @tlll(%bool, $eq(LCODE, $mul(RCODE, #decimalDivisor))),
+                            @tlll(%bool, $eq(LCODE, $mul(RCODE, @decimalDivisor))),
                   #ifThenElse(LT ==K %num andBool RT ==K %decimal,
-                              @tlll(%bool, $eq($mul(LCODE, #decimalDivisor), RCODE)),
+                              @tlll(%bool, $eq($mul(LCODE, @decimalDivisor), RCODE)),
                               #exception("Unsupported types for comparison"))))
 
     rule #compareOpAux(%ne, @tlll(LT, LCODE), @tlll(RT, RCODE))
            => #ifThenElse(LT ==K RT,
                           @tlll(%bool, $ne(LCODE, RCODE)),
                 #ifThenElse(LT ==K %decimal andBool RT ==K %num,
-                            @tlll(%bool, $ne(LCODE, $mul(RCODE, #decimalDivisor))),
+                            @tlll(%bool, $ne(LCODE, $mul(RCODE, @decimalDivisor))),
                   #ifThenElse(LT ==K %num andBool RT ==K %decimal,
-                              @tlll(%bool, $ne($mul(LCODE, #decimalDivisor), RCODE)),
+                              @tlll(%bool, $ne($mul(LCODE, @decimalDivisor), RCODE)),
                               #exception("Unsupported types for comparison"))))
 
 
@@ -981,10 +981,10 @@ module VIPER-LLL
     syntax CTypedLLLExp ::= "#clampArithResult" "(" CTypedLLLExp ")"                     [strict]
  // ---------------------------------------------------------------------------------------------
     rule #clampArithResult(@tlll(%num, CODE))
-              => @tlll(%num, $clamp($mload(#minNumPos), CODE, $mload(#maxNumPos)))
+              => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)))
 
     rule #clampArithResult(@tlll(%decimal, CODE))
-              => @tlll(%decimal, $clamp($mload(#minDecimalPos), CODE, $mload(#maxDecimalPos)))
+              => @tlll(%decimal, $clamp($mload(@minDecimalPos), CODE, $mload(@maxDecimalPos)))
 
 
     syntax CTypedLLLExp ::= "#unwrapLocation" "(" CTypedAddr ")"  [strict]
@@ -1002,7 +1002,7 @@ module VIPER-LLL
  // -------------------------------------
     rule <k> CODE:LLLExps ~> (#cleanConfig => .) ...</k>
          <env> _ => .Map </env>
-         <nextMem> _ => #reservedMemPos </nextMem>
+         <nextMem> _ => @reservedMemPos </nextMem>
          <placeholder> _ => 1 </placeholder>
          <forvar> _ => .Set </forvar>
          <return> _ => %void </return>
@@ -1195,16 +1195,16 @@ module VIPER-LLL
     syntax LLLExp   ::= "#mkDataDecl"       "(" LLLExp "," Bool ")"                                           [function]
  // --------------------------------------------------------------------------------------------------------------------
     rule #mkClamper(%num     , DPOS, MPOS, ISINIT) => $clamp(
-                                                        $mload(#minNumPos),
+                                                        $mload(@minNumPos),
                                                         #mkDataDecl(DPOS, ISINIT),
-                                                        $mload(#maxNumPos)
+                                                        $mload(@maxNumPos)
                                                       );.LLLExps
 
     rule #mkClamper(%num256  , _, _, _ ) => $pass;.LLLExps
 
     rule #mkClamper(%bool    , DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), 2);.LLLExps
 
-    rule #mkClamper(%address , DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), $mload(#addrSizePos));.LLLExps
+    rule #mkClamper(%address , DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), $mload(@addrSizePos));.LLLExps
 
     rule #mkClamper(%bytesT(L), DPOS, MPOS, ISINIT)
              => $%seq(
@@ -1238,11 +1238,11 @@ module VIPER-LLL
  // ------------------------------------------------------
     rule #initializer_lll => $%seq(
                                $mstore(28 , $calldataload(0));
-                               $mstore(#addrSizePos , 2 ^Int 160);
-                               $mstore(#maxNumPos , 2 ^Int 127 -Int 1);
-                               $mstore(#minNumPos , -2 ^Int 127);
-                               $mstore(#maxDecimalPos, (2 ^Int 127 -Int 1) *Int 10000000000);
-                               $mstore(#minDecimalPos, (-2 ^Int 127) *Int 10000000000)
+                               $mstore(@addrSizePos , 2 ^Int 160);
+                               $mstore(@maxNumPos , 2 ^Int 127 -Int 1);
+                               $mstore(@minNumPos , -2 ^Int 127);
+                               $mstore(@maxDecimalPos, (2 ^Int 127 -Int 1) *Int 10000000000);
+                               $mstore(@minDecimalPos, (-2 ^Int 127) *Int 10000000000)
                              );.LLLExps
 
 
