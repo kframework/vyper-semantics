@@ -1,4 +1,4 @@
-module VIPER-SYNTAX
+module VIPER-ABSTRACT-SYNTAX
 
     syntax Pgm ::= "%pgm" "(" Events "," Globals "," Defs ")"
                  | "%pgm" "(" Events "," Globals "," Def /*Init function*/ "," Defs ")"

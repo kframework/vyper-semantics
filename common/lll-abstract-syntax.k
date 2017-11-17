@@ -1,4 +1,4 @@
-module LLL-SYNTAX
+module LLL-ABSTRACT-SYNTAX
 
     syntax LLLExp ::= LLLEVM
                     | Int

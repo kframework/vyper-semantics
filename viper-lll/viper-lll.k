@@ -1,16 +1,41 @@
-require "viper-lll-interface.k"
-require "viper-config.k"
-require "utils.k"
+require "../common/viper-abstract-syntax.k"
+require "../common/lll-abstract-syntax.k"
+require "viper-lll-utils.k"
 require "domains.k"
 
 module VIPER-LLL
-    imports VIPER-LLL-INTERFACE
-    imports VIPER-SYNTAX
-    imports LLL-SYNTAX
-    imports VIPER-CONFIG
-    imports UTILS
+    imports VIPER-ABSTRACT-SYNTAX
+    imports LLL-ABSTRACT-SYNTAX
+    imports VIPER-LLL-UTILS
     imports STRING
     imports KRYPTO
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Configuration
+///////////////////////////////////////////////////////////////////////////////
+
+
+    configuration
+    <T>
+        <k> #compileViperToLLL($PGM:Pgm) </k>
+        <lll> .K </lll>
+        <env> .Map </env>
+        <event> .Map </event>
+        <global> .Map </global>
+        <nextStorage> 0 </nextStorage>
+        <nextMem> #reservedMemPos </nextMem>
+        <placeholder> 1 </placeholder>
+        <forvar> .Set </forvar>
+        <return> %void </return>
+        <constant> false </constant>
+        <payable> false </payable>
+    </T>
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Data Types
+///////////////////////////////////////////////////////////////////////////////
 
 
     syntax TypedAddr       ::= "@taddr" "(" Type ","
@@ -42,7 +67,12 @@ module VIPER-LLL
                       | PackArgBy32Result
                       | Bool
                       | Int
-   
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Preprocessing
+///////////////////////////////////////////////////////////////////////////////
+
 
     syntax KItem    ::= "#compileViperToLLL"    "(" Pgm ")"
     syntax KItem    ::= "#compileViperToLLLAux" "(" CLLLExps /*initializer*/  ","
