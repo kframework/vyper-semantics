@@ -1,6 +1,6 @@
 require "xevm-evm-interface.k"
 require "xevm-syntax.k"
-require "evm-syntax.k"
+require "../common/evm-syntax.k"
 require "lll-evm-config.k"
 
 module XEVM-EVM

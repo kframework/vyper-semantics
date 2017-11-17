@@ -1,5 +1,5 @@
 require "xevm-syntax.k"
-require "evm-syntax.k"
+require "../common/evm-syntax.k"
 
 module XEVM-EVM-INTERFACE
     imports XEVM-SYNTAX

@@ -1,4 +1,4 @@
-require "evm-core-syntax.k"
+require "../common/evm-core-syntax.k"
 
 module XEVM-SYNTAX
     imports EVM-CORE-SYNTAX

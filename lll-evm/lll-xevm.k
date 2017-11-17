@@ -1,5 +1,5 @@
 require "lll-xevm-interface.k"
-require "lll-syntax.k"
+require "../common/lll-abstract-syntax.k"
 require "xevm-syntax.k"
 require "lll-evm-config.k"
 
@@ -8,7 +8,7 @@ module LLL-XEVM
 
     imports LLL-EVM-CONFIG
 
-//  imports LLL-SYNTAX
+//  imports LLL-ABSTRACT-SYNTAX
     imports XEVM-SYNTAX
 
     syntax KResult ::= XEVM
