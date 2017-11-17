@@ -1,8 +1,5 @@
-require "evm-core-syntax.k"
-
 module EVM-SYNTAX
     imports EVM-CORE-SYNTAX
-
     syntax EVM ::= EVMCORE
                   | Int
                   // 0x0*
@@ -149,5 +146,89 @@ module EVM-SYNTAX
                 //| "INVALID"
                 //| "SUICIDE"
                 //| "SELFDESTRUCT"
+endmodule
 
+module EVM-CORE-SYNTAX
+    syntax EVMCORE ::=
+                  // 0x0*
+                    "STOP"
+                  | "ADD"
+                  | "MUL"
+                  | "SUB"
+                  | "DIV"
+                  | "SDIV"
+                  | "MOD"
+                  | "SMOD"
+                  | "ADDMOD"
+                  | "MULMOD"
+                  | "EXP"
+                  | "SIGNEXTEND"
+                  // 0x1*
+                  | "LT"
+                  | "GT"
+                  | "SLT"
+                  | "SGT"
+                  | "EQ"
+                  | "ISZERO"
+                  | "AND"
+                  |/*OR*/ "EVMOR" // workaround of parsing error
+                  | "XOR"
+                  | "NOT"
+                  | "BYTE"
+                  // 0x2*
+                  | "SHA3"
+                  // 0x3*
+                  | "ADDRESS"
+                  | "BALANCE"
+                  | "ORIGIN"
+                  | "CALLER"
+                  | "CALLVALUE"
+                  | "CALLDATALOAD"
+                  | "CALLDATASIZE"
+                  | "CALLDATACOPY"
+                  | "CODESIZE"
+                  | "CODECOPY"
+                  | "GASPRICE"
+                  | "EXTCODESIZE"
+                  | "EXTCODECOPY"
+                  // 0x4*
+                  | "BLOCKHASH"
+                  | "COINBASE"
+                  | "TIMESTAMP"
+                  | "NUMBER"
+                  | "DIFFICULTY"
+                  | "GASLIMIT"
+                  // 0x5*
+                  | "POP"
+                  | "MLOAD"
+                  | "MSTORE"
+                  | "MSTORE8"
+                  | "SLOAD"
+                  | "SSTORE"
+                //| "JUMP"
+                //| "JUMPI"
+                  | "PC"
+                  | "MSIZE"
+                  | "GAS"
+                //| "JUMPDEST"
+                  // 0x6* - 0x9*
+                //| "PUSH1" | ... | "PUSH32"
+                //| "DUP1"  | ... | "DUP16"
+                //| "SWAP1" | ... | "SWAP16"
+                  // 0xa*
+                  | "LOG0"
+                  | "LOG1"
+                  | "LOG2"
+                  | "LOG3"
+                  | "LOG4"
+                  // 0xf*
+                  | "CREATE"
+                  | "CALL"
+                  | "CALLCODE"
+                  | "RETURN"
+                  | "DELEGATECALL"
+                  | "CALLBLACKBOX"
+                  | "INVALID"
+                  | "SUICIDE"
+                  | "SELFDESTRUCT"
 endmodule
