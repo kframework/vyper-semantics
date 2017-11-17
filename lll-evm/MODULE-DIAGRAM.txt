@@ -1,0 +1,41 @@
+Module Diagram
+--------------
+
+Conceptually, what we would like to have:
+
+                     LLL-EVM
+                        |
+                 +------+------+
+                 |             |
+              LLL-XEVM     XEVM-EVM
+              |     |       |     |
+              |     +---+---+     |
+              |         |         |
+              |  LLVM-EVM-CONFIG  |
+              |                   |
+       +------+------+     +------+------+
+       |             |     |             |
+   LLL-SYNTAX      XEVM-SYNTAX       EVM-SYNTAX
+
+
+But, due to recursive module import issue, we have:
+
+                     LLL-EVM
+                        |
+                LLL-EVM-INTERFACE
+                        |
+                 +------+------+
+                 |             |
+              LLL-XEVM     XEVM-EVM
+                 |             |
+                 +------+------+
+                        |
+                 LLVM-EVM-CONFIG
+                        |
+                 +------+------+
+                 |             |
+     LLL-XEVM-INTERFACE   XEVM-EVM-INTERFACE
+              |                   |
+       +------+------+     +------+------+
+       |             |     |             |
+   LLL-SYNTAX      XEVM-SYNTAX       EVM-SYNTAX
