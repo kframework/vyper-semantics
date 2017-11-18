@@ -19,17 +19,18 @@ module VIPER-LLL
     configuration
     <T>
         <k> #compileViperToLLL($PGM:Pgm) </k>
-        <lll> .K </lll>
-        <env> .Map </env>
-        <event> .Map </event>
-        <global> .Map </global>
+        <lll> .K </lll>  // output lll program
+        <env> .Map </env>  // In-memory variables. Var |-> TypedAddr
+        <nextMem> @reservedMemPos </nextMem>  // Next available memory location
+        <global> .Map </global>  // Global variables. Var |-> TypedAddr
         <nextStorage> 0 </nextStorage>
-        <nextMem> @reservedMemPos </nextMem>
-        <placeholder> 1 </placeholder>
-        <forvar> .Set </forvar>
-        <return> %void </return>
-        <constant> false </constant>
-        <payable> false </payable>
+        <internalSig> .Map </internalSig>  // internal ABI objects.   (Event, Func)Name |-> (Event, Func)Record
+        <externalSig> .Map </externalSig>  // external ABI objects.
+        <forvar> .Set </forvar>  // Variables defined in for loops, eg. for i in range(6):...
+        <return> %void </return>  // Return type of the function
+        <constant> false </constant>  // Is the function constant?
+        <payable> false </payable>  // Is the function payable?
+        <placeholder> 1 </placeholder>  // Number of placeholders generated (used to generate random names)
     </T>
 
 
@@ -38,33 +39,44 @@ module VIPER-LLL
 ///////////////////////////////////////////////////////////////////////////////
 
 
-    syntax TypedAddr       ::= "@taddr" "(" Type ","
-                                            LLLExp /*location*/ ","
-                                            Bool   /*global*/   ","
-                                            Bool   /*mutable*/  ")"
+    syntax TypedAddr      ::= "@taddr" "(" Type ","
+                                           LLLExp /*location*/   ","
+                                           Bool   /*global?*/    ","
+                                           Bool   /*mutable?*/   ")"
 
-    syntax TypedLLLExp     ::= "@tlll"  "(" Type "," LLLExp ")"
+    syntax TypedLLLExp    ::= "@tlll"  "(" Type "," LLLExp ")"
 
-    syntax EventRecord     ::= "@event" "(" Int /*event_id*/ "," EventParamRecords ")"
+    syntax EventRecord    ::= "@event" "(" Int /*event_id*/ "," EventParams ")"
 
-    syntax EventParamRecord  ::= "@eparam" "(" Id "," Type "," Bool "," Int /*pos*/ ")"
-    syntax EventParamRecords ::= List{EventParamRecord, ""}
+    syntax FuncRecord     ::= "@func" "(" Int /*func_id*/    ","
+                                          Params             ","
+                                          Type               ","
+                                          Bool /*constant?*/ ","
+                                          Bool /*payable?*/  ","
+                                          Bool /*internal?*/ ")"
+
+    syntax PackedLoggingData  ::= "(" LLLExp    /*code*/ ","
+                                      Int  /*start loc*/ ","
+                                      Int       /*size*/ ")"
+
+    syntax PackedArgBy32  ::= "(" LLLExps /*holder*/ ","
+                                  Int      /*size*/  ")"
 
     // Convention: C'Sort' is a one-one corresponding supersort of Sort. C'Sort'
     //             requires for evaluation (i.e. not KResult).
-    syntax CLLLExp  ::= LLLExp
-    syntax CLLLExps ::= LLLExps
-    syntax CTypedLLLExp  ::= TypedLLLExp
-    syntax CTypedAddr    ::= TypedAddr
-    syntax CPackLoggingDataResult ::= PackLoggingDataResult
-    syntax CPackArgBy32Result     ::= PackArgBy32Result
+    syntax CLLLExp                ::= LLLExp
+    syntax CLLLExps               ::= LLLExps
+    syntax CTypedLLLExp           ::= TypedLLLExp
+    syntax CTypedAddr             ::= TypedAddr
+    syntax CPackedLoggingData     ::= PackedLoggingData
+    syntax CPackedArgBy32         ::= PackedArgBy32
 
     syntax KResult  ::= LLLExp
                       | LLLExps
                       | TypedLLLExp
                       | TypedAddr
-                      | PackLoggingDataResult
-                      | PackArgBy32Result
+                      | PackedLoggingData
+                      | PackedArgBy32
                       | Bool
                       | Int
 
@@ -74,76 +86,90 @@ module VIPER-LLL
 ///////////////////////////////////////////////////////////////////////////////
 
 
-    syntax KItem    ::= "#compileViperToLLL"    "(" Pgm ")"
-    syntax KItem    ::= "#compileViperToLLLAux" "(" CLLLExps /*initializer*/  ","
-                                                    CLLLExps /*init func*/    ","
-                                                    CLLLExps /*regular func*/ ","
-                                                    CLLLExps /*public getter*/
-                                                 ")"                  [seqstrict]
-    syntax KItem    ::= "#compileViperToLLLAux" "(" CLLLExps /*initializer*/  ","
-                                                    CLLLExps /*regular func*/ ","
-                                                    CLLLExps /*public getter*/
-                                                ")"                   [seqstrict]
- // ----------------------------------------------------------------------------
-    rule #compileViperToLLL(%pgm(ES, GS, INIT, DEFS)) => #resolveEvents(ES)
-                                                      ~> #resolveGlobals(GS)
+    syntax KItem  ::= "#compileViperToLLL"    "(" Pgm ")"
+    syntax KItem  ::= "#compileViperToLLLAux" "(" CLLLExps /*header code*/  ","
+                                                  CLLLExps /*init func*/    ","
+                                                  CLLLExps /*regular func*/
+                                               ")"                  [seqstrict]
+    syntax KItem  ::= "#compileViperToLLLAux" "(" CLLLExps /*header code*/  ","
+                                                  CLLLExps /*regular func*/
+                                              ")"                   [seqstrict]
+ // ---------------------------------------------------------------------------
+    rule #compileViperToLLL(%pgm(ES, GS, INIT, DEFS)) => #addEvents(ES)
+                                                      ~> #addGlobals(GS)
+                                                      ~> #addFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs))
                                                       ~> #compileViperToLLLAux(
                                                              #initializer_lll,
-                                                             #resolveFunc(INIT),
-                                                             #resolveFuncs(DEFS),
-                                                             #resolveFuncs(#mkPublicGetters(GS, .Defs)))
+                                                             #compileFunc(INIT),
+                                                             #compileFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs), .LLLExps))
 
-    rule #compileViperToLLL(%pgm(ES, GS, DEFS)) => #resolveEvents(ES)
-                                                ~> #resolveGlobals(GS)
+    rule #compileViperToLLL(%pgm(ES, GS, DEFS)) => #addEvents(ES)
+                                                ~> #addGlobals(GS)
+                                                ~> #addFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs))
                                                 ~> #compileViperToLLLAux(
                                                        #initializer_lll,
-                                                       #resolveFuncs(DEFS),
-                                                       #resolveFuncs(#mkPublicGetters(GS, .Defs)))
+                                                       #compileFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs), .LLLExps))
 
-
-    rule <k> #compileViperToLLLAux(INITIALIZER, INITFUNC, OTHERFUNCS, PUBLICGETTERS) => . ... </k>
+    rule <k> #compileViperToLLLAux(INITIALIZER, INITFUNC, OTHERFUNCS) => . ... </k>
          <lll> _ => $%seq(
-                      $%seq(INITIALIZER) ++LLL INITFUNC ++LLL
-                      $return(
-                        0,
-                        $lll($%seq(INITIALIZER ++LLL OTHERFUNCS ++LLL PUBLICGETTERS), 0));.LLLExps) </lll>
+                      ($%seq(INITIALIZER);.LLLExps) ++LLL INITFUNC ++LLL
+                      ($return(
+                         0,
+                         $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0));.LLLExps)) </lll>
 
-    rule <k> #compileViperToLLLAux(INITIALIZER, OTHERFUNCS, PUBLICGETTERS) => . ... </k>
+    rule <k> #compileViperToLLLAux(INITIALIZER, OTHERFUNCS) => . ... </k>
          <lll> _ => $%seq(
                       $return(
                         0,
-                        $lll($%seq(INITIALIZER ++LLL OTHERFUNCS ++LLL PUBLICGETTERS ), 0));.LLLExps) </lll>
+                        $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0));.LLLExps) </lll>
 
 
-    syntax KItem     ::= "#resolveEvents"     "(" Events ")"
-    syntax KItem     ::= "#resolveEvent"      "(" Event ")"
-    syntax KItem     ::= "#resolveEventAux"   "(" Event ")"
-    syntax KItem     ::= "#checkEventParams"  "(" EventParams "," Int ")"
-    syntax KItem     ::= "#checkEventParamType" "(" Type  ")"
- // -------------------------------------------------------------------
-    rule #resolveEvents(.Events) => .
+// Process Events
+// ==============
 
-    rule #resolveEvents(E ES) => #resolveEvent(E) ~> #resolveEvents(ES)
 
-    rule #resolveEvent(%event(NAME, PARAMS)) => #checkEventParams(PARAMS, 0)
-                                             ~> #resolveEventAux(%event(NAME, PARAMS))
+    syntax KItem  ::= "#addEvents"     "(" Events ")"
+    syntax KItem  ::= "#addEvent"      "(" Event ")"
+    syntax KItem  ::= "#addEventAux"   "(" Id "," EventParams ")"
+ // -------------------------------------------------------------
+    rule #addEvents(.Events) => .
 
-    rule <k> #resolveEventAux(%event(NAME, PARAMS)) => . ...</k>
-         <event> EVENT => EVENT[NAME <- #computeEventRecord(%event(NAME, PARAMS))] </event>
+    rule #addEvents(E ES) => #addEvent(E) ~> #addEvents(ES)
 
-    rule #checkEventParams(.EventParams, TOPICNUM) => .
+    rule #addEvent(%event(NAME, EPARAMS)) => #checkEventParams(EPARAMS, 0, .Ids)
+                                          ~> #addEventAux(NAME, EPARAMS)
+
+    rule <k> #addEventAux(NAME, EPARAMS) => . ... </k>
+         <internalSig> SIGS
+                      => SIGS[NAME <- @event(#computeEventId(NAME, EPARAMS), EPARAMS)] </internalSig>
+      requires notBool NAME in keys(SIGS)
+
+    rule <k> #addEventAux(NAME, EPARAMS) => #exception("Duplicate event name: " +String Id2String(NAME)) ... </k>
+         <internalSig> SIGS </internalSig>
+      requires NAME in keys(SIGS)
+
+
+    syntax KItem  ::= "#checkEventParams"      "(" EventParams "," Int "," Ids ")"
+    syntax KItem  ::= "#checkEventParamType"   "(" Type  ")"
+    syntax KItem  ::= "#checkDuplicateArgName" "(" Id "," Ids ")"
+ // ----------------------------------------------------------------------------
+    rule #checkEventParams(.EventParams, TOPICNUM, NAMES) => .
       requires TOPICNUM <=Int 3
 
-    rule #checkEventParams(%eparam(NAME, T, true) ARGS, TOPICNUM)
-             => #checkEventParamType(T) ~> #checkEventParams(ARGS, TOPICNUM +Int 1)
+    rule #checkEventParams(%eparam(NAME, T, true) EPARAMS, TOPICNUM, NAMES)
+        => #checkEventParamType(T)
+        ~> #checkDuplicateArgName(NAME, NAMES)
+        ~> #checkEventParams(EPARAMS, TOPICNUM +Int 1, NAMES ++Id NAME)
       requires TOPICNUM <Int 3
 
-    rule #checkEventParams(%eparam(NAME, T, true) ARGS, TOPICNUM)
-             => #exception("Maximum of 3 topics.")
+    rule #checkEventParams(%eparam(NAME, T, true) EPARAMS, TOPICNUM, NAMES)
+        => #exception("Maximum of 3 topics.")
       requires TOPICNUM >=Int 3
 
-    rule #checkEventParams(%eparam(NAME, T, false) ARGS, TOPICNUM)
-             => #checkEventParamType(T) ~> #checkEventParams(ARGS, TOPICNUM)
+    rule #checkEventParams(%eparam(NAME, T, false) EPARAMS, TOPICNUM, NAMES)
+        => #checkEventParamType(T)
+        ~> #checkDuplicateArgName(NAME, NAMES)
+        ~> #checkEventParams(EPARAMS, TOPICNUM, NAMES ++Id NAME)
 
     rule #checkEventParamType(%bytesT(L)) => .
       requires L <=Int 32
@@ -154,14 +180,102 @@ module VIPER-LLL
     rule #checkEventParamType(T) => .
       requires notBool isByteArrayType(T)
 
+    rule #checkDuplicateArgName(NAME, NAMES)
+        => #exception("Duplicate function argument name: " +String Id2String(NAME))
+      requires #inIds(NAME, NAMES)
 
-    syntax KItem     ::= "#resolveGlobals" "(" Globals ")"
- // ------------------------------------------------------
-    rule #resolveGlobals(.Globals) => .
+    rule #checkDuplicateArgName(NAME, NAMES) => .
+      requires notBool #inIds(NAME, NAMES)
 
-    rule <k> #resolveGlobals(%svdecl(NAME, T, _) GS) => #resolveGlobals(GS) ... </k>
-         <global> GLOBAL => GLOBAL[%svar(NAME) <- @taddr(T, LOC, true, true)] </global>
+
+// Process Globals
+// ===============
+
+
+    syntax KItem  ::= "#addGlobals"   "(" Globals ")"
+    syntax KItem  ::= "#addGlobal"    "(" Global  ")"
+ // -------------------------------------------------
+    rule #addGlobals(.Globals) => .
+
+    rule #addGlobals(G GS) => #addGlobal(G) ~> #addGlobals(GS)
+
+    rule <k> #addGlobal(%svdecl(NAME, T, _)) => . ... </k>
+         <global> GLOBALS => GLOBALS[%svar(NAME) <- @taddr(T, LOC, true, true)] </global>
          <nextStorage> LOC => LOC +Int 1 </nextStorage>
+      requires notBool NAME in keys(GLOBALS)
+
+    rule <k> #addGlobal(%svdecl(NAME, T, _)) => #exception("Cannot declare a persistent variable twice!") ... </k>
+         <global> GLOBALS </global>
+      requires NAME in keys(GLOBALS)
+
+
+// Process Funcs
+// =============
+
+
+    syntax KItem  ::= "#addFuncs"   "(" Defs ")"
+    syntax KItem  ::= "#addFunc"    "(" Id   "," Params "," Type ","
+                                        Bool /*constant?*/ ","
+                                        Bool /*payable?*/  ","
+                                        Bool /*internal?*/ ","
+                                        Bool /*public?*/   ")"
+    syntax KItem  ::= "#addFuncAux" "(" Id   "," Params "," Type ","
+                                        Bool /*constant?*/ ","
+                                        Bool /*payable?*/  ","
+                                        Bool /*internal?*/ ")"
+ // ------------------------------------------
+    rule #addFuncs(.Defs) => .
+
+    rule #addFuncs(%fdecl(DECS, NAME, PARAMS, T, STMTS) DEFS)
+        => #addFunc(NAME, PARAMS, T,
+                    #inDecorators(%@constant, DECS),
+                    #inDecorators(%@payable, DECS),
+                    #inDecorators(%@internal, DECS),
+                    #inDecorators(%@public, DECS))
+        ~> #addFuncs(DEFS)
+
+    rule #addFunc(NAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL, PUBLIC)
+        => #checkFuncParams(PARAMS, .Ids)
+        ~> #checkInternalPublicMECE(INTERNAL, PUBLIC)
+        ~> #addFuncAux(NAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL)
+
+    rule <k> #addFuncAux(NAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL) => . ... </k>
+         <internalSig> SIGS
+                      => SIGS[NAME <- @func(#computeFuncId(NAME, PARAMS),
+                                            PARAMS,
+                                            T,
+                                            CONSTANT,
+                                            PAYABLE,
+                                            INTERNAL)] </internalSig>
+      requires notBool NAME in keys(SIGS)
+
+    rule <k> #addFuncAux(NAME, _, _, _, _, _)
+        => #exception("Duplicate event or function name: " +String Id2String(NAME)) ... </k>
+         <internalSig> SIGS </internalSig>
+      requires NAME in keys(SIGS)
+
+
+    syntax KItem  ::= "#checkFuncParams"       "(" Params "," Ids ")"
+ // -----------------------------------------------------------------
+    rule #checkFuncParams(.Params, NAMES) => .
+
+    rule #checkFuncParams(%param(NAME, _) PARAMS, NAMES)
+        => #checkDuplicateArgName(NAME, NAMES)
+
+
+    syntax KItem  ::= "#checkInternalPublicMECE" "(" Bool /*internal?*/ "," Bool /*public?*/ ")"
+ // --------------------------------------------------------------------------------------------
+    rule #checkInternalPublicMECE(INTERNAL, PUBLIC)
+        => #ifThenElse(INTERNAL ==K true andBool PUBLIC ==K true,
+                       #exception("Cannot use public and internal decorators on the same function."),
+             #ifThenElse(INTERNAL ==K false andBool PUBLIC ==K false,
+                       #exception("Function visibility must be declared."),
+                       .K))
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Function Definitions
+///////////////////////////////////////////////////////////////////////////////
 
 
     syntax CLLLExps ::= "#extendLLL" "(" CLLLExps "," CLLLExps ")"       [seqstrict]
@@ -169,45 +283,47 @@ module VIPER-LLL
     rule #extendLLL(C1:LLLExps, C2:LLLExps) => C1 ++LLL C2
 
 
-    syntax CLLLExps ::= "#resolveFuncs"    "(" Defs ")"
-    syntax CLLLExps ::= "#resolveFuncsAux" "(" Defs "," CLLLExps ")"  [strict(2)]
- // -----------------------------------------------------------------------------
-    rule #resolveFuncs(DEFS) => #resolveFuncsAux(DEFS, .LLLExps)
-    rule #resolveFuncsAux(.Defs, CODE) => CODE
-    rule #resolveFuncsAux(DEF DEFS, CODE) => #resolveFuncsAux(DEFS, #extendLLL(CODE, #resolveFunc(DEF)))
+    syntax CLLLExps ::= "#compileFuncs" "(" Defs "," CLLLExps ")"
+ // -------------------------------------------------------------
+    rule #compileFuncs(.Defs, RESULTCODE) => RESULTCODE
+
+    rule #compileFuncs(DEF DEFS, RESULTCODE) => #compileFunc(DEF) ~> #compileFuncs(DEFS, RESULTCODE)
+
+    rule (FUNCCODE:LLLExps ~> #compileFuncs(DEFS, RESULTCODE))
+        => #compileFuncs(DEFS, RESULTCODE ++LLL FUNCCODE)
 
 
-    syntax CLLLExps ::= "#resolveFunc"    "(" Def  ")"
-    syntax CLLLExps ::= "#resolveFuncAux" "(" CLLLExps /*copy input*/      ","
+    syntax CLLLExps ::= "#compileFunc"    "(" Def  ")"
+    syntax CLLLExps ::= "#compileFuncAux" "(" CLLLExps /*copy input*/      ","
                                               CLLLExps /*check decorator*/ ","
                                               CLLLExps /*fill params*/     ","
                                               CLLLExps /*resolve stmts*/   ","
-                                              Int      /*method id*/       ","
-                                              Bool     /*is init?*/
+                                              Int      /*func id*/         ","
+                                              Bool     /*init?*/
                                           ")"                      [seqstrict]
  // --------------------------------------------------------------------------
-    rule <k> #resolveFunc(%fdecl(DECS, NAME, PARAMS, T, STMTS))
-                 => #resolveFuncAux(#copyInput(PARAMS, #isInitFunc(NAME)),
+    rule <k> #compileFunc(%fdecl(DECS, NAME, PARAMS, T, STMTS))
+                 => #compileFuncAux(#copyInput(PARAMS, #isInitFunc(NAME)),
                                     #checkDecorators(DECS),
                                     #fillParams(PARAMS, 0, #isInitFunc(NAME)),
                                     #resolveStmts(STMTS),
-                                    #computeMethodId(NAME, PARAMS),
+                                    #computeFuncId(NAME, PARAMS),
                                     #isInitFunc(NAME))
                  ~> #cleanConfig ... </k>
          <return> _ => T </return>
 
 
-    rule #resolveFuncAux(COPYINPUT, CHECKDECS, FILLPARAMS, STMTS, _, true)
+    rule #compileFuncAux(COPYINPUT, CHECKDECS, FILLPARAMS, STMTS, _, true)
              => $%seq(COPYINPUT ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL $%seq(STMTS));.LLLExps
 
-    rule #resolveFuncAux(COPYINPUT, CHECKDECS, FILLPARAMS, STMTS, METHODID, false)
+    rule #compileFuncAux(COPYINPUT, CHECKDECS, FILLPARAMS, STMTS, FUNCID, false)
              => $if(
-                  $eq($mload(0), METHODID),
+                  $eq($mload(0), FUNCID),
                   $%seq(COPYINPUT ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL STMTS ++LLL $stop));.LLLExps
 
 
-    syntax CLLLExps ::= "#copyInput" "(" Params "," Bool /*is init?*/ ")"
- // ---------------------------------------------------------------------
+    syntax CLLLExps ::= "#copyInput" "(" Params "," Bool /*init?*/ ")"
+ // ------------------------------------------------------------------
     rule #copyInput(.Params, _) => $pass;.LLLExps
 
     rule <k> #copyInput(PARAMS, true) => $codecopy(@reservedMemPos,
@@ -351,16 +467,16 @@ module VIPER-LLL
     syntax CLLLExp ::= "#mkSetter"    "(" TypedAddr    /*left variable address*/   ","
                                           TypedLLLExp  /*right compiled Expr*/
                                       ")"
-    syntax CLLLExp ::= "#mkSetterForBase" "("TypedAddr "," CTypedLLLExp ")"    [strict(2)]
- // --------------------------------------------------------------------------------------
+    syntax CLLLExp ::= "#mkSetterBase" "("TypedAddr "," CTypedLLLExp ")"    [strict(2)]
+ // -----------------------------------------------------------------------------------
     rule #mkSetter(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE), RTCODE)
-             => #mkSetterForBase(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE),
-                                 #baseTypeConvert(RTCODE, LT))
+             => #mkSetterBase(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE),
+                              #baseTypeConvert(RTCODE, LT))
       requires isBaseType(LT)
 
-    rule #mkSetterForBase(@taddr(_, LOC, true, _), @tlll(_, CODE)) => $sstore(LOC, CODE)
+    rule #mkSetterBase(@taddr(_, LOC, true, _), @tlll(_, CODE)) => $sstore(LOC, CODE)
 
-    rule #mkSetterForBase(@taddr(_, LOC, false, _), @tlll(_, CODE)) => $mstore(LOC, CODE)
+    rule #mkSetterBase(@taddr(_, LOC, false, _), @tlll(_, CODE)) => $mstore(LOC, CODE)
 
 
     // Augassign
@@ -506,64 +622,64 @@ module VIPER-LLL
     syntax CLLLExps ::= "#log"    "(" Exprs "," EventRecord ")"
     syntax CLLLExps ::= "#logAux" "(" Int /*event id*/  ","
                                       Exprs             ","
-                                      EventParamRecords ","
+                                      EventParams       ","
                                       Exprs /*topic*/   ","
-                                      EventParamRecords ","
+                                      EventParams       ","
                                       Exprs /*data*/    ","
-                                      EventParamRecords ")"
-    syntax CLLLExps ::= "#log1"  "(" CPackLoggingDataResult ","
-                                     Int                    ")"          [strict(1)]
-    syntax CLLLExps ::= "#log2"  "(" CPackLoggingDataResult ","
-                                     Int                    ","
-                                     CTypedLLLExp           ")"     [seqstrict(1,3)]
-    syntax CLLLExps ::= "#log3"  "(" CPackLoggingDataResult ","
-                                     Int                    ","
-                                     CTypedLLLExp           ","
-                                     CTypedLLLExp           ")"   [seqstrict(1,3,4)]
-    syntax CLLLExps ::= "#log4"  "(" CPackLoggingDataResult ","
-                                     Int                    ","
-                                     CTypedLLLExp           ","
-                                     CTypedLLLExp           ","
-                                     CTypedLLLExp           ")" [seqstrict(1,3,4,5)]
+                                      EventParams       ")"
+    syntax CLLLExps ::= "#log1"  "(" CPackedLoggingData ","
+                                     Int                ")"          [strict(1)]
+    syntax CLLLExps ::= "#log2"  "(" CPackedLoggingData ","
+                                     Int                ","
+                                     CTypedLLLExp       ")"     [seqstrict(1,3)]
+    syntax CLLLExps ::= "#log3"  "(" CPackedLoggingData ","
+                                     Int                ","
+                                     CTypedLLLExp       ","
+                                     CTypedLLLExp       ")"   [seqstrict(1,3,4)]
+    syntax CLLLExps ::= "#log4"  "(" CPackedLoggingData ","
+                                     Int                ","
+                                     CTypedLLLExp       ","
+                                     CTypedLLLExp       ","
+                                     CTypedLLLExp       ")" [seqstrict(1,3,4,5)]
  // --------------------------------------------------------------------------------
     rule <k> #resolveStmt(%log(NAME, ARGS)) => #log(ARGS, EVENTRECORD) ... </k>
-         <event> NAME |-> EVENTRECORD EVENT </event>
+         <internalSig> NAME |-> EVENTRECORD SIGS </internalSig>
 
     rule <k> #resolveStmt(%log(NAME, _)) => #exception("Event not declared yet: " +String Id2String(NAME)) ... </k>
-         <event> EVENT </event>
-      requires notBool NAME in keys(EVENT)
+         <internalSig> SIGS </internalSig>
+      requires notBool NAME in keys(SIGS)
 
-    rule #log(ARGS, @event(EID, EPRS)) => #logAux(EID, ARGS, EPRS, .Exprs, .EventParamRecords, .Exprs, .EventParamRecords)
+    rule #log(ARGS, @event(EID, EPARAMS)) => #logAux(EID, ARGS, EPARAMS, .Exprs, .EventParams, .Exprs, .EventParams)
 
-    rule #logAux(EID, (ARG1, ARGS), (EPR1 EPRS), TARGS, TEPRS, DARGS, DEPRS)
-             => #ifThenElse(#isTopic(EPR1),
-                            #logAux(EID, ARGS, EPRS, TARGS ++Expr ARG1, TEPRS ++Epr EPR1, DARGS, DEPRS),
-                            #logAux(EID, ARGS, EPRS, TARGS, TEPRS, DARGS ++Expr ARG1, DEPRS ++Epr EPR1))
+    rule #logAux(EID, (ARG1, ARGS), (EPARAM1 EPARAMS), TARGS, TEPARAMS, DARGS, DEPARAMS)
+             => #ifThenElse(#isTopic(EPARAM1),
+                            #logAux(EID, ARGS, EPARAMS, TARGS ++Expr ARG1, TEPARAMS ++Ep EPARAM1, DARGS, DEPARAMS),
+                            #logAux(EID, ARGS, EPARAMS, TARGS, TEPARAMS, DARGS ++Expr ARG1, DEPARAMS ++Ep EPARAM1))
 
     // 0 topic
-    rule #logAux(EID, .Exprs, .EventParamRecords, (TARG1, .Exprs), (TEPR1 .EventParamRecords), DARGS, DEPRS)
-           => #log1(#packLoggingData(DARGS, DEPRS), EID)
+    rule #logAux(EID, .Exprs, .EventParams, (TARG1, .Exprs), (TEPARAM1 .EventParams), DARGS, DEPARAMS)
+           => #log1(#packLoggingData(DARGS, DEPARAMS), EID)
 
     // 1 topic
-    rule #logAux(EID, .Exprs, .EventParamRecords, (TARG1, .Exprs), (TEPR1 .EventParamRecords), DARGS, DEPRS)
-           => #log2(#packLoggingData(DARGS, DEPRS),
+    rule #logAux(EID, .Exprs, .EventParams, (TARG1, .Exprs), (TEPARAM1 .EventParams), DARGS, DEPARAMS)
+           => #log2(#packLoggingData(DARGS, DEPARAMS),
                     EID,
-                    #packLoggingTopic(#resolveExpr(TARG1), TEPR1))
+                    #packLoggingTopic(#resolveExpr(TARG1), TEPARAM1))
 
     // 2 topics
-    rule #logAux(EID, .Exprs, .EventParamRecords, (TARG1, TARG2, .Exprs), (TEPR1 TEPR2 .EventParamRecords), DARGS, DEPRS)
-           => #log3(#packLoggingData(DARGS, DEPRS),
+    rule #logAux(EID, .Exprs, .EventParams, (TARG1, TARG2, .Exprs), (TEPARAM1 TEPARAM2 .EventParams), DARGS, DEPARAMS)
+           => #log3(#packLoggingData(DARGS, DEPARAMS),
                     EID,
-                    #packLoggingTopic(#resolveExpr(TARG1), TEPR1),
-                    #packLoggingTopic(#resolveExpr(TARG2), TEPR2))
+                    #packLoggingTopic(#resolveExpr(TARG1), TEPARAM1),
+                    #packLoggingTopic(#resolveExpr(TARG2), TEPARAM2))
 
     // 3 topics
-    rule #logAux(EID, .Exprs, .EventParamRecords, (TARG1, TARG2, TARG3, .Exprs), (TEPR1 TEPR2 TEPR3 .EventParamRecords), DARGS, DEPRS)
-           => #log4(#packLoggingData(DARGS, DEPRS),
+    rule #logAux(EID, .Exprs, .EventParams, (TARG1, TARG2, TARG3, .Exprs), (TEPARAM1 TEPARAM2 TEPARAM3 .EventParams), DARGS, DEPARAMS)
+           => #log4(#packLoggingData(DARGS, DEPARAMS),
                     EID,
-                    #packLoggingTopic(#resolveExpr(TARG1), TEPR1),
-                    #packLoggingTopic(#resolveExpr(TARG2), TEPR2),
-                    #packLoggintTopic(#resolveExpr(TARG3), TEPR3))
+                    #packLoggingTopic(#resolveExpr(TARG1), TEPARAM1),
+                    #packLoggingTopic(#resolveExpr(TARG2), TEPARAM2),
+                    #packLoggintTopic(#resolveExpr(TARG3), TEPARAM3))
 
 
     rule #log1((DATACODE, START, SIZE), EID) => $%seq(
@@ -586,38 +702,32 @@ module VIPER-LLL
                   $log4(START, SIZE, EID, TOPIC1, TOPIC2, TOPIC3);.LLLExps);.LLLExps
 
 
-    syntax PackLoggingDataResult  ::= "(" LLLExp    /*code*/ ","
-                                          Int  /*start loc*/ ","
-                                          Int       /*size*/ ")"
-    syntax CPackLoggingDataResult ::= "#packLoggingData"    "(" Exprs             ","
-                                                                EventParamRecords ")"
-    syntax CPackLoggingDataResult ::= "#packLoggingDataAux" "(" Exprs             ","
-                                                                EventParamRecords ","
-                                                                LLLExps           ","
-                                                                Int /*size*/      ")"
- // ---------------------------------------------------------------------------------
-    rule #packLoggingData(DARGS, DEPRS) => #ifThenElse(#numOfExprs(DARGS) ==Int 0,
-                                                       ($pass, 0, 0),
-                                                       #packLoggingDataAux(DARGS, DEPRS, .LLLExps, 0))
+    syntax CPackedLoggingData ::= "#packLoggingData"    "(" Exprs        ","
+                                                            EventParams  ")"
+    syntax CPackedLoggingData ::= "#packLoggingDataAux" "(" Exprs        ","
+                                                            EventParams  ","
+                                                            LLLExps      ","
+                                                            Int /*size*/ ")"
+ // -----------------------------------------------------------------------------
+    rule #packLoggingData(DARGS, DEPARAMS) => #ifThenElse(#numOfExprs(DARGS) ==Int 0,
+                                                          ($pass, 0, 0),
+                                                          #packLoggingDataAux(DARGS, DEPARAMS, .LLLExps, 0))
 
-    rule #packLoggingDataAux(.Exprs, .EventParamRecords, CODE, SIZE)
-             => ($%seq(CODE), #getFirstLoc(CODE), SIZE)
+    rule #packLoggingDataAux(.Exprs, .EventParams, CODE, SIZE)
+             => ($%seq(CODE), #getFirstStoreLoc(CODE), SIZE)
 
-    rule #packLoggingDataAux((DARG, DARGS), @eparam(_, T, _, _) DEPRS, CODE, SIZE)
-             => #packArgBy32ForBase(#baseTypeConvert(#resolveExpr(DARG), T), #allocPlaceholder(T))
-             ~> #packLoggingDataAux(DARGS, DEPRS, CODE, SIZE)
+    rule #packLoggingDataAux((DARG, DARGS), %eparam(_, T, _) DEPARAMS, CODE, SIZE)
+             => #packArgBy32Base(#baseTypeConvert(#resolveExpr(DARG), T), #allocPlaceholder(T))
+             ~> #packLoggingDataAux(DARGS, DEPARAMS, CODE, SIZE)
       requires isBaseType(T)
 
-    rule (ARGCODE, ARGSIZE) ~> #packLoggingDataAux(DARGS, DEPRS, CODE, TOTALSIZE)
-             => #packLoggingDataAux(DARGS, DEPRS, CODE ++LLL ARGCODE, TOTALSIZE +Int ARGSIZE)
-
-    rule (ARGCODE, ARGSIZE) ~> #packLoggingDataAux(DARGS, DEPRS, CODE, TOTALSIZE)
-             => #packLoggingDataAux(DARGS, DEPRS, CODE ++LLL ARGCODE, TOTALSIZE +Int ARGSIZE)
+    rule (ARGCODE, ARGSIZE) ~> #packLoggingDataAux(DARGS, DEPARAMS, CODE, TOTALSIZE)
+             => #packLoggingDataAux(DARGS, DEPARAMS, CODE ++LLL ARGCODE, TOTALSIZE +Int ARGSIZE)
 
 
-    syntax CTypedLLLExp ::= "#packLoggingTopic" "(" CTypedLLLExp "," EventParamRecords ")"  [strict(1)]
- // ---------------------------------------------------------------------------------------------------
-    rule #packLoggingTopic(ARGCODE, @eparam(_, T, _, _)) => #baseTypeConvert(ARGCODE, T)
+    syntax CTypedLLLExp ::= "#packLoggingTopic" "(" CTypedLLLExp "," EventParams ")"  [strict(1)]
+ // ---------------------------------------------------------------------------------------------
+    rule #packLoggingTopic(ARGCODE, %eparam(_, T, _)) => #baseTypeConvert(ARGCODE, T)
       requires isBaseType(T)
 
 
@@ -693,15 +803,15 @@ module VIPER-LLL
     syntax CTypedAddr ::= "#computeVarOffset" "(" CTypedAddr   /*parent*/ ","
                                                   CTypedLLLExp /*key*/
                                               ")"                 [seqstrict]
-    syntax CTypedAddr ::= "#computeVarOffsetForMap" "(" CTypedAddr        ","
-                                                        CTypedLLLExp
-                                                    ")"           [strict(2)]
+    syntax CTypedAddr ::= "#computeMapVarOffset" "(" CTypedAddr        ","
+                                                     CTypedLLLExp
+                                                 ")"              [strict(2)]
  // -------------------------------------------------------------------------
     rule #computeVarOffset(@taddr(%mapT(VT, KT), LOC, GLOBAL, MUTABLE), TCODE)
-             => #computeVarOffsetForMap(@taddr(%mapT(VT, KT), LOC, GLOBAL, MUTABLE),
-                                        #baseTypeConvert(TCODE, KT))
+             => #computeMapVarOffset(@taddr(%mapT(VT, KT), LOC, GLOBAL, MUTABLE),
+                                     #baseTypeConvert(TCODE, KT))
 
-    rule #computeVarOffsetForMap(@taddr(%mapT(VT, KT), LOC, true, MUTABLE), @tlll(_, CODE))
+    rule #computeMapVarOffset(@taddr(%mapT(VT, KT), LOC, true, MUTABLE), @tlll(_, CODE))
              => @taddr(VT, $add($sha3_32(LOC), CODE), true, MUTABLE)
 
     rule #computeVarOffsetForMap(@taddr(%mapT(VT, KT), _, false, _), _)
@@ -1018,7 +1128,6 @@ module VIPER-LLL
 // Utils
 //////////////////////////////////////////////////////////////////////////////
 
-    // Is function
     syntax Bool ::= "#isInitFunc" "(" Id ")"    [function]
  // ------------------------------------------------------
     rule #isInitFunc(NAME) => NAME ==K __init__
@@ -1033,31 +1142,25 @@ module VIPER-LLL
       requires notBool isUnitType(T)
 
 
-    syntax Bool ::= "#isUnitTypeOf" "(" UnitType "," Type ")"            [function]
- // -------------------------------------------------------------------------------
+    syntax Bool ::= "#isUnitTypeOf" "(" UnitType "," Type ")"    [function]
+ // -----------------------------------------------------------------------
     rule #isUnitTypeOf(%unitT(T, _, _), T) => true
 
     rule #isUnitTypeOf(%unitT(T, _, _), TARGET) => false
       requires T =/=K TARGET
 
 
-    syntax Bool ::= "#inDecorators" "(" Decorator "," Decorators ")"     [function]
- // -------------------------------------------------------------------------------
-    rule #inDecorators(D, .Decorators) => false
-
-    rule #inDecorators(D, DEC DECS) => true                     requires D ==K DEC
-
-    rule #inDecorators(D, DEC DECS) => #inDecorators(D, DECS)   requires D =/=K DEC
+    syntax Bool ::= "#isTopic" "(" EventParam ")"    [function]
+ // -----------------------------------------------------------
+    rule #isTopic(%eparam(_, _, ISTOPIC)) => ISTOPIC
 
 
-    syntax Bool ::= "#isTopic" "(" EventParamRecord ")"                  [function]
- // -------------------------------------------------------------------------------
-    rule #isTopic(@eparam(_, _, ISTOPIC, _)) => ISTOPIC
+// Lists
+// =====
 
 
-    // List operation
-    syntax Defs   ::= Defs "++Def" Defs                    [function]
- // -----------------------------------------------------------------
+    syntax Defs  ::= Defs "++Def" Defs    [left, function]
+ // ------------------------------------------------------
     rule .Defs ++Def DEFS:Defs => DEFS
 
     rule (DEF DEFS1) ++Def DEFS2:Defs => DEF (DEFS1 ++Def DEFS2)
@@ -1065,31 +1168,64 @@ module VIPER-LLL
 
     syntax LLLExp   ::= "$%seq" "(" LLLExps ")"
     syntax LLLExps  ::= List{LLLExp, ";"}
-    syntax LLLExps  ::= LLLExps "++LLL" LLLExps      [left, function]
- // -----------------------------------------------------------------
+    syntax LLLExps  ::= LLLExps "++LLL" LLLExps    [left, function]
+ // ---------------------------------------------------------------
     rule .LLLExps    ++LLL LES:LLLExps => LES
 
     rule (LE ; LES1) ++LLL LES2        => LE ; (LES1 ++LLL LES2)
 
 
-    syntax Exprs    ::= Exprs "++Expr" Exprs         [left, function]
- // -----------------------------------------------------------------
+    syntax Exprs  ::= Exprs "++Expr" Exprs    [left, function]
+ // ----------------------------------------------------------
     rule .Exprs     ++Expr EXPRS:Exprs => EXPRS
 
     rule (EXPR , EXPRS1) ++Expr EXPRS2 => EXPR , (EXPRS1 ++Expr EXPRS2)
 
 
-    syntax EventParamRecords ::= EventParamRecords "++Epr" EventParamRecords  [left, function]
- // ------------------------------------------------------------------------------------------
-    rule .EventParamRecords ++Epr EPRS:EventParamRecords => EPRS
+    syntax EventParams ::= EventParams "++Ep" EventParams    [left, function]
+ // -------------------------------------------------------------------------
+    rule .EventParams ++Ep EPARAMS:EventParams => EPARAMS
 
-    rule (EPR EPRS1) ++Epr EPRS2 => EPR (EPRS1 ++Epr EPRS2)
+    rule (EPARAM EPARAMS1) ++Ep EPARAMS2 => EPARAM (EPARAMS1 ++Ep EPARAMS2)
 
 
-    // Type related
-    syntax Int       ::= "#sizeOfParams" "(" Params ")"   [function]
-    syntax Int       ::= "#sizeOfParam"  "(" Param  ")"   [function]
- // --------------------------------------------------------------
+    syntax Ids   ::= List{Id, ""}
+    syntax Ids   ::= Ids "++Id" Ids                 [left, function]
+    syntax Ids   ::= Ids "++Id" Id                  [left, function]
+    syntax Bool  ::= "#inIds" "(" Id "," Ids ")"    [function]
+ // ----------------------------------------------------------------
+    rule .Ids ++Id IDS:Ids   => IDS
+
+    rule (ID IDS1) ++Id IDS2 => ID (IDS1 ++Id IDS2)
+
+    rule .Ids ++Id ID        => ID .Ids
+
+    rule (ID1 IDS) ++Id ID   => (ID1 IDS) ++Id (ID .Ids)
+
+    rule #inIds(ID, .Ids) => false
+
+    rule #inIds(ID, ID1 IDS) => true               requires ID ==K ID1
+
+    rule #inIds(ID, ID1 IDS) => #inIds(ID, IDS)    requires ID =/=K ID1
+
+
+    syntax Bool ::= "#inDecorators" "(" Decorator "," Decorators ")"  [function]
+ // ----------------------------------------------------------------------------
+    rule #inDecorators(D, .Decorators) => false
+
+    rule #inDecorators(D, DEC DECS) => true                     requires D ==K DEC
+
+    rule #inDecorators(D, DEC DECS) => #inDecorators(D, DECS)   requires D =/=K DEC
+
+
+
+// Type Related
+// ============
+
+
+    syntax Int       ::= "#sizeOfParams" "(" Params ")"    [function]
+    syntax Int       ::= "#sizeOfParam"  "(" Param  ")"    [function]
+ // -----------------------------------------------------------------
     rule #sizeOfParams(.Params) => 0
 
     rule #sizeOfParams(P PS)    => #sizeOfParam(P) +Int #sizeOfParams(PS)
@@ -1138,54 +1274,41 @@ module VIPER-LLL
     rule #canonicalizeType(%bytes32, _) => "bytes32"
 
 
-    // signature
-    syntax EventRecord       ::= "#computeEventRecord"       "(" Event ")"         [function]
-    syntax EventParamRecords ::= "#computeEventParamRecords" "(" EventParams ","
-                                                                 Int ")"           [function]
-    syntax String            ::= "#computeEventSig"          "(" String      ","
-                                                                 EventParams ")"   [function]
-    syntax Int               ::= "#computeEventId"           "(" Id          ","
-                                                                 EventParams ")"   [function]
- // -----------------------------------------------------------------------------------------
-    rule #computeEventRecord(%event(NAME, PARAMS)) => @event(#computeEventId(NAME, PARAMS),
-                                                             #computeEventParamRecords(PARAMS, 0))
+// Compute signatures
+// ==================
 
-    rule #computeEventParamRecords(.EventParams, POS)
-             => .EventParamRecords
 
-    rule #computeEventParamRecords(%eparam(NAME, T, ISTOPIC) PARAMS, POS)
-             => @eparam(NAME, T, ISTOPIC, POS) #computeEventParamRecords(PARAMS, POS +Int #sizeOfType(T))
+    syntax Int     ::= "#computeEventId"     "(" Id     "," EventParams ")"    [function]
+    syntax String  ::= "#computeEventSig"    "(" String "," EventParams ")"    [function]
+ // -------------------------------------------------------------------------------------
+    rule #computeEventId(NAME, EPARAMS)
+        => String2Base(Keccak256(#computeEventSig(Id2String(NAME) +String "(" , EPARAMS)), 16)
 
-    rule #computeEventSig(SIG, %eparam(_, T, _) PARAM1 PARAMS)
-             => #computeEventSig(SIG +String #canonicalizeType(T, true) +String "," , PARAM1 PARAMS)
+    rule #computeEventSig(SIG, %eparam(_, T, _) EPARAM1 EPARAMS)
+        => #computeEventSig(SIG +String #canonicalizeType(T, true) +String "," , EPARAM1 EPARAMS)
 
     rule #computeEventSig(SIG, %eparam(_, T, _) .EventParams)
-             => #computeEventSig(SIG +String #canonicalizeType(T, true), .EventParams)
+        => #computeEventSig(SIG +String #canonicalizeType(T, true), .EventParams)
 
     rule #computeEventSig(SIG, .EventParams) => SIG +String ")"
 
-    rule #computeEventId(NAME, PARAMS)
-             => String2Base(Keccak256(#computeEventSig(Id2String(NAME) +String "(" , PARAMS)), 16)
 
+    syntax Int     ::= "#computeFuncId"  "(" Id     "," Params ")"    [function]
+    syntax String  ::= "#computeFuncSig" "(" String "," Params ")"    [function]
+ // ----------------------------------------------------------------------------
+    rule #computeFuncId(__init__, PARAMS) => 0
 
-    syntax String   ::= "#computeMethodSig" "(" String "," Params ")"  [function]
- // ------------------------------------------------------------------------------
-    rule #computeMethodSig(SIG, %param(_,T) PARAM1 PARAMS)
-             => #computeMethodSig(SIG +String #canonicalizeType(T, false) +String "," , PARAM1 PARAMS)
-    
-    rule #computeMethodSig(SIG, %param(_,T) .Params)
-             => #computeMethodSig(SIG +String #canonicalizeType(T, false), .Params)
-
-    rule #computeMethodSig(SIG, .Params) => SIG +String ")"
-
-
-    syntax Int     ::= "#computeMethodId" "(" Id "," Params ")"       [function]
- // ------------------------------------------------------------------------------
-    rule #computeMethodId(__init__, PARAMS) => 0
-
-    rule #computeMethodId(NAME, PARAMS)
-             => String2Base(substrString(Keccak256(#computeMethodSig(Id2String(NAME) +String "(", PARAMS)), 0, 8), 16)
+    rule #computeFuncId(NAME, PARAMS)
+        => String2Base(substrString(Keccak256(#computeFuncSig(Id2String(NAME) +String "(", PARAMS)), 0, 8), 16)
       requires NAME =/=K __init__
+
+    rule #computeFuncSig(SIG, %param(_,T) PARAM1 PARAMS)
+        => #computeFuncSig(SIG +String #canonicalizeType(T, false) +String "," , PARAM1 PARAMS)
+
+    rule #computeFuncSig(SIG, %param(_,T) .Params)
+        => #computeFuncSig(SIG +String #canonicalizeType(T, false), .Params)
+
+    rule #computeFuncSig(SIG, .Params) => SIG +String ")"
 
 
     // Code generation
@@ -1258,7 +1381,7 @@ module VIPER-LLL
            => #mkPublicGetters(GS, DEFS)
 
     rule #mkPublicGetter(NAME, T)
-           => %fdecl(%@constant .Decorators,
+           => %fdecl(%@public %@constant .Decorators,
                      String2Id("get_" +String Id2String(NAME)),
                      .Params,
                      T,
@@ -1303,14 +1426,14 @@ module VIPER-LLL
     rule #convertToWei(ether)    => 10 ^Int 18
 
 
-    syntax KItem  ::= "#ifThen" "(" Bool /*condition*/ "," K /*then*/ ")"
- // ---------------------------------------------------------------------
+    syntax KItem  ::= "#ifThen" "(" Bool /*condition*/ "," K /*then*/ ")"    [function]
+ // -----------------------------------------------------------------------------------
     rule #ifThen(true, THENCLAUSE) => THENCLAUSE
     rule #ifThen(false, THENCLAUSE) => .
 
 
-    syntax KItem  ::= "#ifThenElse" "(" Bool /*condition*/ "," K /*then*/ "," K /*else*/ ")"
- // ----------------------------------------------------------------------------------------
+    syntax KItem  ::= "#ifThenElse" "(" Bool /*condition*/ "," K /*then*/ "," K /*else*/ ")"    [function]
+ // ------------------------------------------------------------------------------------------------------
     rule #ifThenElse(true, THENCLAUSE, ELSECLAUSE) => THENCLAUSE
     rule #ifThenElse(false, THENCLAUSE, ELSECLAUSE) => ELSECLAUSE
 
@@ -1329,16 +1452,15 @@ module VIPER-LLL
          <placeholder> I => I +Int 1 </placeholder>
 
 
-    syntax PackArgBy32Result  ::= "(" LLLExps /*holder*/ ","
-                                      Int      /*size*/  ")"
-    syntax CPackArgBy32Result ::= "#packArgBy32ForBase" "(" CTypedLLLExp ","
-                                                            CTypedAddr   ")"     [seqstrict]
- // ----------------------------------------------------------------------------------------
-    rule #packArgBy32ForBase(@tlll(_, CODE), @taddr(_, LOC:Int, _, _)) => ($mstore(LOC, CODE); .LLLExps, 32)
+    syntax CPackedArgBy32 ::= "#packArgBy32Base" "(" CTypedLLLExp ","
+                                                     CTypedAddr   ")"     [seqstrict]
+ // ---------------------------------------------------------------------------------
+    rule #packArgBy32Base(@tlll(_, CODE), @taddr(_, LOC:Int, _, _)) => ($mstore(LOC, CODE); .LLLExps, 32)
 
 
-    syntax Int ::= "#getFirstLoc" "(" LLLExps ")"       [function]
+    syntax Int ::= "#getFirstStoreLoc" "(" LLLExps ")"  [function]
  // --------------------------------------------------------------
-    rule #getFirstLoc($mstore(L:Int, _); CODE) => L
+    rule #getFirstStoreLoc($mstore(L:Int, _); CODE) => L
+
 
 endmodule

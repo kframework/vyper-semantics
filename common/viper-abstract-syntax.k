@@ -6,7 +6,7 @@ module VIPER-ABSTRACT-SYNTAX
     syntax Event    ::= "%event" "(" Id "," EventParams ")"
     syntax Events   ::= List{Event, ""}
 
-    syntax EventParam  ::= "%eparam" "(" Id "," Type "," Bool ")"
+    syntax EventParam  ::= "%eparam" "(" Id "," Type "," Bool /*indexed?*/ ")"
     syntax EventParams ::= List{EventParam, ""}
 
     syntax Global   ::= "%svdecl" "(" Id "," Type "," Visibility ")"
@@ -17,7 +17,7 @@ module VIPER-ABSTRACT-SYNTAX
     syntax Def      ::= "%fdecl" "(" Decorators "," Id "," Params "," Type "," Stmts ")"
     syntax Defs     ::= List{Def, ""}
 
-    syntax Decorator  ::= "%@constant" | "%@payable" | "%@internal"
+    syntax Decorator  ::= "%@constant" | "%@payable" | "%@internal" | "%@public"
     syntax Decorators ::= List{Decorator, ""}
 
     syntax Param    ::= "%param" "(" Id "," Type ")"
