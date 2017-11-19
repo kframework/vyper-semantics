@@ -1,3 +1,7 @@
+/* Viper source code:
+ * https://github.com/ethereum/viper/commit/67963b582d8a0c62fbef081df97e32f0ed5bb34d
+ */
+
 require "../common/viper-abstract-syntax.k"
 require "../common/lll-abstract-syntax.k"
 require "viper-lll-utils.k"
@@ -97,7 +101,7 @@ module VIPER-LLL
  // ---------------------------------------------------------------------------
     rule #compileViperToLLL(%pgm(ES, GS, INIT, DEFS)) => #addEvents(ES)
                                                       ~> #addGlobals(GS)
-                                                      ~> #addFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs))
+                                                      ~> #addFuncs((INIT .Defs) ++Def DEFS ++Def #mkPublicGetters(GS, .Defs))
                                                       ~> #compileViperToLLLAux(
                                                              #initializer_lll,
                                                              #compileFunc(INIT),
@@ -150,15 +154,15 @@ module VIPER-LLL
 
 
     syntax KItem  ::= "#checkEventParams"      "(" EventParams "," Int "," Ids ")"
-    syntax KItem  ::= "#checkEventParamType"   "(" Type  ")"
-    syntax KItem  ::= "#checkDuplicateArgName" "(" Id "," Ids ")"
- // ----------------------------------------------------------------------------
+    syntax KItem  ::= "#checkEventParamType"   "(" Type ")"
+    syntax KItem  ::= "#checkNameDuplicateWithParams" "(" Id "," Ids ")"
+ // ------------------------------------------------------------------------------
     rule #checkEventParams(.EventParams, TOPICNUM, NAMES) => .
       requires TOPICNUM <=Int 3
 
     rule #checkEventParams(%eparam(NAME, T, true) EPARAMS, TOPICNUM, NAMES)
         => #checkEventParamType(T)
-        ~> #checkDuplicateArgName(NAME, NAMES)
+        ~> #checkNameDuplicateWithParams(NAME, NAMES)
         ~> #checkEventParams(EPARAMS, TOPICNUM +Int 1, NAMES ++Id NAME)
       requires TOPICNUM <Int 3
 
@@ -168,7 +172,7 @@ module VIPER-LLL
 
     rule #checkEventParams(%eparam(NAME, T, false) EPARAMS, TOPICNUM, NAMES)
         => #checkEventParamType(T)
-        ~> #checkDuplicateArgName(NAME, NAMES)
+        ~> #checkNameDuplicateWithParams(NAME, NAMES)
         ~> #checkEventParams(EPARAMS, TOPICNUM, NAMES ++Id NAME)
 
     rule #checkEventParamType(%bytesT(L)) => .
@@ -180,11 +184,11 @@ module VIPER-LLL
     rule #checkEventParamType(T) => .
       requires notBool isByteArrayType(T)
 
-    rule #checkDuplicateArgName(NAME, NAMES)
+    rule #checkNameDuplicateWithParams(NAME, NAMES)
         => #exception("Duplicate function argument name: " +String Id2String(NAME))
       requires #inIds(NAME, NAMES)
 
-    rule #checkDuplicateArgName(NAME, NAMES) => .
+    rule #checkNameDuplicateWithParams(NAME, NAMES) => .
       requires notBool #inIds(NAME, NAMES)
 
 
@@ -256,11 +260,23 @@ module VIPER-LLL
 
 
     syntax KItem  ::= "#checkFuncParams"       "(" Params "," Ids ")"
+    syntax KItem  ::= "#checkNameDuplicateWithGlobals" "(" Id ")"
  // -----------------------------------------------------------------
     rule #checkFuncParams(.Params, NAMES) => .
 
     rule #checkFuncParams(%param(NAME, _) PARAMS, NAMES)
-        => #checkDuplicateArgName(NAME, NAMES)
+        => #checkNameDuplicateWithParams(NAME, NAMES)
+        ~> #checkNameDuplicateWithGlobals(NAME)
+
+    rule <k> #checkNameDuplicateWithGlobals(NAME) => . ... </k>
+         <global> GLOBALS </global>
+      requires notBool %svar(NAME) in keys(GLOBALS)
+
+    rule <k> #checkNameDuplicateWithGlobals(NAME)
+           => #exception("Variable name duplicated between function arguments and globals: +String Id2String(NAME)")
+         ... </k>
+         <global> GLOBALS </global>
+      requires %svar(NAME) in keys(GLOBALS)
 
 
     syntax KItem  ::= "#checkInternalPublicMECE" "(" Bool /*internal?*/ "," Bool /*public?*/ ")"
@@ -273,6 +289,99 @@ module VIPER-LLL
                        .K))
 
 
+    syntax Defs  ::= "#mkPublicGetters"         "(" Globals "," Defs ")"            [function]
+    syntax Defs  ::= "#mkPublicGetter"          "(" String /*func name*/       ","
+                                                    Params                     ","
+                                                    Type                       ","
+                                                    Var                        ","
+                                                    Int     /*depth*/          ")"  [function]
+    syntax Defs  ::= "#mkPublicGetterBase"      "(" String "," Params "," Type "," Var "," Int ")"  [function]
+    syntax Defs  ::= "#mkPublicGetterByteArray" "(" String "," Params "," Type "," Var "," Int ")"  [function]
+    syntax Defs  ::= "#mkPublicGetterListT"     "(" String "," Params "," Type "," Var "," Int ")"  [function]
+    syntax Defs  ::= "#mkPublicGetterMapT"      "(" String "," Params "," Type "," Var "," Int ")"  [function]
+    syntax Defs  ::= "#mkPublicGetterStructT"   "(" String "," Params "," Type "," Var "," Int ")"  [function]
+ // -------------------------------------------------------------------------------------------------------------
+    rule #mkPublicGetters(.Globals, DEFS) => DEFS
+
+    rule #mkPublicGetters(%svdecl(NAME, T, %public) GS, DEFS)
+        => #mkPublicGetters(GS,
+                            DEFS ++Def #mkPublicGetter(Id2String(NAME), .Params, T, %svar(NAME), 0))
+
+    rule #mkPublicGetters(%svdecl(_, _, %private) GS, DEFS)
+           => #mkPublicGetters(GS, DEFS)
+
+    rule #mkPublicGetter(NAME, PARAMS, T, VAR, DEPTH) => #mkPublicGetterBase(NAME, PARAMS, T, VAR, DEPTH)
+      requires isBaseType(T)
+
+    rule #mkPublicGetter(NAME, PARAMS, %bytesT(L), VAR, DEPTH)
+        => #mkPublicGetterByteArray(NAME, PARAMS, %bytesT(L), VAR, DEPTH)
+
+    rule #mkPublicGetter(NAME, PARAMS, %listT(T, L), VAR, DEPTH)
+        => #mkPublicGetterListT(NAME, PARAMS, %listT(T, L), VAR, DEPTH)
+
+    rule #mkPublicGetter(NAME, PARAMS, %mapT(VT, KT), VAR, DEPTH)
+        => #mkPublicGetterMapT(NAME, PARAMS, %mapT(VT, KT), VAR, DEPTH)
+
+    rule #mkPublicGetter(NAME, PARAMS, %structT(VDECLS), VAR, DEPTH)
+        => #mkPublicGetterStructT(NAME, PARAMS, %structT(VDECLS), VAR, DEPTH)
+
+    rule #mkPublicGetterBase(NAME, PARAMS, T, VAR, DEPTH)
+        => %fdecl(%@public %@constant .Decorators,
+                  String2Id("get_" +String NAME),
+                  PARAMS,
+                  T,
+                  %return(VAR) .Stmts) .Defs
+
+    rule #mkPublicGetterByteArray(NAME, PARAMS, %bytesT(L), VAR, DEPTH)
+        => %fdecl(%@public %@constant .Decorators,
+                  String2Id("get_" +String NAME),
+                  PARAMS,
+                  %bytesT(L),
+                  %return(VAR) .Stmts) .Defs
+
+    rule #mkPublicGetterListT(NAME, PARAMS, %listT(T, L), VAR, DEPTH)
+        => #mkPublicGetter(NAME,
+                           PARAMS ++Param (%param(String2Id("arg" +String Int2String(DEPTH)), %num) .Params),
+                           T,
+                           %listelem(VAR, %var(String2Id("arg" +String Int2String(DEPTH)))),
+                           DEPTH +Int 1)
+
+    rule #mkPublicGetterMapT(NAME, PARAMS, %mapT(VT, KT), VAR, DEPTH)
+        => #mkPublicGetter(NAME,
+                           PARAMS ++Param (%param(String2Id("arg" +String Int2String(DEPTH)), KT) .Params),
+                           VT,
+                           %mapelem(VAR, %var(String2Id("arg" +String Int2String(DEPTH)))),
+                           DEPTH +Int 1)
+
+    rule #mkPublicGetterStructT(NAME, PARAMS, %structT(%vdecl(VNAME, T) VS), VAR, DEPTH)
+        => #mkPublicGetter(NAME +String "___" +String Id2String(VNAME),
+                           PARAMS,
+                           T,
+                           %mem(VAR, VNAME),
+                           DEPTH)
+           ++Def #mkPublicGetterStructT(NAME, PARAMS, %structT(VS), VAR, DEPTH)
+
+    rule #mkPublicGetterStructT(NAME, PARAMS, %structT(.VarDecls), VAR, DEPTH)
+        => .Defs
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Header Code
+///////////////////////////////////////////////////////////////////////////////
+
+
+    syntax LLLExps  ::= "#initializer_lll"      [function]
+ // ------------------------------------------------------
+    rule #initializer_lll => $%seq(
+                               $mstore(28 , $calldataload(0));
+                               $mstore(@addrSizePos , 2 ^Int 160);
+                               $mstore(@maxNumPos , 2 ^Int 127 -Int 1);
+                               $mstore(@minNumPos , -2 ^Int 127);
+                               $mstore(@maxDecimalPos, (2 ^Int 127 -Int 1) *Int 10000000000);
+                               $mstore(@minDecimalPos, (-2 ^Int 127) *Int 10000000000)
+                             );.LLLExps
+
+
 ///////////////////////////////////////////////////////////////////////////////
 // Function Definitions
 ///////////////////////////////////////////////////////////////////////////////
@@ -283,8 +392,8 @@ module VIPER-LLL
     rule #extendLLL(C1:LLLExps, C2:LLLExps) => C1 ++LLL C2
 
 
-    syntax CLLLExps ::= "#compileFuncs" "(" Defs "," CLLLExps ")"
- // -------------------------------------------------------------
+    syntax CLLLExps ::= "#compileFuncs" "(" Defs "," LLLExps ")"
+ // ------------------------------------------------------------
     rule #compileFuncs(.Defs, RESULTCODE) => RESULTCODE
 
     rule #compileFuncs(DEF DEFS, RESULTCODE) => #compileFunc(DEF) ~> #compileFuncs(DEFS, RESULTCODE)
@@ -303,92 +412,157 @@ module VIPER-LLL
                                           ")"                      [seqstrict]
  // --------------------------------------------------------------------------
     rule <k> #compileFunc(%fdecl(DECS, NAME, PARAMS, T, STMTS))
-                 => #compileFuncAux(#copyInput(PARAMS, #isInitFunc(NAME)),
-                                    #checkDecorators(DECS),
-                                    #fillParams(PARAMS, 0, #isInitFunc(NAME)),
-                                    #resolveStmts(STMTS),
-                                    #computeFuncId(NAME, PARAMS),
-                                    #isInitFunc(NAME))
-                 ~> #cleanConfig ... </k>
+           => #compileFuncAux(#copyArg(PARAMS, #isInitFunc(NAME)),
+                              #addClampersForDecorators(PAYABLE, INTERNAL),
+                              #fillParams(PARAMS, 0, #isInitFunc(NAME), .LLLExps),
+                              #resolveStmts(STMTS),
+                              FUNCID,
+                              #isInitFunc(NAME))
+           ~> #cleanConfig ... </k>
+         <internalSig> NAME |-> @func(FUNCID, _, T, CONSTANT, PAYABLE, INTERNAL) SIGS</internalSig>
          <return> _ => T </return>
+         <constant> _ => CONSTANT </constant>
+         <payable> _ => PAYABLE </payable>
 
 
-    rule #compileFuncAux(COPYINPUT, CHECKDECS, FILLPARAMS, STMTS, _, true)
-             => $%seq(COPYINPUT ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL $%seq(STMTS));.LLLExps
+    rule #compileFuncAux(COPYARG, CHECKDECS, FILLPARAMS, STMTS, _, true)
+             => $%seq(COPYARG ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL ($%seq(STMTS);.LLLExps));.LLLExps
 
-    rule #compileFuncAux(COPYINPUT, CHECKDECS, FILLPARAMS, STMTS, FUNCID, false)
+    rule #compileFuncAux(COPYARG, CHECKDECS, FILLPARAMS, STMTS, FUNCID, false)
              => $if(
                   $eq($mload(0), FUNCID),
-                  $%seq(COPYINPUT ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL STMTS ++LLL $stop));.LLLExps
+                  $%seq(COPYARG ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL STMTS ++LLL ($stop;.LLLExps)));.LLLExps
 
 
-    syntax CLLLExps ::= "#copyInput" "(" Params "," Bool /*init?*/ ")"
- // ------------------------------------------------------------------
-    rule #copyInput(.Params, _) => $pass;.LLLExps
+// Copy Arguments
+// ==============
 
-    rule <k> #copyInput(PARAMS, true) => $codecopy(@reservedMemPos,
-                                                   $codelen, 
-                                                   #sizeOfParams(PARAMS));.LLLExps ... </k>
+
+    syntax CLLLExps ::= "#copyArg" "(" Params "," Bool /*init?*/ ")"
+ // ----------------------------------------------------------------
+    rule #copyArg(.Params, _) => $pass;.LLLExps
+
+    rule <k> #copyArg(PARAMS, true) => $codecopy(@reservedMemPos,
+                                                 $codelen,
+                                                 #sizeOfParams(PARAMS));.LLLExps ... </k>
          <nextMem> M => M +Int #sizeOfParams(PARAMS) </nextMem>
       requires #sizeOfParams(PARAMS) >Int 0
 
-    rule <k> #copyInput(PARAMS, false) => $calldatacopy(@reservedMemPos,
-                                                        4, 
-                                                        #sizeOfParams(PARAMS));.LLLExps ... </k>
+    rule <k> #copyArg(PARAMS, false) => $calldatacopy(@reservedMemPos,
+                                                      4,
+                                                      #sizeOfParams(PARAMS));.LLLExps ... </k>
          <nextMem> M => M +Int #sizeOfParams(PARAMS) </nextMem>
       requires #sizeOfParams(PARAMS) >Int 0
 
 
-    syntax CLLLExps ::= "#checkDecorators" "(" Decorators ")"
-    syntax CLLLExps ::= "#checkConstant"   "(" Decorators ")"
-    syntax CLLLExps ::= "#checkPayable"    "(" Decorators ")"
-    syntax CLLLExps ::= "#checkInternal"   "(" Decorators ")"
- // ---------------------------------------------------------
-    rule #checkDecorators(DECS) => #extendLLL(
-                                       #checkConstant(DECS),
-                                       #extendLLL(
-                                           #checkPayable(DECS),
-                                           #checkInternal(DECS)))
-
-    rule <k> #checkConstant(DECS) => .LLLExps ... </k>
-         <constant> _ => true </constant>
-      requires #inDecorators(%@constant, DECS)
-
-    rule <k> #checkConstant(DECS) => .LLLExps ... </k>
-         <constant> _ => false </constant>
-      requires notBool #inDecorators(%@constant, DECS)
-
-    rule <k> #checkPayable(DECS) => .LLLExps ... </k>
-         <payable> _ => true </payable>
-      requires #inDecorators(%@payable, DECS)
-
-    rule <k> #checkPayable(DECS) => $assert($iszero($callvalue));.LLLExps ... </k>
-         <payable> _ => false </payable>
-      requires notBool #inDecorators(%@payable, DECS)
-
-    rule <k> #checkInternal(DECS) => $assert($eq($caller, $address));.LLLExps ... </k>
-      requires #inDecorators(%@internal, DECS)
-
-    rule #checkInternal(DECS) => .LLLExps
-      requires notBool #inDecorators(%@internal, DECS)
+// Add Clampers For Decorators
+// ===========================
 
 
+    syntax CLLLExps ::= "#addClampersForDecorators" "(" Bool "," Bool ")"
+    syntax LLLExps  ::= "#checkPayable"    "(" Bool ")"    [function]
+    syntax LLLExps  ::= "#checkInternal"   "(" Bool ")"    [function]
+ // -----------------------------------------------------------------
+    rule #addClampersForDecorators(PAYABLE, INTERNAL) => #checkPayable(PAYABLE) ++LLL #checkInternal(INTERNAL)
+
+    rule #checkPayable(true) => .LLLExps
+
+    rule #checkPayable(false) => $assert($iszero($callvalue));.LLLExps
+
+    rule #checkInternal(true) => $assert($eq($caller, $address));.LLLExps
+
+    rule #checkInternal(false) => .LLLExps
+
+
+// Fill Parameters
+// ===============
+
+
+    syntax CLLLExps ::= "#fillParams" "(" Params "," Int /*data pos*/ "," Bool /*init?*/ "," LLLExps ")"
     syntax CLLLExps ::= "#fillParam"  "(" Param  "," Int "," Bool ")"
-    syntax CLLLExps ::= "#fillParams" "(" Params "," Int /*data pos*/ "," Bool")"
- // --------------------------------------------------------------------------------
+ // ----------------------------------------------------------------------------------------------------
+    rule #fillParams(.Params, _, _, RESULTCODE) => RESULTCODE
+
+    rule #fillParams(P PS, DATAPOS, ISINIT, RESULTCODE)
+        => #fillParam(P, DATAPOS, ISINIT) ~> #fillParams(PS, DATAPOS +Int #sizeOfParam(P), ISINIT, RESULTCODE)
+
+    rule (FILLCODE:LLLExps ~> #fillParams(PS, DATAPOS, ISINIT, RESULTCODE))
+        => #fillParams(PS, DATAPOS, ISINIT, RESULTCODE ++LLL FILLCODE)
+
     rule <k> #fillParam(%param(NAME, %bytesT(L)), DATAPOS, ISINIT) => #mkClamper(%bytesT(L), DATAPOS, LOC, ISINIT) ... </k>
-         <env> ENV => #updateEnv(%var(NAME), %bytesT(L), LOC, ENV, false)</env>
+         <env> ENV => #updateEnv(ENV, %var(NAME), %bytesT(L), LOC, false) </env>
          <nextMem> LOC => LOC +Int #sizeOfType(%bytesT(L)) </nextMem>
 
     rule <k> #fillParam(%param(NAME, T), DATAPOS, ISINIT) => #mkClamper(T, DATAPOS, LOC, ISINIT) ... </k>
-         <env> ENV => #updateEnv(%var(NAME), T, @reservedMemPos +Int DATAPOS, ENV, false) </env>
+         <env> ENV => #updateEnv(ENV, %var(NAME), T, @reservedMemPos +Int DATAPOS, false) </env>
          <nextMem> LOC </nextMem>
       requires notBool isByteArrayType(T)
 
-    rule #fillParams(.Params, _, _) => .LLLExps
 
-    rule #fillParams(P PS, DATAPOS, ISINIT)
-             => #extendLLL(#fillParam(P, DATAPOS, ISINIT), #fillParams(PS, DATAPOS +Int #sizeOfParam(P), ISINIT))
+    syntax LLLExps  ::= "#mkClamper"      "(" Type ","
+                                              Int /*data pos*/ ","
+                                              Int /*mem pos*/  ","
+                                              Bool /*init?*/   ")"                                  [function]
+    syntax LLLExps  ::= "#mkClamperListT" "(" Int /*length*/ "," Type "," Int "," Int "," Bool ")"  [function]
+    syntax LLLExp   ::= "#mkCopier"       "(" LLLExp "," LLLExp "," LLLExp "," Bool ")"             [function]
+    syntax LLLExp   ::= "#mkDataDecl"     "(" LLLExp "," Bool ")"                                   [function]
+ // ------------------------------------------------------------------------------------------------------------
+    rule #mkClamper(%num, DPOS, MPOS, ISINIT) => $clamp(
+                                                   $mload(@minNumPos),
+                                                   #mkDataDecl(DPOS, ISINIT),
+                                                   $mload(@maxNumPos)
+                                                 );.LLLExps
+
+    rule #mkClamper(%unitT(%num, _, _), DPOS, MPOS, ISINIT) => $clamp(
+                                                                 $mload(@minNumPos),
+                                                                 #mkDataDecl(DPOS, ISINIT),
+                                                                 $mload(@maxNumPos)
+                                                               );.LLLExps
+
+    rule #mkClamper(%bool, DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), 2);.LLLExps
+
+    rule #mkClamper(%address, DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), $mload(@addrSizePos));.LLLExps
+
+    // TODO: figure out what do these checks mean?
+    rule #mkClamper(%bytesT(L), DPOS, MPOS, ISINIT)
+        => $%seq(
+             #mkCopier(MPOS, #mkDataDecl(DPOS, ISINIT), 32 +Int L, ISINIT);
+             $assert(
+               $le(
+                 $calldataload($add(4, #mkDataDecl(DPOS, ISINIT))),
+                 L
+                )
+             )
+           );.LLLExps
+
+    rule #mkClamper(%listT(T, N), DPOS, MPOS, ISINIT) => $%seq(#mkClamperListT(N, T, DPOS, MPOS, ISINIT));.LLLExps
+
+    rule #mkClamperListT(1, T, DPOS, MPOS, ISINIT) => #mkClamper(T, DPOS, MPOS, ISINIT)
+
+    rule #mkClamperListT(N, T, DPOS, MPOS, ISINIT)
+             => #mkClamper(T, DPOS, MPOS, ISINIT) ++LLL
+                #mkClamperListT(N -Int 1, T, DPOS +Int #sizeOfType(T), MPOS +Int #sizeOfType(T), ISINIT)
+      requires N >Int 1
+
+    rule #mkClamper(%decimal, _, _, _) => $pass;.LLLExps
+
+    rule #mkClamper(%unitT(%decimal, _, _), _, _, _) => $pass;.LLLExps
+
+    rule #mkClamper(%num256, _, _, _) => $pass;.LLLExps
+
+    rule #mkClamper(%bytes32, _, _, _) => $pass;.LLLExps
+
+    rule #mkClamper(%mapT(_, _), _, _, _) => $pass;.LLLExps
+
+    rule #mkClamper(%structT(_), _, _, _) => $pass;.LLLExps
+
+    rule #mkCopier(MPOS, POS, SIZE, true) => $codecopy(MPOS, $add($codelen, POS), SIZE)
+
+    rule #mkCopier(MPOS, POS, SIZE, false) => $calldatacopy(MPOS, $add(4, POS), SIZE)
+
+    rule #mkDataDecl(DATAPOS, true) => $codeload($add($codelen, DATAPOS))
+
+    rule #mkDataDecl(DATAPOS, false) => $calldataload($add(4, DATAPOS))
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -454,7 +628,7 @@ module VIPER-LLL
     syntax CTypedAddr ::= "#allocVar" "(" Var "," Type ")"
  // ------------------------------------------------------
     rule <k> #allocVar(%var(NAME), T) => @taddr(T, LOC, false, true) ...</k>
-         <env> ENV => #updateEnv(%var(NAME), T, LOC, ENV, true) </env>
+         <env> ENV => #updateEnv(ENV, %var(NAME), T, LOC, true) </env>
          <nextMem> LOC => LOC +Int #sizeOfType(T) </nextMem>
       requires notBool %var(NAME) in keys(ENV)
 
@@ -653,8 +827,8 @@ module VIPER-LLL
 
     rule #logAux(EID, (ARG1, ARGS), (EPARAM1 EPARAMS), TARGS, TEPARAMS, DARGS, DEPARAMS)
              => #ifThenElse(#isTopic(EPARAM1),
-                            #logAux(EID, ARGS, EPARAMS, TARGS ++Expr ARG1, TEPARAMS ++Ep EPARAM1, DARGS, DEPARAMS),
-                            #logAux(EID, ARGS, EPARAMS, TARGS, TEPARAMS, DARGS ++Expr ARG1, DEPARAMS ++Ep EPARAM1))
+                            #logAux(EID, ARGS, EPARAMS, TARGS ++Expr ARG1, TEPARAMS ++Eparam EPARAM1, DARGS, DEPARAMS),
+                            #logAux(EID, ARGS, EPARAMS, TARGS, TEPARAMS, DARGS ++Expr ARG1, DEPARAMS ++Eparam EPARAM1))
 
     // 0 topic
     rule #logAux(EID, .Exprs, .EventParams, (TARG1, .Exprs), (TEPARAM1 .EventParams), DARGS, DEPARAMS)
@@ -814,7 +988,7 @@ module VIPER-LLL
     rule #computeMapVarOffset(@taddr(%mapT(VT, KT), LOC, true, MUTABLE), @tlll(_, CODE))
              => @taddr(VT, $add($sha3_32(LOC), CODE), true, MUTABLE)
 
-    rule #computeVarOffsetForMap(@taddr(%mapT(VT, KT), _, false, _), _)
+    rule #computeMapVarOffset(@taddr(%mapT(VT, KT), _, false, _), _)
              => #exception("Can only have fixed-side arrays in memory, not mappings")
 
 
@@ -1128,6 +1302,7 @@ module VIPER-LLL
 // Utils
 //////////////////////////////////////////////////////////////////////////////
 
+
     syntax Bool ::= "#isInitFunc" "(" Id ")"    [function]
  // ------------------------------------------------------
     rule #isInitFunc(NAME) => NAME ==K __init__
@@ -1155,43 +1330,50 @@ module VIPER-LLL
     rule #isTopic(%eparam(_, _, ISTOPIC)) => ISTOPIC
 
 
-// Lists
-// =====
+// List Concatenation
+// ==================
 
 
-    syntax Defs  ::= Defs "++Def" Defs    [left, function]
+    syntax Defs  ::= Defs "++Def" Defs    [right, function]
  // ------------------------------------------------------
     rule .Defs ++Def DEFS:Defs => DEFS
 
     rule (DEF DEFS1) ++Def DEFS2:Defs => DEF (DEFS1 ++Def DEFS2)
 
 
-    syntax LLLExp   ::= "$%seq" "(" LLLExps ")"
-    syntax LLLExps  ::= List{LLLExp, ";"}
-    syntax LLLExps  ::= LLLExps "++LLL" LLLExps    [left, function]
- // ---------------------------------------------------------------
-    rule .LLLExps    ++LLL LES:LLLExps => LES
+    syntax Params ::= Params "++Param" Params    [right, function]
+ // -------------------------------------------------------------
+    rule .Params ++Param PARAMS:Params => PARAMS
 
-    rule (LE ; LES1) ++LLL LES2        => LE ; (LES1 ++LLL LES2)
+    rule (PARAM PARAMS1) ++Param PARAMS2 => PARAM (PARAMS1 ++Param PARAMS2)
 
 
-    syntax Exprs  ::= Exprs "++Expr" Exprs    [left, function]
+    syntax EventParams ::= EventParams "++Eparam" EventParams    [right, function]
+ // -----------------------------------------------------------------------------
+    rule .EventParams ++Eparam EPARAMS:EventParams => EPARAMS
+
+    rule (EPARAM EPARAMS1) ++Eparam EPARAMS2 => EPARAM (EPARAMS1 ++Eparam EPARAMS2)
+
+
+    syntax Exprs  ::= Exprs "++Expr" Exprs    [right, function]
  // ----------------------------------------------------------
     rule .Exprs     ++Expr EXPRS:Exprs => EXPRS
 
     rule (EXPR , EXPRS1) ++Expr EXPRS2 => EXPR , (EXPRS1 ++Expr EXPRS2)
 
 
-    syntax EventParams ::= EventParams "++Ep" EventParams    [left, function]
- // -------------------------------------------------------------------------
-    rule .EventParams ++Ep EPARAMS:EventParams => EPARAMS
+    syntax LLLExp   ::= "$%seq" "(" LLLExps ")"
+    syntax LLLExps  ::= List{LLLExp, ";"}
+    syntax LLLExps  ::= LLLExps "++LLL" LLLExps    [right, function]
+ // ---------------------------------------------------------------
+    rule .LLLExps    ++LLL LES:LLLExps => LES
 
-    rule (EPARAM EPARAMS1) ++Ep EPARAMS2 => EPARAM (EPARAMS1 ++Ep EPARAMS2)
+    rule (LE ; LES1) ++LLL LES2        => LE ; (LES1 ++LLL LES2)
 
 
     syntax Ids   ::= List{Id, ""}
-    syntax Ids   ::= Ids "++Id" Ids                 [left, function]
-    syntax Ids   ::= Ids "++Id" Id                  [left, function]
+    syntax Ids   ::= Ids "++Id" Ids                 [right, function]
+    syntax Ids   ::= Ids "++Id" Id                  [right, function]
     syntax Bool  ::= "#inIds" "(" Id "," Ids ")"    [function]
  // ----------------------------------------------------------------
     rule .Ids ++Id IDS:Ids   => IDS
@@ -1216,7 +1398,6 @@ module VIPER-LLL
     rule #inDecorators(D, DEC DECS) => true                     requires D ==K DEC
 
     rule #inDecorators(D, DEC DECS) => #inDecorators(D, DECS)   requires D =/=K DEC
-
 
 
 // Type Related
@@ -1296,11 +1477,8 @@ module VIPER-LLL
     syntax Int     ::= "#computeFuncId"  "(" Id     "," Params ")"    [function]
     syntax String  ::= "#computeFuncSig" "(" String "," Params ")"    [function]
  // ----------------------------------------------------------------------------
-    rule #computeFuncId(__init__, PARAMS) => 0
-
     rule #computeFuncId(NAME, PARAMS)
         => String2Base(substrString(Keccak256(#computeFuncSig(Id2String(NAME) +String "(", PARAMS)), 0, 8), 16)
-      requires NAME =/=K __init__
 
     rule #computeFuncSig(SIG, %param(_,T) PARAM1 PARAMS)
         => #computeFuncSig(SIG +String #canonicalizeType(T, false) +String "," , PARAM1 PARAMS)
@@ -1311,96 +1489,20 @@ module VIPER-LLL
     rule #computeFuncSig(SIG, .Params) => SIG +String ")"
 
 
-    // Code generation
-    syntax LLLExps  ::= "#mkClamper"        "(" Type "," Int /*data pos*/ "," Int /*mem pos*/ "," Bool ")"    [function]
-    syntax LLLExps  ::= "#mkClamperForList" "(" Int /*length*/ "," Type "," Int "," Int "," Bool ")"          [function]
-    syntax LLLExp   ::= "#mkCopier"         "(" LLLExp "," LLLExp "," LLLExp "," Bool ")"                     [function]
-    syntax LLLExp   ::= "#mkDataDecl"       "(" LLLExp "," Bool ")"                                           [function]
- // --------------------------------------------------------------------------------------------------------------------
-    rule #mkClamper(%num     , DPOS, MPOS, ISINIT) => $clamp(
-                                                        $mload(@minNumPos),
-                                                        #mkDataDecl(DPOS, ISINIT),
-                                                        $mload(@maxNumPos)
-                                                      );.LLLExps
-
-    rule #mkClamper(%num256  , _, _, _ ) => $pass;.LLLExps
-
-    rule #mkClamper(%bool    , DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), 2);.LLLExps
-
-    rule #mkClamper(%address , DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), $mload(@addrSizePos));.LLLExps
-
-    rule #mkClamper(%bytesT(L), DPOS, MPOS, ISINIT)
-             => $%seq(
-                  #mkCopier(MPOS, #mkDataDecl(DPOS, ISINIT), 32 +Int L, ISINIT);
-                  $assert(
-                    $le(
-                      $calldataload($add(4, #mkDataDecl(DPOS, ISINIT))),
-                      L
-                    )
-                  )
-                );.LLLExps
-
-    rule #mkClamper(%listT(T, N), DPOS, MPOS, ISINIT) => $%seq(#mkClamperForList(N, T, DPOS, MPOS, ISINIT));.LLLExps
-
-    rule #mkClamperForList(0, T, DPOS, MPOS, ISINIT) => .LLLExps
-
-    rule #mkClamperForList(N, T, DPOS, MPOS, ISINIT)
-             => #mkClamper(T, DPOS, MPOS, ISINIT) ++LLL
-                #mkClamperForList(N -Int 1, T, DPOS +Int #sizeOfType(T), MPOS +Int #sizeOfType(T), ISINIT)
-
-    rule #mkCopier(MPOS, POS, SZ, true) => $codecopy(MPOS, $add($codelen, POS), SZ)
-
-    rule #mkCopier(MPOS, POS, SZ, false) => $calldatacopy(MPOS, $add(4, POS), SZ)
-
-    rule #mkDataDecl(DATAPOS, true) => $codeload($add($codelen, DATAPOS))
-
-    rule #mkDataDecl(DATAPOS, false) => $calldataload($add(4, DATAPOS))
-
-
-    syntax LLLExps  ::= "#initializer_lll"      [function]
- // ------------------------------------------------------
-    rule #initializer_lll => $%seq(
-                               $mstore(28 , $calldataload(0));
-                               $mstore(@addrSizePos , 2 ^Int 160);
-                               $mstore(@maxNumPos , 2 ^Int 127 -Int 1);
-                               $mstore(@minNumPos , -2 ^Int 127);
-                               $mstore(@maxDecimalPos, (2 ^Int 127 -Int 1) *Int 10000000000);
-                               $mstore(@minDecimalPos, (-2 ^Int 127) *Int 10000000000)
-                             );.LLLExps
-
-
-    syntax Defs   ::= "#mkPublicGetters" "(" Globals "," Defs ")"    [function]
-    syntax Defs   ::= "#mkPublicGetter" "(" Id "," Type ")"          [function]
- // ---------------------------------------------------------------------------
-    rule #mkPublicGetters(.Globals, DEFS) => DEFS
-
-    rule #mkPublicGetters(%svdecl(NAME, T, %public) GS, DEFS)
-           => #mkPublicGetters(GS, DEFS ++Def #mkPublicGetter(NAME, T))
-
-    rule #mkPublicGetters(%svdecl(_, _, %private) GS, DEFS)
-           => #mkPublicGetters(GS, DEFS)
-
-    rule #mkPublicGetter(NAME, T)
-           => %fdecl(%@public %@constant .Decorators,
-                     String2Id("get_" +String Id2String(NAME)),
-                     .Params,
-                     T,
-                     %return(%svar(NAME)) .Stmts) .Defs
-      requires isBaseType(T)
-
-
     // Others
-    syntax Map  ::= "#updateEnv" "(" Var "," Type "," Int "," Map "," Bool /*mutable*/ ")"   [function]
-    syntax Map  ::= "#flattenStruct" "(" Var "," VarDecls "," Int "," Map "," Bool ")"       [function]
- // ---------------------------------------------------------------------------------------------------
-    rule #updateEnv(V, %structT(VARDECLS), LOC, M, ISMUTABLE) => #flattenStruct(V, VARDECLS, LOC, M, ISMUTABLE)
+    syntax Map  ::= "#updateEnv" "(" Map "," Var "," Type "," Int /*loc*/ "," Bool /*mutable*/ ")"  [function]
+    syntax Map  ::= "#flattenStruct" "(" Map "," Var "," VarDecls "," Int "," Bool ")"              [function]
+ // ----------------------------------------------------------------------------------------------------------
+    rule #updateEnv(M, V, %structT(VARDECLS), LOC, ISMUTABLE) => #flattenStruct(M, V, VARDECLS, LOC, ISMUTABLE)
 
-    rule #updateEnv(V, T, LOC, M, ISMUTABLE) => M[V <- @taddr(T, LOC, false, ISMUTABLE)]    requires notBool isStructType(T)
+    rule #updateEnv(M, V, T, LOC, ISMUTABLE) => M[V <- @taddr(T, LOC, false, ISMUTABLE)]
+      requires notBool isStructType(T)
 
-    rule #flattenStruct(V, .VarDecls, LOC, M, ISMUTABLE) => M
+    rule #flattenStruct(M, V, .VarDecls, LOC, ISMUTABLE) => M
 
-    rule #flattenStruct(V, %vdecl(NAME, T) VS, LOC, M, ISMUTABLE)
-             => #flattenStruct(V, VS, LOC +Int #sizeOfType(T), #updateEnv(%mem(V, NAME), T, LOC, M, ISMUTABLE), ISMUTABLE)
+    rule #flattenStruct(M, V, %vdecl(NAME, T) VS, LOC, ISMUTABLE)
+             => #flattenStruct(#updateEnv(M, %mem(V, NAME), T, LOC, ISMUTABLE),
+                               V, VS, LOC +Int #sizeOfType(T), ISMUTABLE)
 
 
     syntax Int    ::= "#convertToWei" "(" Id ")"    [function]
