@@ -524,7 +524,6 @@ module VIPER-LLL
 
     rule #mkClamper(%address, DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), $mload(@addrSizePos));.LLLExps
 
-    // TODO: figure out what do these checks mean?
     rule #mkClamper(%bytesT(L), DPOS, MPOS, ISINIT)
         => $%seq(
              #mkCopier(MPOS, #mkDataDecl(DPOS, ISINIT), 32 +Int L, ISINIT);
@@ -615,64 +614,81 @@ module VIPER-LLL
  // ------------------------------------------------------------------------
     rule #assign(V, @tlll(T, CODE)) => #assignAux(#lookupOrNewVar(V, T), @tlll(T, CODE))
 
-    rule <k> #assignAux(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE), RTCODE)
-            => #ifThen(ISGLOBAL ==K true andBool ISCONSTANT ==K true,
+    rule <k> #assignAux(@taddr(LT, LOC, GLOBAL, MUTABLE), RTCODE)
+            => #ifThen(GLOBAL ==K true andBool CONSTANT ==K true,
                        #exception("Cannot modify storage inside a constant function!"))
-            ~> #ifThen(ISMUTABLE ==K false,
+            ~> #ifThen(MUTABLE ==K false,
                        #exception("Cannot modify function argument"))
-            ~> #mkSetter(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE), RTCODE)
+            ~> #mkSetter(@taddr(LT, LOC, GLOBAL, MUTABLE), RTCODE)
          ... </k>
-         <constant> ISCONSTANT </constant>
+         <constant> CONSTANT </constant>
 
 
-    syntax CLLLExps ::= "#mkSetter"     "(" TypedAddr    /*left variable address*/   ","
-                                            TypedLLLExp  /*right compiled Expr*/
+    syntax CLLLExps ::= "#mkSetter"     "(" TypedAddr   /*left variable address*/ ","
+                                            TypedLLLExp /*right compiled Expr*/
                                         ")"
-    syntax CLLLExps ::= "#mkSetterBase" "(" TypedAddr "," CTypedLLLExp ")"    [strict(2)]
- // -------------------------------------------------------------------------------------
-    rule #mkSetter(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE), RTCODE)
-             => #mkSetterBase(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE),
-                              #baseTypeConvert(RTCODE, LT))
+    syntax CLLLExps ::= "#mkSetterBase"  "(" TypedAddr "," TypedLLLExp ")"
+    syntax CLLLExps ::= "#mkSetterListT" "(" TypedAddr "," TypedLLLExp ")"
+ // --------------------------------------------------------------------------------------
+    rule #mkSetter(@taddr(LT, LOC, GLOBAL, MUTABLE), RTCODE)
+        => #mkSetterBase(@taddr(LT, LOC, GLOBAL, MUTABLE),
+                         #baseTypeConvert(RTCODE, LT))
       requires isBaseType(LT)
 
-    rule #mkSetterBase(@taddr(_, LOC, true, _), @tlll(_, CODE)) => $sstore(LOC, CODE);.LLLExps
+    rule #mkSetter(@taddr(LT, LOC, GLOBAL, MUTABLE), RTCODE)
+        => #exception("Cannot copy mappings; can only copy individual elements.")
+      requires isMappingType(LT)
+
+
+    rule #mkSetterBase(@taddr(_, LOC, true, _), @tlll(RT, CODE)) => $sstore(LOC, CODE);.LLLExps
 
     rule #mkSetterBase(@taddr(_, LOC, false, _), @tlll(_, CODE)) => $mstore(LOC, CODE);.LLLExps
 
+    // TODO: figure out an efficient way to copy byte array
 
-    // Augassign
+
+// Aug Assignment
+// ==============
+
+
     syntax CLLLExps ::= "#augassign"    "(" AugAssignOp                     ","
                                             CTypedAddr /*variable address*/ ","
                                             CTypedLLLExp  /*compiled Expr*/
                                         ")"                    [seqstrict(2,3)]
-    syntax CLLLExps ::= "#augassignAux" "(" TypedAddr /*variable address*/  ","
-                                            CTypedLLLExp  /*compiled Expr*/
-                                        ")"                         [strict(2)]
- // ---------------------------------------------------------------------------
+    syntax CLLLExps ::= "#desugarAugAssign" "(" TypedAddr                   ","
+                                                CTypedLLLExp
+                                            ")"                     [strict(2)]
+    syntax CLLLExps ::= "#augassignAux" "(" Int  /*loc*/                    ","
+                                            Bool /*global?*/                ","
+                                            TypedLLLExp
+                                         ")"
+ // -------------------------------------------------------------------------------
     rule #compileStmt(%augassign(OP, V, E)) => #augassign(OP, #lookupVar(V), #resolveExpr(E))
 
     rule <k> #augassign(OP, @taddr(LT, LOC, true, _), RTCODE)
-                 => #exception("Cannot modify storage inside a constant function!") ... </k>
+            => #exception("Cannot modify storage inside a constant function!") ... </k>
          <constant> true </constant>
 
-    rule <k> #augassign(OP, @taddr(LT, LOC, true, ISMUTABLE), RTCODE)
-                 => #augassignAux(@taddr(LT, LOC, true, ISMUTABLE),
-                                  #baseTypeConvert(
-                                      #convertToBinaryArith(OP, @tlll(LT, $sload($stloc)), RTCODE),
-                                      LT)) ... </k>
+    rule <k> #augassign(OP, @taddr(LT, LOC, true, MUTABLE), RTCODE)
+            => #desugarAugAssign(@taddr(LT, LOC, true, MUTABLE),
+                                 #convertToBinaryArith(OP, @tlll(LT, $sload($stloc)), RTCODE))
+         ... </k>
          <constant> false </constant>
 
-    rule <k> #augassign(OP, @taddr(LT, LOC, false, ISMUTABLE), RTCODE)
-                 => #augassignAux(@taddr(LT, LOC, false, ISMUTABLE),
-                                  #baseTypeConvert(
-                                      #convertToBinaryArith(OP, @tlll(LT, $mload($mloc)), RTCODE),
-                                      LT)) ... </k>
-          <constant> false </constant>
+    rule <k> #augassign(OP, @taddr(LT, LOC, false, MUTABLE), RTCODE)
+            => #desugarAugAssign(@taddr(LT, LOC, false, MUTABLE),
+                                 #convertToBinaryArith(OP, @tlll(LT, $mload($mloc)), RTCODE))
+         ... </k>
+         <constant> false </constant>
 
-    rule #augassignAux(@taddr(_, LOC, true, _), @tlll(_, CODE))
+
+    rule #desugarAugAssign(@taddr(LT, LOC, GLOBAL, MUTABLE), RTCODE)
+        => #augassignAux(LOC, GLOBAL, #baseTypeConvert(RTCODE, LT))
+
+    rule #augassignAux(LOC, true, @tlll(_, CODE))
              => $with($stloc, LOC, $sstore($stloc, CODE));.LLLExps
 
-    rule #augassignAux(@taddr(_, LOC, false, _), @tlll(_, CODE))
+    rule #augassignAux(LOC, false, @tlll(_, CODE))
              => $with($mloc, LOC, $mstore($mloc, CODE));.LLLExps
 
 
@@ -867,7 +883,7 @@ module VIPER-LLL
              => ($%seq(CODE), #getFirstStoreLoc(CODE), SIZE)
 
     rule #packLoggingDataAux((DARG, DARGS), %eparam(_, T, _) DEPARAMS, CODE, SIZE)
-             => #packArgBy32Base(#baseTypeConvert(#resolveExpr(DARG), T), #newPlaceholder(T))
+             => #packArgBy32Base(#newPlaceholder(T), #resolveExpr(DARG), T)
              ~> #packLoggingDataAux(DARGS, DEPARAMS, CODE, SIZE)
       requires isBaseType(T)
 
@@ -1198,11 +1214,6 @@ module VIPER-LLL
  // ----------------------------------------------------------------------
     rule #unwrapLocation(@taddr(T, LOC, false, _)) => @tlll(T, $mload(LOC))
     rule #unwrapLocation(@taddr(T, LOC, true, _)) => @tlll(T, $sload(LOC))
-   
-
-    syntax CLLLExps    ::= "#convertToLLLExps" "(" CLLLExp ")"    [strict]
- // ----------------------------------------------------------------------
-    rule #convertToLLLExps(CODE) => CODE;.LLLExps
 
 
     syntax KItem       ::= "#cleanConfig"
@@ -1327,9 +1338,9 @@ module VIPER-LLL
 // ============
 
 
-    syntax Int       ::= "#sizeOfParams" "(" Params ")"    [function]
-    syntax Int       ::= "#sizeOfParam"  "(" Param  ")"    [function]
- // -----------------------------------------------------------------
+    syntax Int  ::= "#sizeOfParams" "(" Params ")"    [function]
+    syntax Int  ::= "#sizeOfParam"  "(" Param  ")"    [function]
+ // ------------------------------------------------------------
     rule #sizeOfParams(.Params) => 0
 
     rule #sizeOfParams(P PS)    => #sizeOfParam(P) +Int #sizeOfParams(PS)
@@ -1339,8 +1350,8 @@ module VIPER-LLL
     rule #sizeOfParam(%param(_, T)) => #sizeOfType(T)    requires notBool isByteArrayType(T)
 
 
-    syntax Int       ::= "#sizeOfType" "(" Type ")"     [function]
- // --------------------------------------------------------------
+    syntax Int  ::= "#sizeOfType" "(" Type ")"     [function]
+ // ---------------------------------------------------------
     rule #sizeOfType(T:BaseType) => 32
 
     rule #sizeOfType(%bytesT(L)) => #ceil32(L) +Int 64
@@ -1352,8 +1363,8 @@ module VIPER-LLL
     rule #sizeOfType(%structT(%vdecl(_, T) VS)) => #sizeOfType(T) +Int #sizeOfType(%structT(VS))
 
 
-    syntax String    ::= "#canonicalizeType" "(" Type "," Bool /*is event?*/")"  [function]
- // ---------------------------------------------------------------------------------------
+    syntax String  ::= "#canonicalizeType" "(" Type "," Bool /*is event?*/")"  [function]
+ // -------------------------------------------------------------------------------------
     rule #canonicalizeType(%bytesT(L), true) => "bytes" +String Int2String(L)
       requires L <=Int 32
 
@@ -1378,18 +1389,23 @@ module VIPER-LLL
     rule #canonicalizeType(%bytes32, _) => "bytes32"
 
 
-    syntax CTypedLLLExp ::= "#baseTypeConvert" "(" CTypedLLLExp "," Type /*to*/ ")"  [strict(1)]
- // --------------------------------------------------------------------------------------------
+    syntax Int ::= "#getListTCount" "(" Type ")"    [function]
+ // ----------------------------------------------------------
+    rule #getListTCount(%listT(T, N)) => N
+
+
+    syntax TypedLLLExp ::= "#baseTypeConvert" "(" TypedLLLExp "," Type /*to*/ ")"   [function]
+ // ------------------------------------------------------------------------------------------
     rule #baseTypeConvert(@tlll(FROMT, CODE), TOT)
-             => #ifThenElse(notBool(isBaseType(FROMT)) orBool notBool(isBaseType(TOT)),
-                            #exception("Base type conversion from or to non-base type."),
-                  #ifThenElse(FROMT ==K TOT,
-                              @tlll(TOT, CODE),
-                    #ifThenElse(FROMT ==K %num andBool TOT ==K %decimal,
-                                @tlll(TOT, $mul(CODE, @decimalDivisor)),
-                      #ifThenElse(FROMT ==K %num256 andBool TOT ==K %num,
-                                  @tlll(TOT, $uclample(CODE, $mload(@maxNumPos))),
-                                  #exception("Typecasting unavailable.")))))
+        => #ifThenElse(notBool(isBaseType(FROMT)) orBool notBool(isBaseType(TOT)),
+                       #exception("Base type conversion from or to non-base type."),
+             #ifThenElse(FROMT ==K TOT,
+                         @tlll(TOT, CODE),
+               #ifThenElse(FROMT ==K %num andBool TOT ==K %decimal,
+                           @tlll(TOT, $mul(CODE, @decimalDivisor)),
+                 #ifThenElse(FROMT ==K %num256 andBool TOT ==K %num,
+                             @tlll(TOT, $uclample(CODE, $mload(@maxNumPos))),
+                             #exception("Typecasting unavailable.")))))
 
 
 // Compute signatures
@@ -1532,7 +1548,7 @@ module VIPER-LLL
 
 
 // Others
-// ============================
+// ======
 
 
     syntax Int    ::= "#convertToWei" "(" Id ")"    [function]
@@ -1577,10 +1593,16 @@ module VIPER-LLL
     rule #numOfExprs(EXPR, EXPRS) => 1 +Int #numOfExprs(EXPRS)
 
 
-    syntax CPackedArgBy32 ::= "#packArgBy32Base" "(" CTypedLLLExp ","
-                                                     CTypedAddr   ")"     [seqstrict]
- // ---------------------------------------------------------------------------------
-    rule #packArgBy32Base(@tlll(_, CODE), @taddr(_, LOC:Int, _, _)) => ($mstore(LOC, CODE); .LLLExps, 32)
+    syntax CPackedArgBy32 ::= "#packArgBy32Base"    "(" CTypedAddr   ","
+                                                        CTypedLLLExp ","
+                                                        Type         ")"     [seqstrict(1,2)]
+    syntax CPackedArgBy32 ::= "#packArgBy32BaseAux" "(" Int          ","
+                                                        TypedLLLExp  ")"
+ // -----------------------------------------------------------------------------------------
+    rule #packArgBy32Base(@taddr(_, LOC:Int, _, _), TCODE, ARGTYPE)
+        => #packArgBy32BaseAux(LOC, #baseTypeConvert(TCODE, ARGTYPE))
+
+    rule #packArgBy32BaseAux(LOC, @tlll(_, CODE)) => ($mstore(LOC, CODE); .LLLExps, 32)
 
 
     syntax Int ::= "#getFirstStoreLoc" "(" LLLExps ")"  [function]
