@@ -16,7 +16,7 @@ module VIPER-LLL
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// Configuration
+// Configuration / Context
 ///////////////////////////////////////////////////////////////////////////////
 
 
@@ -273,7 +273,7 @@ module VIPER-LLL
       requires notBool %svar(NAME) in keys(GLOBALS)
 
     rule <k> #checkNameDuplicateWithGlobals(NAME)
-           => #exception("Variable name duplicated between function arguments and globals: +String Id2String(NAME)")
+            => #exception("Variable name duplicated between function arguments and globals: +String Id2String(NAME)")
          ... </k>
          <global> GLOBALS </global>
       requires %svar(NAME) in keys(GLOBALS)
@@ -282,11 +282,10 @@ module VIPER-LLL
     syntax KItem  ::= "#checkInternalPublicMECE" "(" Bool /*internal?*/ "," Bool /*public?*/ ")"
  // --------------------------------------------------------------------------------------------
     rule #checkInternalPublicMECE(INTERNAL, PUBLIC)
-        => #ifThenElse(INTERNAL ==K true andBool PUBLIC ==K true,
-                       #exception("Cannot use public and internal decorators on the same function."),
-             #ifThenElse(INTERNAL ==K false andBool PUBLIC ==K false,
-                       #exception("Function visibility must be declared."),
-                       .K))
+        => #ifThen(INTERNAL ==K true andBool PUBLIC ==K true,
+                   #exception("Cannot use public and internal decorators on the same function."))
+        ~> #ifThen(INTERNAL ==K false andBool PUBLIC ==K false,
+                   #exception("Function visibility must be declared."))
 
 
     syntax Defs  ::= "#mkPublicGetters"         "(" Globals "," Defs ")"            [function]
@@ -412,12 +411,12 @@ module VIPER-LLL
                                           ")"                      [seqstrict]
  // --------------------------------------------------------------------------
     rule <k> #compileFunc(%fdecl(DECS, NAME, PARAMS, T, STMTS))
-           => #compileFuncAux(#copyArg(PARAMS, #isInitFunc(NAME)),
-                              #addClampersForDecorators(PAYABLE, INTERNAL),
-                              #fillParams(PARAMS, 0, #isInitFunc(NAME), .LLLExps),
-                              #resolveStmts(STMTS),
-                              FUNCID,
-                              #isInitFunc(NAME))
+            => #compileFuncAux(#copyArg(PARAMS, #isInitFunc(NAME)),
+                               #addClampersForDecorators(PAYABLE, INTERNAL),
+                               #fillParams(PARAMS, 0, #isInitFunc(NAME), .LLLExps),
+                               #compileStmts(STMTS, .LLLExps),
+                               FUNCID,
+                               #isInitFunc(NAME))
            ~> #cleanConfig ... </k>
          <internalSig> NAME |-> @func(FUNCID, _, T, CONSTANT, PAYABLE, INTERNAL) SIGS</internalSig>
          <return> _ => T </return>
@@ -426,12 +425,12 @@ module VIPER-LLL
 
 
     rule #compileFuncAux(COPYARG, CHECKDECS, FILLPARAMS, STMTS, _, true)
-             => $%seq(COPYARG ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL ($%seq(STMTS);.LLLExps));.LLLExps
+        => $%seq(COPYARG ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL ($%seq(STMTS);.LLLExps));.LLLExps
 
     rule #compileFuncAux(COPYARG, CHECKDECS, FILLPARAMS, STMTS, FUNCID, false)
-             => $if(
-                  $eq($mload(0), FUNCID),
-                  $%seq(COPYARG ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL STMTS ++LLL ($stop;.LLLExps)));.LLLExps
+        => $if(
+             $eq($mload(0), FUNCID),
+             $%seq(COPYARG ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL STMTS ++LLL ($stop;.LLLExps)));.LLLExps
 
 
 // Copy Arguments
@@ -479,7 +478,6 @@ module VIPER-LLL
 
 
     syntax CLLLExps ::= "#fillParams" "(" Params "," Int /*data pos*/ "," Bool /*init?*/ "," LLLExps ")"
-    syntax CLLLExps ::= "#fillParam"  "(" Param  "," Int "," Bool ")"
  // ----------------------------------------------------------------------------------------------------
     rule #fillParams(.Params, _, _, RESULTCODE) => RESULTCODE
 
@@ -489,6 +487,9 @@ module VIPER-LLL
     rule (FILLCODE:LLLExps ~> #fillParams(PS, DATAPOS, ISINIT, RESULTCODE))
         => #fillParams(PS, DATAPOS, ISINIT, RESULTCODE ++LLL FILLCODE)
 
+
+    syntax CLLLExps ::= "#fillParam"  "(" Param  "," Int "," Bool ")"
+ // -----------------------------------------------------------------
     rule <k> #fillParam(%param(NAME, %bytesT(L)), DATAPOS, ISINIT) => #mkClamper(%bytesT(L), DATAPOS, LOC, ISINIT) ... </k>
          <env> ENV => #updateEnv(ENV, %var(NAME), %bytesT(L), LOC, false) </env>
          <nextMem> LOC => LOC +Int #sizeOfType(%bytesT(L)) </nextMem>
@@ -570,26 +571,41 @@ module VIPER-LLL
 ///////////////////////////////////////////////////////////////////////////////
 
 
-    syntax CLLLExps ::= "#resolveStmts"    "(" Stmts ")"
-    syntax CLLLExps ::= "#resolveStmtsAux" "(" Stmts "," CLLLExps ")"  [strict(2)]
- // ------------------------------------------------------------------------------
-    rule #resolveStmts(STMTS) => #resolveStmtsAux(STMTS, .LLLExps)
+    syntax CLLLExps ::= "#compileStmts" "(" Stmts "," LLLExps ")"
+ // ----------------------------------------------------------------
+    rule #compileStmts(.Stmts, RESULTCODE) => RESULTCODE
 
-    rule #resolveStmtsAux(.Stmts, CODE) => CODE
+    rule #compileStmts(STMT STMTS, RESULTCODE) => #compileStmt(STMT) ~> #compileStmts(STMTS, RESULTCODE)
 
-    rule #resolveStmtsAux(STMT STMTS, CODE) => #resolveStmtsAux(STMTS, #extendLLL(CODE, #resolveStmt(STMT)))
+    rule (STMTCODE:LLLExps ~> #compileStmts(STMTS, RESULTCODE))
+        => #compileStmts(STMTS, RESULTCODE ++LLL STMTCODE)
 
 
-    syntax CLLLExps ::= "#resolveStmt"     "(" Stmt ")"
+    syntax CLLLExps ::= "#compileStmt" "(" Stmt ")"
  // -------------------------------------------------------
-    rule #resolveStmt(%break) => $break; .LLLExps
+    rule #compileStmt(%break) => $break; .LLLExps
 
-    rule #resolveStmt(%pass) => $pass;.LLLExps
+    rule #compileStmt(%pass) => $pass;.LLLExps
 
-    rule #resolveStmt(%throw) => $assert(0);.LLLExps
+    rule #compileStmt(%throw) => $assert(0);.LLLExps
 
 
-    // Assign
+// Annotated Assignment
+// ====================
+
+
+   rule #compileStmt(%vdecl(NAME, T)) => #newVar(NAME, T) ~> $pass;.LLLExps
+
+   rule (@taddr(T, LOC, GLOBAL, MUTABLE) => .) ~> $pass;.LLLExps
+
+
+// Assignment
+// ==========
+
+
+    rule #compileStmt(%assign(V, E)) => #assign(V, #resolveExpr(E))
+
+
     syntax CLLLExps ::= "#assign"    "(" Var                             ","
                                          CTypedLLLExp  /*compiled Expr*/
                                      ")"                         [strict(2)]
@@ -597,60 +613,31 @@ module VIPER-LLL
                                          TypedLLLExp
                                      ")"                         [strict(1)]
  // ------------------------------------------------------------------------
-    rule #resolveStmt(%assign(V, E)) => #assign(V, #resolveExpr(E))
-
-    rule #assign(V, @tlll(T, CODE)) => #assignAux(#lookupOrAllocVar(V, T), @tlll(T, CODE))
+    rule #assign(V, @tlll(T, CODE)) => #assignAux(#lookupOrNewVar(V, T), @tlll(T, CODE))
 
     rule <k> #assignAux(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE), RTCODE)
-                 => #ifThen((ISGLOBAL ==K true andBool ISCONSTANT ==K true),
-                            #exception("Cannot modify storage inside a constant function!"))
-                 ~> #ifThen(ISMUTABLE ==K false,
-                            #exception("Cannot modify function argument"))
-                 ~> #convertToLLLExps(#mkSetter(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE), RTCODE))
-                 ... </k>
+            => #ifThen(ISGLOBAL ==K true andBool ISCONSTANT ==K true,
+                       #exception("Cannot modify storage inside a constant function!"))
+            ~> #ifThen(ISMUTABLE ==K false,
+                       #exception("Cannot modify function argument"))
+            ~> #mkSetter(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE), RTCODE)
+         ... </k>
          <constant> ISCONSTANT </constant>
 
 
-    syntax CTypedAddr ::= "#lookupOrAllocVar" "(" Var "," Type ")"
- // --------------------------------------------------------------
-    rule <k> #lookupOrAllocVar(%var(NAME), _) => TADDR ... </k>
-         <env> %var(NAME) |-> TADDR:TypedAddr ENV </env>
-
-    rule <k> #lookupOrAllocVar(%var(NAME), T) => #allocVar(%var(NAME), T) ... </k>
-         <env> ENV </env>
-      requires notBool %var(NAME) in keys(ENV)
-
-    rule #lookupOrAllocVar(%svar(NAME), _) => #lookupVar(%svar(NAME))
-
-    rule #lookupOrAllocVar(%mapelem(V, EXPR), _) => #lookupVar(%mapelem(V, EXPR))
-
-
-    syntax CTypedAddr ::= "#allocVar" "(" Var "," Type ")"
- // ------------------------------------------------------
-    rule <k> #allocVar(%var(NAME), T) => @taddr(T, LOC, false, true) ...</k>
-         <env> ENV => #updateEnv(ENV, %var(NAME), T, LOC, true) </env>
-         <nextMem> LOC => LOC +Int #sizeOfType(T) </nextMem>
-      requires notBool %var(NAME) in keys(ENV)
-
-    rule <k> #allocVar(%var(NAME), T)
-                 => #exception("Duplicate variable name: " +String Id2String(NAME)) ...</k>
-         <env> ENV </env>
-      requires %var(NAME) in keys(ENV)
-
-
-    syntax CLLLExp ::= "#mkSetter"    "(" TypedAddr    /*left variable address*/   ","
-                                          TypedLLLExp  /*right compiled Expr*/
-                                      ")"
-    syntax CLLLExp ::= "#mkSetterBase" "("TypedAddr "," CTypedLLLExp ")"    [strict(2)]
- // -----------------------------------------------------------------------------------
+    syntax CLLLExps ::= "#mkSetter"     "(" TypedAddr    /*left variable address*/   ","
+                                            TypedLLLExp  /*right compiled Expr*/
+                                        ")"
+    syntax CLLLExps ::= "#mkSetterBase" "(" TypedAddr "," CTypedLLLExp ")"    [strict(2)]
+ // -------------------------------------------------------------------------------------
     rule #mkSetter(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE), RTCODE)
              => #mkSetterBase(@taddr(LT, LOC, ISGLOBAL, ISMUTABLE),
                               #baseTypeConvert(RTCODE, LT))
       requires isBaseType(LT)
 
-    rule #mkSetterBase(@taddr(_, LOC, true, _), @tlll(_, CODE)) => $sstore(LOC, CODE)
+    rule #mkSetterBase(@taddr(_, LOC, true, _), @tlll(_, CODE)) => $sstore(LOC, CODE);.LLLExps
 
-    rule #mkSetterBase(@taddr(_, LOC, false, _), @tlll(_, CODE)) => $mstore(LOC, CODE)
+    rule #mkSetterBase(@taddr(_, LOC, false, _), @tlll(_, CODE)) => $mstore(LOC, CODE);.LLLExps
 
 
     // Augassign
@@ -662,7 +649,7 @@ module VIPER-LLL
                                             CTypedLLLExp  /*compiled Expr*/
                                         ")"                         [strict(2)]
  // ---------------------------------------------------------------------------
-    rule #resolveStmt(%augassign(OP, V, E)) => #augassign(OP, #lookupVar(V), #resolveExpr(E))
+    rule #compileStmt(%augassign(OP, V, E)) => #augassign(OP, #lookupVar(V), #resolveExpr(E))
 
     rule <k> #augassign(OP, @taddr(LT, LOC, true, _), RTCODE)
                  => #exception("Cannot modify storage inside a constant function!") ... </k>
@@ -712,11 +699,11 @@ module VIPER-LLL
                                   CLLLExps     /*Then*/
                               ")"               [seqstrict]
  // -------------------------------------------------------
-    rule #resolveStmt(%if(TEST, THENSTMTS, ELSESTMTS)) => #if(#resolveExpr(TEST),
-                                                              #resolveStmts(THENSTMTS),
-                                                              #resolveStmts(ELSESTMTS))
+    rule #compileStmt(%if(TEST, THENSTMTS, ELSESTMTS)) => #if(#resolveExpr(TEST),
+                                                              #compileStmts(THENSTMTS, .LLLExps),
+                                                              #compileStmts(ELSESTMTS, .LLLExps))
 
-    rule #resolveStmt(%if(TEST, THENSTMTS)) => #if(#resolveExpr(TEST), #resolveStmts(THENSTMTS))
+    rule #compileStmt(%if(TEST, THENSTMTS)) => #if(#resolveExpr(TEST), #compileStmts(THENSTMTS, .LLLExps))
 
     rule #if(@tlll(_, CODE), THEN:LLLExps, ELSE:LLLExps) => $if(CODE, $%seq(THEN), $%seq(ELSE));.LLLExps
 
@@ -731,41 +718,30 @@ module VIPER-LLL
                                ")"         [seqstrict(1,2,4)]
  // ---------------------------------------------------------
     // e.g. for i in range(10): ...
-    rule #resolveStmt(%for(NAME, ROUNDS, STMTS)) => #for(#allocLoopVar(NAME), @tlll(%num, 0), ROUNDS, #resolveStmts(STMTS))
+    rule #compileStmt(%for(NAME, ROUNDS, STMTS)) => #for(#newLoopVar(NAME), @tlll(%num, 0), ROUNDS, #compileStmts(STMTS, .LLLExps))
 
     // e.g. for i in range(100, 110): ...
-    rule #resolveStmt(%for(NAME, START:Int, END:Int, STMTS))
-             => #for(#allocLoopVar(NAME), @tlll(%num, START), END -Int START, #resolveStmts(STMTS))
+    rule #compileStmt(%for(NAME, START:Int, END:Int, STMTS))
+             => #for(#newLoopVar(NAME), @tlll(%num, START), END -Int START, #compileStmts(STMTS, .LLLExps))
 
     // e.g. for i in range(x, x + 10): ...
-    rule #resolveStmt(%for(NAME, %var(V), %binop(+, %var(V), ROUNDS:Int), STMTS))
-             => #for(#allocLoopVar(NAME), #resolveExpr(%var(V)), ROUNDS, #resolveStmts(STMTS))
+    rule #compileStmt(%for(NAME, %var(V), %binop(+, %var(V), ROUNDS:Int), STMTS))
+             => #for(#newLoopVar(NAME), #resolveExpr(%var(V)), ROUNDS, #compileStmts(STMTS, .LLLExps))
 
     rule #for(@taddr(%num, LOC:Int, _, _), @tlll(_, STARTCODE), ROUNDS, BODYCODE:LLLExps)
              => $repeat(LOC, STARTCODE, ROUNDS, $%seq(BODYCODE));.LLLExps
-
-
-    syntax CTypedAddr ::= "#allocLoopVar" "(" Id ")"
- // ------------------------------------------------
-    rule <k> #allocLoopVar(NAME) => #lookupVar(%var(NAME)) ... </k>
-         <forvar> FORNAMES </forvar>
-      requires NAME in FORNAMES
-
-    rule <k> #allocLoopVar(NAME) => #allocVar(%var(NAME), %num) ... </k>
-         <forvar> FORNAMES (.Set => SetItem(NAME)) </forvar>
-      requires notBool NAME in FORNAMES
 
 
     // return
     syntax CLLLExps ::= "#return" "(" CTypedLLLExp "," Type /*return type*/ ")"  [strict(1)]
     syntax CLLLExps ::= "#returnBase" "(" TypedLLLExp "," Type ")"
  // ----------------------------------------------------------------------------------------
-    rule <k> #resolveStmt(%return) => #ifThenElse(T =/=K %void,
+    rule <k> #compileStmt(%return) => #ifThenElse(T =/=K %void,
                                                   #exception("Expecting to return a value"),
                                                   .LLLExps) ... </k>
          <return> T </return>
 
-    rule <k> #resolveStmt(%return(E)) => #ifThenElse(T =/=K %void,
+    rule <k> #compileStmt(%return(E)) => #ifThenElse(T =/=K %void,
                                                      #return(#resolveExpr(E), T),
                                                      #exception("Not expecting to return a value")) ... </k>
          <return> T </return>
@@ -782,7 +758,7 @@ module VIPER-LLL
     // send
     syntax CLLLExps ::= "#send" "(" CTypedLLLExp /*to*/ "," CTypedLLLExp /*value*/ ")"  [seqstrict]
  // -----------------------------------------------------------------------------------------------
-    rule <k> #resolveStmt(%send(TO, VALUE))
+    rule <k> #compileStmt(%send(TO, VALUE))
                  => #ifThenElse(CONSTANT ==K false,
                                 #send(#resolveExpr(TO), #resolveExpr(VALUE)),
                                 #exception("Cannot send ether inside a constant function")) ... </k>
@@ -816,10 +792,10 @@ module VIPER-LLL
                                      CTypedLLLExp       ","
                                      CTypedLLLExp       ")" [seqstrict(1,3,4,5)]
  // --------------------------------------------------------------------------------
-    rule <k> #resolveStmt(%log(NAME, ARGS)) => #log(ARGS, EVENTRECORD) ... </k>
+    rule <k> #compileStmt(%log(NAME, ARGS)) => #log(ARGS, EVENTRECORD) ... </k>
          <internalSig> NAME |-> EVENTRECORD SIGS </internalSig>
 
-    rule <k> #resolveStmt(%log(NAME, _)) => #exception("Event not declared yet: " +String Id2String(NAME)) ... </k>
+    rule <k> #compileStmt(%log(NAME, _)) => #exception("Event not declared yet: " +String Id2String(NAME)) ... </k>
          <internalSig> SIGS </internalSig>
       requires notBool NAME in keys(SIGS)
 
@@ -891,7 +867,7 @@ module VIPER-LLL
              => ($%seq(CODE), #getFirstStoreLoc(CODE), SIZE)
 
     rule #packLoggingDataAux((DARG, DARGS), %eparam(_, T, _) DEPARAMS, CODE, SIZE)
-             => #packArgBy32Base(#baseTypeConvert(#resolveExpr(DARG), T), #allocPlaceholder(T))
+             => #packArgBy32Base(#baseTypeConvert(#resolveExpr(DARG), T), #newPlaceholder(T))
              ~> #packLoggingDataAux(DARGS, DEPARAMS, CODE, SIZE)
       requires isBaseType(T)
 
@@ -903,19 +879,6 @@ module VIPER-LLL
  // ---------------------------------------------------------------------------------------------
     rule #packLoggingTopic(ARGCODE, %eparam(_, T, _)) => #baseTypeConvert(ARGCODE, T)
       requires isBaseType(T)
-
-
-    // Type convert
-    syntax CTypedLLLExp ::= "#baseTypeConvert" "(" CTypedLLLExp "," Type /*to*/ ")"  [strict(1)]
- // --------------------------------------------------------------------------------------------
-    rule #baseTypeConvert(@tlll(FROMT, CODE), TOT)
-             => #ifThenElse(notBool(isBaseType(FROMT)) orBool notBool(isBaseType(TOT)),
-                            #exception("Base type conversion from or to non-base type."),
-                  #ifThenElse(FROMT ==K TOT,
-                              @tlll(TOT, CODE),
-                    #ifThenElse(FROMT ==K %num andBool TOT ==K %decimal,
-                                @tlll(TOT, $mul(CODE, @decimalDivisor)),
-                                #exception("Typecasting unavailable"))))
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -950,46 +913,6 @@ module VIPER-LLL
 
     // Var
     rule #resolveExpr(V) => #unwrapLocation(#lookupVar(V))
-
-
-    syntax CTypedAddr ::= "#lookupVar" "(" Var ")"
- // ----------------------------------------------
-    rule <k> #lookupVar(%var(NAME)) => TADDR ... </k>
-         <env> %var(NAME) |-> TADDR:TypedAddr ENV </env>
-
-    rule <k> #lookupVar(%var(NAME))
-                 => #exception("Undeclared Variable: " +String Id2String(NAME)) ... </k>
-         <env> ENV </env>
-      requires notBool %var(NAME) in keys(ENV)
-
-    rule <k> #lookupVar(%svar(NAME)) => TADDR ... </k>
-         <global> %svar(NAME) |-> TADDR:TypedAddr GLOBAL </global>
-
-    rule <k> #lookupVar(%svar(NAME))
-                 => #exception("Persistent variable undeclared: " +String Id2String(NAME)) ... </k>
-         <global> GLOBAL </global>
-      requires notBool %svar(NAME) in keys(GLOBAL)
-
-    rule #lookupVar(%mapelem(V, EXPR))
-             => #computeVarOffset(#lookupVar(V), #resolveExpr(EXPR))
-
-
-    syntax CTypedAddr ::= "#computeVarOffset" "(" CTypedAddr   /*parent*/ ","
-                                                  CTypedLLLExp /*key*/
-                                              ")"                 [seqstrict]
-    syntax CTypedAddr ::= "#computeMapVarOffset" "(" CTypedAddr        ","
-                                                     CTypedLLLExp
-                                                 ")"              [strict(2)]
- // -------------------------------------------------------------------------
-    rule #computeVarOffset(@taddr(%mapT(VT, KT), LOC, GLOBAL, MUTABLE), TCODE)
-             => #computeMapVarOffset(@taddr(%mapT(VT, KT), LOC, GLOBAL, MUTABLE),
-                                     #baseTypeConvert(TCODE, KT))
-
-    rule #computeMapVarOffset(@taddr(%mapT(VT, KT), LOC, true, MUTABLE), @tlll(_, CODE))
-             => @taddr(VT, $add($sha3_32(LOC), CODE), true, MUTABLE)
-
-    rule #computeMapVarOffset(@taddr(%mapT(VT, KT), _, false, _), _)
-             => #exception("Can only have fixed-side arrays in memory, not mappings")
 
 
     // Reserved Expr
@@ -1455,6 +1378,20 @@ module VIPER-LLL
     rule #canonicalizeType(%bytes32, _) => "bytes32"
 
 
+    syntax CTypedLLLExp ::= "#baseTypeConvert" "(" CTypedLLLExp "," Type /*to*/ ")"  [strict(1)]
+ // --------------------------------------------------------------------------------------------
+    rule #baseTypeConvert(@tlll(FROMT, CODE), TOT)
+             => #ifThenElse(notBool(isBaseType(FROMT)) orBool notBool(isBaseType(TOT)),
+                            #exception("Base type conversion from or to non-base type."),
+                  #ifThenElse(FROMT ==K TOT,
+                              @tlll(TOT, CODE),
+                    #ifThenElse(FROMT ==K %num andBool TOT ==K %decimal,
+                                @tlll(TOT, $mul(CODE, @decimalDivisor)),
+                      #ifThenElse(FROMT ==K %num256 andBool TOT ==K %num,
+                                  @tlll(TOT, $uclample(CODE, $mload(@maxNumPos))),
+                                  #exception("Typecasting unavailable.")))))
+
+
 // Compute signatures
 // ==================
 
@@ -1489,7 +1426,95 @@ module VIPER-LLL
     rule #computeFuncSig(SIG, .Params) => SIG +String ")"
 
 
-    // Others
+// Memory Lookup and Allocation
+// ============================
+
+
+    syntax CTypedAddr ::= "#lookupVar" "(" Var ")"
+ // ----------------------------------------------
+    rule <k> #lookupVar(%var(NAME)) => TADDR ... </k>
+         <env> %var(NAME) |-> TADDR:TypedAddr ENV </env>
+
+    rule <k> #lookupVar(%var(NAME))
+            => #exception("Undeclared Variable: " +String Id2String(NAME)) ... </k>
+         <env> ENV </env>
+      requires notBool %var(NAME) in keys(ENV)
+
+    rule <k> #lookupVar(%svar(NAME)) => TADDR ... </k>
+         <global> %svar(NAME) |-> TADDR:TypedAddr GLOBAL </global>
+
+    rule <k> #lookupVar(%svar(NAME))
+            => #exception("Persistent variable undeclared: " +String Id2String(NAME)) ... </k>
+         <global> GLOBAL </global>
+      requires notBool %svar(NAME) in keys(GLOBAL)
+
+    rule #lookupVar(%mapelem(V, EXPR))
+        => #computeVarOffset(#lookupVar(V), #resolveExpr(EXPR))
+
+
+    syntax CTypedAddr ::= "#computeVarOffset"    "(" CTypedAddr   /*parent*/ ","
+                                                     CTypedLLLExp /*key*/
+                                                 ")"                 [seqstrict]
+    syntax CTypedAddr ::= "#computeMapVarOffset" "(" CTypedAddr        ","
+                                                     CTypedLLLExp
+                                                 ")"              [strict(2)]
+ // -------------------------------------------------------------------------
+    rule #computeVarOffset(@taddr(%mapT(VT, KT), LOC, GLOBAL, MUTABLE), TCODE)
+             => #computeMapVarOffset(@taddr(%mapT(VT, KT), LOC, GLOBAL, MUTABLE),
+                                     #baseTypeConvert(TCODE, KT))
+
+    rule #computeMapVarOffset(@taddr(%mapT(VT, KT), LOC, true, MUTABLE), @tlll(_, CODE))
+             => @taddr(VT, $add($sha3_32(LOC), CODE), true, MUTABLE)
+
+    rule #computeMapVarOffset(@taddr(%mapT(VT, KT), _, false, _), _)
+             => #exception("Can only have fixed-side arrays in memory, not mappings")
+
+
+    syntax CTypedAddr ::= "#newVar" "(" Id "," Type ")"
+ // ---------------------------------------------------
+    rule <k> #newVar(NAME, T) => @taddr(T, LOC, false, true) ...</k>
+         <env> ENV => #updateEnv(ENV, %var(NAME), T, LOC, true) </env>
+         <nextMem> LOC => LOC +Int #sizeOfType(T) </nextMem>
+      requires notBool %var(NAME) in keys(ENV)
+
+    rule <k> #new(NAME, T)
+           => #exception("Duplicate variable name: " +String Id2String(NAME)) ...</k>
+         <env> ENV </env>
+      requires %var(NAME) in keys(ENV)
+
+
+    syntax CTypedAddr ::= "#lookupOrNewVar" "(" Var "," Type ")"
+ // --------------------------------------------------------------
+    rule <k> #lookupOrNewVar(%var(NAME), _) => TADDR ... </k>
+         <env> %var(NAME) |-> TADDR:TypedAddr ENV </env>
+
+    rule <k> #lookupOrNewVar(%var(NAME), T) => #newVar(NAME, T) ... </k>
+         <env> ENV </env>
+      requires notBool %var(NAME) in keys(ENV)
+
+    rule #lookupOrNewVar(%svar(NAME), _) => #lookupVar(%svar(NAME))
+
+    rule #lookupOrNewVar(%mapelem(V, EXPR), _) => #lookupVar(%mapelem(V, EXPR))
+
+
+    syntax CTypedAddr ::= "#newLoopVar" "(" Id ")"
+ // ----------------------------------------------
+    rule <k> #newLoopVar(NAME) => #lookupVar(%var(NAME)) ... </k>
+         <forvar> FORNAMES </forvar>
+      requires NAME in FORNAMES
+
+    rule <k> #newLoopVar(NAME) => #newVar(NAME, %num) ... </k>
+         <forvar> FORNAMES (.Set => SetItem(NAME)) </forvar>
+      requires notBool NAME in FORNAMES
+
+
+    syntax CTypedAddr ::= "#newPlaceholder" "(" Type ")"
+ // ----------------------------------------------------
+    rule <k> #newPlaceholder(T)
+           => #newVar(String2Id("_placeholder_" +String Int2String(I)), T) ... </k>
+         <placeholder> I => I +Int 1 </placeholder>
+
+
     syntax Map  ::= "#updateEnv" "(" Map "," Var "," Type "," Int /*loc*/ "," Bool /*mutable*/ ")"  [function]
     syntax Map  ::= "#flattenStruct" "(" Map "," Var "," VarDecls "," Int "," Bool ")"              [function]
  // ----------------------------------------------------------------------------------------------------------
@@ -1501,8 +1526,13 @@ module VIPER-LLL
     rule #flattenStruct(M, V, .VarDecls, LOC, ISMUTABLE) => M
 
     rule #flattenStruct(M, V, %vdecl(NAME, T) VS, LOC, ISMUTABLE)
-             => #flattenStruct(#updateEnv(M, %mem(V, NAME), T, LOC, ISMUTABLE),
-                               V, VS, LOC +Int #sizeOfType(T), ISMUTABLE)
+        => #flattenStruct(#updateEnv(M, %mem(V, NAME), T, LOC, ISMUTABLE),
+                          V, VS, LOC +Int #sizeOfType(T), ISMUTABLE)
+
+
+
+// Others
+// ============================
 
 
     syntax Int    ::= "#convertToWei" "(" Id ")"    [function]
@@ -1545,13 +1575,6 @@ module VIPER-LLL
     rule #numOfExprs(.Exprs) => 0
 
     rule #numOfExprs(EXPR, EXPRS) => 1 +Int #numOfExprs(EXPRS)
-
-
-    syntax CTypedAddr ::= "#allocPlaceholder" "(" Type ")"
- // ------------------------------------------------------
-    rule <k> #allocPlaceholder(T)
-                 => #allocVar(%var(String2Id("_placeholder_" +String Int2String(I))), T) ... </k>
-         <placeholder> I => I +Int 1 </placeholder>
 
 
     syntax CPackedArgBy32 ::= "#packArgBy32Base" "(" CTypedLLLExp ","
