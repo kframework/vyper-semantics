@@ -59,6 +59,9 @@ module VIPER-LLL
                                           Bool /*payable?*/  ","
                                           Bool /*internal?*/ ")"
 
+    // Evaluated viper list
+    syntax LLLExp         ::= "@list" "(" LLLExps ")"
+
     syntax PackedLoggingData  ::= "(" LLLExp    /*code*/ ","
                                       Int  /*start loc*/ ","
                                       Int       /*size*/ ")"
@@ -627,24 +630,40 @@ module VIPER-LLL
     syntax CLLLExps ::= "#mkSetter"     "(" TypedAddr   /*left variable address*/ ","
                                             TypedLLLExp /*right compiled Expr*/
                                         ")"
+ // ---------------------------------------------------------------------------------
+
+
+    // Basic Types
     syntax CLLLExps ::= "#mkSetterBase"  "(" TypedAddr "," TypedLLLExp ")"
-    syntax CLLLExps ::= "#mkSetterListT" "(" TypedAddr "," TypedLLLExp ")"
- // --------------------------------------------------------------------------------------
+ // ----------------------------------------------------------------------
     rule #mkSetter(@taddr(LT, LOC, GLOBAL, MUTABLE), RTCODE)
         => #mkSetterBase(@taddr(LT, LOC, GLOBAL, MUTABLE),
                          #baseTypeConvert(RTCODE, LT))
       requires isBaseType(LT)
-
-    rule #mkSetter(@taddr(LT, LOC, GLOBAL, MUTABLE), RTCODE)
-        => #exception("Cannot copy mappings; can only copy individual elements.")
-      requires isMappingType(LT)
-
 
     rule #mkSetterBase(@taddr(_, LOC, true, _), @tlll(RT, CODE)) => $sstore(LOC, CODE);.LLLExps
 
     rule #mkSetterBase(@taddr(_, LOC, false, _), @tlll(_, CODE)) => $mstore(LOC, CODE);.LLLExps
 
     // TODO: figure out an efficient way to copy byte array
+
+
+    // Can't copy mappings
+    rule #mkSetter(@taddr(LT, LOC, GLOBAL, MUTABLE), RTCODE)
+        => #exception("Cannot copy mappings; can only copy individual elements.")
+      requires isMappingType(LT)
+
+
+    // List
+    syntax CLLLExps ::= "#mkSetterListT" "(" TypedAddr "," TypedLLLExp ")"
+ // ---------------------------------------------------------------------------------
+    rule #mkSetter(@taddr(LT, LOC, GLOBAL, MUTABLE), @tlll(RT, CODE))
+        => #ifThenElse(notBool(isListType(RT)),
+                       #exception("Setter type mismatch: left side is array but right side is not."),
+             #ifThenElse(#getListTCount(LT) =/=K #getListTCount(RT),
+                         #exception("Mismatched number of elements"),
+                         #mkSetterListT(@taddr(LT, LOC, GLOBAL, MUTABLE), @tlll(RT, CODE))))
+       requires isListType(LT)
 
 
 // Aug Assignment
@@ -655,41 +674,47 @@ module VIPER-LLL
                                             CTypedAddr /*variable address*/ ","
                                             CTypedLLLExp  /*compiled Expr*/
                                         ")"                    [seqstrict(2,3)]
-    syntax CLLLExps ::= "#desugarAugAssign" "(" TypedAddr                   ","
-                                                CTypedLLLExp
-                                            ")"                     [strict(2)]
-    syntax CLLLExps ::= "#augassignAux" "(" Int  /*loc*/                    ","
-                                            Bool /*global?*/                ","
+    syntax CLLLExps ::= "#augassignAux" "(" AugAssignOp                     ","
+                                            TypedAddr                       ","
                                             TypedLLLExp
-                                         ")"
+                                        ")"
+    syntax CLLLExps ::= "#desugarAugAssign"    "(" TypedAddr                ","
+                                                   CTypedLLLExp
+                                               ")"                  [strict(2)]
+    syntax CLLLExps ::= "#desugarAugAssignAux" "(" Int  /*loc*/             ","
+                                                   Bool /*global?*/         ","
+                                                   TypedLLLExp
+                                               ")"
  // -------------------------------------------------------------------------------
     rule #compileStmt(%augassign(OP, V, E)) => #augassign(OP, #lookupVar(V), #resolveExpr(E))
 
-    rule <k> #augassign(OP, @taddr(LT, LOC, true, _), RTCODE)
-            => #exception("Cannot modify storage inside a constant function!") ... </k>
-         <constant> true </constant>
-
-    rule <k> #augassign(OP, @taddr(LT, LOC, true, MUTABLE), RTCODE)
-            => #desugarAugAssign(@taddr(LT, LOC, true, MUTABLE),
-                                 #convertToBinaryArith(OP, @tlll(LT, $sload($stloc)), RTCODE))
+    rule <k> #augassign(OP, @taddr(LT, LOC, GLOBAL, MUTABLE), RTCODE)
+            => #ifThen(notBool(isBaseType(LT)),
+                       #exception("Can only use aug-assign operators with simple types!"))
+            ~> #ifThen(GLOBAL ==K true andBool CONSTANT ==K true,
+                       #exception("Cannot modify storage inside a constant function!"))
+            ~> #ifThen(MUTABLE ==K false,
+                       #exception("Cannot modify function argument"))
+            ~> #augassignAux(OP, @taddr(LT, LOC, GLOBAL, MUTABLE), RTCODE)
          ... </k>
-         <constant> false </constant>
+         <constant> CONSTANT </constant>
 
-    rule <k> #augassign(OP, @taddr(LT, LOC, false, MUTABLE), RTCODE)
-            => #desugarAugAssign(@taddr(LT, LOC, false, MUTABLE),
-                                 #convertToBinaryArith(OP, @tlll(LT, $mload($mloc)), RTCODE))
-         ... </k>
-         <constant> false </constant>
+    rule #augassignAux(OP, @taddr(LT, LOC, true, MUTABLE), RTCODE)
+        => #desugarAugAssign(@taddr(LT, LOC, true, MUTABLE),
+                             #convertToBinaryArith(OP, @tlll(LT, $sload($stloc)), RTCODE))
 
+    rule #augassignAux(OP, @taddr(LT, LOC, false, MUTABLE), RTCODE)
+        => #desugarAugAssign(@taddr(LT, LOC, false, MUTABLE),
+                             #convertToBinaryArith(OP, @tlll(LT, $mload($mloc)), RTCODE))
 
     rule #desugarAugAssign(@taddr(LT, LOC, GLOBAL, MUTABLE), RTCODE)
-        => #augassignAux(LOC, GLOBAL, #baseTypeConvert(RTCODE, LT))
+        => #desugarAugAssignAux(LOC, GLOBAL, #baseTypeConvert(RTCODE, LT))
 
-    rule #augassignAux(LOC, true, @tlll(_, CODE))
-             => $with($stloc, LOC, $sstore($stloc, CODE));.LLLExps
+    rule #desugarAugAssignAux(LOC, true, @tlll(_, CODE))
+        => $with($stloc, LOC, $sstore($stloc, CODE));.LLLExps
 
-    rule #augassignAux(LOC, false, @tlll(_, CODE))
-             => $with($mloc, LOC, $mstore($mloc, CODE));.LLLExps
+    rule #desugarAugAssignAux(LOC, false, @tlll(_, CODE))
+        => $with($mloc, LOC, $mstore($mloc, CODE));.LLLExps
 
 
     syntax CTypedLLLExp ::= "#convertToBinaryArith" "(" AugAssignOp           ","
@@ -704,6 +729,8 @@ module VIPER-LLL
     rule #convertToBinaryArith(*=, LEXP, REXP) => #binOp(*, LEXP, REXP)
 
     rule #convertToBinaryArith(/=, LEXP, REXP) => #binOp(/, LEXP, REXP)
+
+    rule #convertTobinaryArith(%=, LEXP, REXP) => #binOp(%, LEXP, REXP)
 
 
     // if
