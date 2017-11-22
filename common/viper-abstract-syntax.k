@@ -23,7 +23,7 @@ module VIPER-ABSTRACT-SYNTAX
     syntax Param    ::= "%param" "(" Id "," Type ")"
     syntax Params   ::= List{Param, ""}
 
-    syntax Stmt     ::= VarDecl
+    syntax Stmt     ::= VarDecl  // annotated assign
                       | "%assign"    "(" Var "," Expr ")"
                       | "%augassign" "(" AugAssignOp "," Var "," Expr ")"
                       | "%if"        "(" Expr "," Stmts "," Stmts ")"
@@ -33,11 +33,14 @@ module VIPER-ABSTRACT-SYNTAX
                       | "%break"
                       | "%pass"
                       | "%return"
-                      | "%return"    "(" Expr  ")"
+                      | "%return"    "(" Expr ")"
+                      | "%assert"    "(" Expr ")"
+                      | "%throw"
+                      | "%log"       "(" Id "," Exprs ")"
+                      // stmt dispatch table
                       | "%send"      "(" Expr  "," Expr ")"
                       | "%selfdestruct" "(" Expr ")"
-                      | "%log"       "(" Id "," Exprs ")"
-                      | "%throw"
+
     syntax Stmts    ::= List{Stmt, ""}
 
     syntax VarDecl  ::= "%vdecl" "(" Id "," Type ")"
@@ -48,26 +51,28 @@ module VIPER-ABSTRACT-SYNTAX
     syntax Expr     ::= Const
                       | Var
                       | ReservedExpr
-                      | ReservedFunc
+                      | ReservedFunc  // expr dispatch table
                       | "%self"
                       | "%binop"     "(" BinOp     "," Expr "," Expr ")"
                       | "%compareop" "(" CompareOp "," Expr "," Expr ")"
                       | "%boolop"    "(" BoolOp    "," Expr "," Expr ")"
                       | "%unaryop"   "(" UnaryOp   "," Expr ")"
-                      | "%typecast"  "(" BaseType  "," Expr ")"
-                      | "%floor"     "(" Expr ")"
+                      | "%icall"     "(" Id        "," Exprs ")"  // internal contract call
+                      | "%ecall"     "(" Id        "," Exprs ")"  // external contract call
+
     syntax Exprs    ::= List{Expr, ","}
+
+    syntax Const    ::= Int
+                      | "%hex"     "(" String ")"
+                      | "%fixed10" "(" Int ")"  // decimal fixed point value with a precision of 10 decimal places
+                      | String
+                      | Bool
 
     syntax Var      ::= "%var"      "(" Id ")"
                       | "%svar"     "(" Id ")"
-                      | "%mem"      "(" Var "," Id ")"     /*field access*/
-                      | "%listelem" "(" Var "," Expr ")"   /*list element*/
-                      | "%mapelem"  "(" Var "," Expr ")"   /*map element*/
-
-    syntax Const    ::= Int
-                      | "%hex" "(" String ")"
-                      | String
-                      | Bool
+                      | "%mem"      "(" Var "," Id   ")"  // struct field access
+                      | "%listelem" "(" Var "," Expr ")"  // list element
+                      | "%mapelem"  "(" Var "," Expr ")"  // map element
 
     syntax ReservedExpr  ::= "%msg.sender" | "%msg.value" | "%msg.gas"
                            | "%block.difficulty" | "%block.timestamp" | "%block.coinbase" | "%block.number" | "%block.prevhash"

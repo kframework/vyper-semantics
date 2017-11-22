@@ -50,24 +50,26 @@ module VIPER-LLL
 
     syntax TypedLLLExp    ::= "@tlll"  "(" Type "," LLLExp ")"
 
-    syntax EventRecord    ::= "@event" "(" Int /*event_id*/ "," EventParams ")"
+    syntax EventRecord    ::= "@event" "(" Int /*event_id*/  ","
+                                           Id  /*name*/      ","
+                                           EventParams       ")"
 
     syntax FuncRecord     ::= "@func" "(" Int /*func_id*/    ","
+                                          Id  /*name*/       ","
                                           Params             ","
                                           Type               ","
                                           Bool /*constant?*/ ","
                                           Bool /*payable?*/  ","
                                           Bool /*internal?*/ ")"
 
-    // Evaluated viper list
-    syntax LLLExp         ::= "@list" "(" LLLExps ")"
+    syntax PackedLoggingData  ::= "@loggingdata" "(" LLLExp    /*code*/ ","
+                                                     Int  /*start loc*/ ","
+                                                     Int       /*size*/ ")"
+    syntax PackedArgData      ::= "@argdata" "(" LLLExp /*code*/ ","
+                                                 Int    /*size*/ ")"
 
-    syntax PackedLoggingData  ::= "(" LLLExp    /*code*/ ","
-                                      Int  /*start loc*/ ","
-                                      Int       /*size*/ ")"
-
-    syntax PackedArgBy32  ::= "(" LLLExps /*holder*/ ","
-                                  Int      /*size*/  ")"
+    syntax PackedArgBy32  ::= "@argby32" "(" LLLExps /*code*/ ","
+                                             Int     /*size*/ ")"
 
     // Convention: C'Sort' is a one-one corresponding supersort of Sort. C'Sort'
     //             requires for evaluation (i.e. not KResult).
@@ -76,6 +78,7 @@ module VIPER-LLL
     syntax CTypedLLLExp           ::= TypedLLLExp
     syntax CTypedAddr             ::= TypedAddr
     syntax CPackedLoggingData     ::= PackedLoggingData
+    syntax CPackedArgData         ::= PackedArgData
     syntax CPackedArgBy32         ::= PackedArgBy32
 
     syntax KResult  ::= LLLExp
@@ -83,6 +86,7 @@ module VIPER-LLL
                       | TypedLLLExp
                       | TypedAddr
                       | PackedLoggingData
+                      | PackedArgData
                       | PackedArgBy32
                       | Bool
                       | Int
@@ -122,13 +126,15 @@ module VIPER-LLL
                       ($%seq(INITIALIZER);.LLLExps) ++LLL INITFUNC ++LLL
                       ($return(
                          0,
-                         $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0));.LLLExps)) </lll>
+                         $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0));.LLLExps)
+                    ) </lll>
 
     rule <k> #compileViperToLLLAux(INITIALIZER, OTHERFUNCS) => . ... </k>
          <lll> _ => $%seq(
                       $return(
                         0,
-                        $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0));.LLLExps) </lll>
+                        $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0));.LLLExps
+                    ) </lll>
 
 
 // Process Events
@@ -148,7 +154,7 @@ module VIPER-LLL
 
     rule <k> #addEventAux(NAME, EPARAMS) => . ... </k>
          <internalSig> SIGS
-                      => SIGS[NAME <- @event(#computeEventId(NAME, EPARAMS), EPARAMS)] </internalSig>
+                      => SIGS[NAME <- @event(#computeEventId(NAME, EPARAMS), NAME, EPARAMS)] </internalSig>
       requires notBool NAME in keys(SIGS)
 
     rule <k> #addEventAux(NAME, EPARAMS) => #exception("Duplicate event name: " +String Id2String(NAME)) ... </k>
@@ -233,33 +239,34 @@ module VIPER-LLL
  // ------------------------------------------
     rule #addFuncs(.Defs) => .
 
-    rule #addFuncs(%fdecl(DECS, NAME, PARAMS, T, STMTS) DEFS)
-        => #addFunc(NAME, PARAMS, T,
+    rule #addFuncs(%fdecl(DECS, FNAME, PARAMS, T, STMTS) DEFS)
+        => #addFunc(FNAME, PARAMS, T,
                     #inDecorators(%@constant, DECS),
                     #inDecorators(%@payable, DECS),
                     #inDecorators(%@internal, DECS),
                     #inDecorators(%@public, DECS))
         ~> #addFuncs(DEFS)
 
-    rule #addFunc(NAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL, PUBLIC)
+    rule #addFunc(FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL, PUBLIC)
         => #checkFuncParams(PARAMS, .Ids)
         ~> #checkInternalPublicMECE(INTERNAL, PUBLIC)
-        ~> #addFuncAux(NAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL)
+        ~> #addFuncAux(FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL)
 
-    rule <k> #addFuncAux(NAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL) => . ... </k>
+    rule <k> #addFuncAux(FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL) => . ... </k>
          <internalSig> SIGS
-                      => SIGS[NAME <- @func(#computeFuncId(NAME, PARAMS),
-                                            PARAMS,
-                                            T,
-                                            CONSTANT,
-                                            PAYABLE,
-                                            INTERNAL)] </internalSig>
-      requires notBool NAME in keys(SIGS)
+                      => SIGS[FNAME <- @func(#computeFuncId(FNAME, PARAMS),
+                                             FNAME,
+                                             PARAMS,
+                                             T,
+                                             CONSTANT,
+                                             PAYABLE,
+                                             INTERNAL)] </internalSig>
+      requires notBool FNAME in keys(SIGS)
 
-    rule <k> #addFuncAux(NAME, _, _, _, _, _)
-        => #exception("Duplicate event or function name: " +String Id2String(NAME)) ... </k>
+    rule <k> #addFuncAux(FNAME, _, _, _, _, _)
+        => #exception("Duplicate event or function name: " +String Id2String(FNAME)) ... </k>
          <internalSig> SIGS </internalSig>
-      requires NAME in keys(SIGS)
+      requires FNAME in keys(SIGS)
 
 
     syntax KItem  ::= "#checkFuncParams"       "(" Params "," Ids ")"
@@ -413,15 +420,15 @@ module VIPER-LLL
                                               Bool     /*init?*/
                                           ")"                      [seqstrict]
  // --------------------------------------------------------------------------
-    rule <k> #compileFunc(%fdecl(DECS, NAME, PARAMS, T, STMTS))
-            => #compileFuncAux(#copyArg(PARAMS, #isInitFunc(NAME)),
+    rule <k> #compileFunc(%fdecl(DECS, FNAME, PARAMS, T, STMTS))
+            => #compileFuncAux(#copyArg(PARAMS, #isInitFunc(FNAME)),
                                #addClampersForDecorators(PAYABLE, INTERNAL),
-                               #fillParams(PARAMS, 0, #isInitFunc(NAME), .LLLExps),
+                               #fillParams(PARAMS, 0, #isInitFunc(FNAME), .LLLExps),
                                #compileStmts(STMTS, .LLLExps),
                                FUNCID,
-                               #isInitFunc(NAME))
+                               #isInitFunc(FNAME))
            ~> #cleanConfig ... </k>
-         <internalSig> NAME |-> @func(FUNCID, _, T, CONSTANT, PAYABLE, INTERNAL) SIGS</internalSig>
+         <internalSig> FNAME |-> @func(FUNCID, FNAME, _, T, CONSTANT, PAYABLE, INTERNAL) SIGS</internalSig>
          <return> _ => T </return>
          <constant> _ => CONSTANT </constant>
          <payable> _ => PAYABLE </payable>
@@ -568,6 +575,22 @@ module VIPER-LLL
     rule #mkDataDecl(DATAPOS, false) => $calldataload($add(4, DATAPOS))
 
 
+// Clean configuartion
+// ===================
+
+
+    syntax KItem       ::= "#cleanConfig"
+ // -------------------------------------
+    rule <k> CODE:LLLExps ~> (#cleanConfig => .) ...</k>
+         <env> _ => .Map </env>
+         <nextMem> _ => @reservedMemPos </nextMem>
+         <forvar> _ => .Set </forvar>
+         <return> _ => %void </return>
+         <constant> _ => false </constant>
+         <payable> _ => false </payable>
+         <placeholder> _ => 1 </placeholder>    [structural]
+
+
 ///////////////////////////////////////////////////////////////////////////////
 // Stmts
 ///////////////////////////////////////////////////////////////////////////////
@@ -585,7 +608,7 @@ module VIPER-LLL
 
     syntax CLLLExps ::= "#compileStmt" "(" Stmt ")"
  // -------------------------------------------------------
-    rule #compileStmt(%break) => $break; .LLLExps
+    rule #compileStmt(%break) => $break;.LLLExps
 
     rule #compileStmt(%pass) => $pass;.LLLExps
 
@@ -596,16 +619,16 @@ module VIPER-LLL
 // ====================
 
 
-   rule #compileStmt(%vdecl(NAME, T)) => #newVar(NAME, T) ~> $pass;.LLLExps
+    rule #compileStmt(%vdecl(NAME, T)) => #newVar(NAME, T) ~> $pass;.LLLExps
 
-   rule (@taddr(T, LOC, GLOBAL, MUTABLE) => .) ~> $pass;.LLLExps
+    rule (@taddr(T, LOC, GLOBAL, MUTABLE) => .) ~> $pass;.LLLExps
 
 
 // Assignment
 // ==========
 
 
-    rule #compileStmt(%assign(V, E)) => #assign(V, #resolveExpr(E))
+    rule #compileStmt(%assign(V, E)) => #assign(V, #compileExpr(E))
 
 
     syntax CLLLExps ::= "#assign"    "(" Var                             ","
@@ -686,7 +709,7 @@ module VIPER-LLL
                                                    TypedLLLExp
                                                ")"
  // -------------------------------------------------------------------------------
-    rule #compileStmt(%augassign(OP, V, E)) => #augassign(OP, #lookupVar(V), #resolveExpr(E))
+    rule #compileStmt(%augassign(OP, V, E)) => #augassign(OP, #lookupVar(V), #compileExpr(E))
 
     rule <k> #augassign(OP, @taddr(LT, LOC, GLOBAL, MUTABLE), RTCODE)
             => #ifThen(notBool(isBaseType(LT)),
@@ -742,11 +765,11 @@ module VIPER-LLL
                                   CLLLExps     /*Then*/
                               ")"               [seqstrict]
  // -------------------------------------------------------
-    rule #compileStmt(%if(TEST, THENSTMTS, ELSESTMTS)) => #if(#resolveExpr(TEST),
+    rule #compileStmt(%if(TEST, THENSTMTS, ELSESTMTS)) => #if(#compileExpr(TEST),
                                                               #compileStmts(THENSTMTS, .LLLExps),
                                                               #compileStmts(ELSESTMTS, .LLLExps))
 
-    rule #compileStmt(%if(TEST, THENSTMTS)) => #if(#resolveExpr(TEST), #compileStmts(THENSTMTS, .LLLExps))
+    rule #compileStmt(%if(TEST, THENSTMTS)) => #if(#compileExpr(TEST), #compileStmts(THENSTMTS, .LLLExps))
 
     rule #if(@tlll(_, CODE), THEN:LLLExps, ELSE:LLLExps) => $if(CODE, $%seq(THEN), $%seq(ELSE));.LLLExps
 
@@ -769,7 +792,7 @@ module VIPER-LLL
 
     // e.g. for i in range(x, x + 10): ...
     rule #compileStmt(%for(NAME, %var(V), %binop(+, %var(V), ROUNDS:Int), STMTS))
-             => #for(#newLoopVar(NAME), #resolveExpr(%var(V)), ROUNDS, #compileStmts(STMTS, .LLLExps))
+             => #for(#newLoopVar(NAME), #compileExpr(%var(V)), ROUNDS, #compileStmts(STMTS, .LLLExps))
 
     rule #for(@taddr(%num, LOC:Int, _, _), @tlll(_, STARTCODE), ROUNDS, BODYCODE:LLLExps)
              => $repeat(LOC, STARTCODE, ROUNDS, $%seq(BODYCODE));.LLLExps
@@ -785,7 +808,7 @@ module VIPER-LLL
          <return> T </return>
 
     rule <k> #compileStmt(%return(E)) => #ifThenElse(T =/=K %void,
-                                                     #return(#resolveExpr(E), T),
+                                                     #return(#compileExpr(E), T),
                                                      #exception("Not expecting to return a value")) ... </k>
          <return> T </return>
 
@@ -803,7 +826,7 @@ module VIPER-LLL
  // -----------------------------------------------------------------------------------------------
     rule <k> #compileStmt(%send(TO, VALUE))
                  => #ifThenElse(CONSTANT ==K false,
-                                #send(#resolveExpr(TO), #resolveExpr(VALUE)),
+                                #send(#compileExpr(TO), #compileExpr(VALUE)),
                                 #exception("Cannot send ether inside a constant function")) ... </k>
          <constant> CONSTANT </constant>
 
@@ -842,7 +865,7 @@ module VIPER-LLL
          <internalSig> SIGS </internalSig>
       requires notBool NAME in keys(SIGS)
 
-    rule #log(ARGS, @event(EID, EPARAMS)) => #logAux(EID, ARGS, EPARAMS, .Exprs, .EventParams, .Exprs, .EventParams)
+    rule #log(ARGS, @event(EID, ENAME, EPARAMS)) => #logAux(EID, ARGS, EPARAMS, .Exprs, .EventParams, .Exprs, .EventParams)
 
     rule #logAux(EID, (ARG1, ARGS), (EPARAM1 EPARAMS), TARGS, TEPARAMS, DARGS, DEPARAMS)
              => #ifThenElse(#isTopic(EPARAM1),
@@ -857,42 +880,46 @@ module VIPER-LLL
     rule #logAux(EID, .Exprs, .EventParams, (TARG1, .Exprs), (TEPARAM1 .EventParams), DARGS, DEPARAMS)
            => #log2(#packLoggingData(DARGS, DEPARAMS),
                     EID,
-                    #packLoggingTopic(#resolveExpr(TARG1), TEPARAM1))
+                    #packLoggingTopic(#compileExpr(TARG1), TEPARAM1))
 
     // 2 topics
     rule #logAux(EID, .Exprs, .EventParams, (TARG1, TARG2, .Exprs), (TEPARAM1 TEPARAM2 .EventParams), DARGS, DEPARAMS)
            => #log3(#packLoggingData(DARGS, DEPARAMS),
                     EID,
-                    #packLoggingTopic(#resolveExpr(TARG1), TEPARAM1),
-                    #packLoggingTopic(#resolveExpr(TARG2), TEPARAM2))
+                    #packLoggingTopic(#compileExpr(TARG1), TEPARAM1),
+                    #packLoggingTopic(#compileExpr(TARG2), TEPARAM2))
 
     // 3 topics
     rule #logAux(EID, .Exprs, .EventParams, (TARG1, TARG2, TARG3, .Exprs), (TEPARAM1 TEPARAM2 TEPARAM3 .EventParams), DARGS, DEPARAMS)
            => #log4(#packLoggingData(DARGS, DEPARAMS),
                     EID,
-                    #packLoggingTopic(#resolveExpr(TARG1), TEPARAM1),
-                    #packLoggingTopic(#resolveExpr(TARG2), TEPARAM2),
-                    #packLoggintTopic(#resolveExpr(TARG3), TEPARAM3))
+                    #packLoggingTopic(#compileExpr(TARG1), TEPARAM1),
+                    #packLoggingTopic(#compileExpr(TARG2), TEPARAM2),
+                    #packLoggintTopic(#compileExpr(TARG3), TEPARAM3))
 
 
-    rule #log1((DATACODE, START, SIZE), EID) => $%seq(
-                                                  DATACODE;
-                                                  $log1(START, SIZE, EID);.LLLExps);.LLLExps
+    rule #log1(@loggingdata(DATACODE, START, SIZE), EID) => $%seq(
+                                                              DATACODE;
+                                                              $log1(START, SIZE, EID);.LLLExps
+                                                            );.LLLExps
 
-    rule #log2((DATACODE, START, SIZE), EID, @tlll(_, TOPIC1))
+    rule #log2(@loggingdata(DATACODE, START, SIZE), EID, @tlll(_, TOPIC1))
              => $%seq(
                   DATACODE;
-                  $log2(START, SIZE, EID, TOPIC1);.LLLExps);.LLLExps
+                  $log2(START, SIZE, EID, TOPIC1);.LLLExps
+                );.LLLExps
 
-    rule #log3((DATACODE, START, SIZE), EID, @tlll(_, TOPIC1), @tlll(_, TOPIC2))
+    rule #log3(@loggingdata(DATACODE, START, SIZE), EID, @tlll(_, TOPIC1), @tlll(_, TOPIC2))
              => $%seq(
                   DATACODE;
-                  $log3(START, SIZE, EID, TOPIC1, TOPIC2);.LLLExps);.LLLExps
+                  $log3(START, SIZE, EID, TOPIC1, TOPIC2);.LLLExps
+                );.LLLExps
 
-    rule #log4((DATACODE, START, SIZE), EID, @tlll(_, TOPIC1), @tlll(_, TOPIC2), @tlll(_, TOPIC3))
+    rule #log4(@loggingdata(DATACODE, START, SIZE), EID, @tlll(_, TOPIC1), @tlll(_, TOPIC2), @tlll(_, TOPIC3))
              => $%seq(
                   DATACODE;
-                  $log4(START, SIZE, EID, TOPIC1, TOPIC2, TOPIC3);.LLLExps);.LLLExps
+                  $log4(START, SIZE, EID, TOPIC1, TOPIC2, TOPIC3);.LLLExps
+                );.LLLExps
 
 
     syntax CPackedLoggingData ::= "#packLoggingData"    "(" Exprs        ","
@@ -903,18 +930,18 @@ module VIPER-LLL
                                                             Int /*size*/ ")"
  // -----------------------------------------------------------------------------
     rule #packLoggingData(DARGS, DEPARAMS) => #ifThenElse(#numOfExprs(DARGS) ==Int 0,
-                                                          ($pass, 0, 0),
+                                                          @loggingdata($pass, 0, 0),
                                                           #packLoggingDataAux(DARGS, DEPARAMS, .LLLExps, 0))
 
     rule #packLoggingDataAux(.Exprs, .EventParams, CODE, SIZE)
-             => ($%seq(CODE), #getFirstStoreLoc(CODE), SIZE)
+             => @loggingdata($%seq(CODE), #getFirstStoreLoc(CODE), SIZE)
 
     rule #packLoggingDataAux((DARG, DARGS), %eparam(_, T, _) DEPARAMS, CODE, SIZE)
-             => #packArgBy32Base(#newPlaceholder(T), #resolveExpr(DARG), T)
+             => #packArgBy32Base(#newPlaceholder(T), #compileExpr(DARG), T)
              ~> #packLoggingDataAux(DARGS, DEPARAMS, CODE, SIZE)
       requires isBaseType(T)
 
-    rule (ARGCODE, ARGSIZE) ~> #packLoggingDataAux(DARGS, DEPARAMS, CODE, TOTALSIZE)
+    rule @argby32(ARGCODE, ARGSIZE) ~> #packLoggingDataAux(DARGS, DEPARAMS, CODE, TOTALSIZE)
              => #packLoggingDataAux(DARGS, DEPARAMS, CODE ++LLL ARGCODE, TOTALSIZE +Int ARGSIZE)
 
 
@@ -929,65 +956,65 @@ module VIPER-LLL
 ///////////////////////////////////////////////////////////////////////////////
 
 
-    syntax CTypedLLLExp ::= "#resolveExpr" "(" Expr ")"
+    syntax CTypedLLLExp ::= "#compileExpr" "(" Expr ")"
  // ---------------------------------------------------
-    rule #resolveExpr(%self) => @tlll(%address, $address)
+    rule #compileExpr(%self) => @tlll(%address, $address)
 
 
     // Number
-    rule #resolveExpr(I:Int) => #ifThenElse(
+    rule #compileExpr(I:Int) => #ifThenElse(
                                   (I >=Int -2 ^Int 127 +Int 1) andBool (I <=Int 2 ^Int 127 -Int 1),
                                   @tlll(%num, I),
                                   #exception("Number out of range")
                                 )
 
-    rule #resolveExpr(%hex(STR)) => @tlll(%address, String2Base(STR, 16))
+    rule #compileExpr(%hex(STR)) => @tlll(%address, String2Base(STR, 16))
       requires lengthString(STR) ==Int 40
 
-    rule #resolveExpr(%hex(STR)) => @tlll(%bytes32, String2Base(STR, 16))
+    rule #compileExpr(%hex(STR)) => @tlll(%bytes32, String2Base(STR, 16))
       requires lengthString(STR) ==Int 64
 
 
     // Bool
-    rule #resolveExpr(true)  => @tlll(%bool, 1)
+    rule #compileExpr(true)  => @tlll(%bool, 1)
 
-    rule #resolveExpr(false)  => @tlll(%bool, 0)
+    rule #compileExpr(false)  => @tlll(%bool, 0)
 
 
     // Var
-    rule #resolveExpr(V) => #unwrapLocation(#lookupVar(V))
+    rule #compileExpr(V) => #unwrapLocation(#lookupVar(V))
 
 
     // Reserved Expr
-    rule #resolveExpr(%msg.sender)       => @tlll(%address, $caller)
+    rule #compileExpr(%msg.sender)       => @tlll(%address, $caller)
 
-    rule #resolveExpr(%msg.value)        => @tlll(%unitT(%num, %wei, false), $callvalue)
+    rule #compileExpr(%msg.value)        => @tlll(%unitT(%num, %wei, false), $callvalue)
 
-    rule #resolveExpr(%msg.gas)          => @tlll(%num, $gas)
+    rule #compileExpr(%msg.gas)          => @tlll(%num, $gas)
 
-    rule #resolveExpr(%block.difficulty) => @tlll(%num, $difficulty)
+    rule #compileExpr(%block.difficulty) => @tlll(%num, $difficulty)
 
-    rule #resolveExpr(%block.timestamp)  => @tlll(%unitT(%num, %sec, true), $timestamp)
+    rule #compileExpr(%block.timestamp)  => @tlll(%unitT(%num, %sec, true), $timestamp)
 
-    rule #resolveExpr(%block.coinbase)   => @tlll(%address, $coinbase)
+    rule #compileExpr(%block.coinbase)   => @tlll(%address, $coinbase)
 
-    rule #resolveExpr(%block.number)     => @tlll(%num, $number)
+    rule #compileExpr(%block.number)     => @tlll(%num, $number)
 
-    rule #resolveExpr(%block.prevhash)   => @tlll(%bytes32, $blockhash($sub($number, 1)))
+    rule #compileExpr(%block.prevhash)   => @tlll(%bytes32, $blockhash($sub($number, 1)))
 
-    rule #resolveExpr(%tx.origin)        => @tlll(%address, $origin)
+    rule #compileExpr(%tx.origin)        => @tlll(%address, $origin)
 
 
     // Reserved Func
-    rule #resolveExpr(%as_num128(EXPR)) => #asNum128(#resolveExpr(EXPR))
+    rule #compileExpr(%as_num128(EXPR)) => #asNum128(#compileExpr(EXPR))
 
-    rule #resolveExpr(%as_num256(EXPR)) => #asNum256(#resolveExpr(EXPR))
+    rule #compileExpr(%as_num256(EXPR)) => #asNum256(#compileExpr(EXPR))
 
-    rule #resolveExpr(%as_wei_value(EXPR, UNIT)) => #asWeiValue(#resolveExpr(EXPR), UNIT)
+    rule #compileExpr(%as_wei_value(EXPR, UNIT)) => #asWeiValue(#compileExpr(EXPR), UNIT)
 
-    rule #resolveExpr(%num256_add(LEFTE, RIGHTE)) => #num256Add(#resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+    rule #compileExpr(%num256_add(LEFTE, RIGHTE)) => #num256Add(#compileExpr(LEFTE), #compileExpr(RIGHTE))
 
-    rule #resolveExpr(%num256_sub(LEFTE, RIGHTE)) => #num256Sub(#resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+    rule #compileExpr(%num256_sub(LEFTE, RIGHTE)) => #num256Sub(#compileExpr(LEFTE), #compileExpr(RIGHTE))
 
 
     syntax CTypedLLLExp ::= "#asNum128"    "(" CTypedLLLExp ")"    [strict]
@@ -1054,7 +1081,8 @@ module VIPER-LLL
     rule #num256AddAux(LCODE, RCODE)
              => @tlll(%num256, $%seq(
                                  $assert($or($iszero(RCODE), $gt($add(LCODE, RCODE), LCODE)));
-                                 $add(LCODE, RCODE);.LLLExps))
+                                 $add(LCODE, RCODE);.LLLExps)
+                               )
 
 
     syntax CTypedLLLExp ::= "#num256Sub"    "(" CTypedLLLExp "," CTypedLLLExp ")"        [seqstrict]
@@ -1068,14 +1096,15 @@ module VIPER-LLL
     rule #num256SubAux(LCODE, RCODE)
              => @tlll(%num256, $%seq(
                                  $assert($ge(LCODE, RCODE));
-                                 $sub(LCODE, RCODE);.LLLExps))
+                                 $sub(LCODE, RCODE);.LLLExps
+                               ))
 
 
     // Arithmetic
     syntax CTypedLLLExp ::= "#binOp"    "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
     syntax CTypedLLLExp ::= "#binOpForPure" "(" BinOp "," TypedLLLExp "," TypedLLLExp ")"
  // -----------------------------------------------------------------------------------------------------
-    rule #resolveExpr(%binop(BOP, LEFTE, RIGHTE)) => #binOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+    rule #compileExpr(%binop(BOP, LEFTE, RIGHTE)) => #binOp(BOP, #compileExpr(LEFTE), #compileExpr(RIGHTE))
 
     rule #binOp(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE))
              => #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
@@ -1111,14 +1140,16 @@ module VIPER-LLL
                                                   $with($ans, $mul($l, $r),
                                                     $%seq(
                                                       $assert($or($eq($sdiv($ans, $l), $r), $not($l)));
-                                                      $sdiv($ans, @decimalDivisor);.LLLExps))))),
+                                                      $sdiv($ans, @decimalDivisor);.LLLExps
+                                                    ))))),
                     #ifThen((LT ==K %num andBool RT ==K %decimal) orBool (LT ==K %decimal andBool RT ==K %num),
                             @tlll(%decimal, $with($r, RCODE,
                                               $with($l, LCODE,
                                                 $with($ans, $mul($l, $r),
                                                   $%seq(
                                                     $assert($or($eq($sdiv($ans, $l), $r), $not($l)));
-                                                    $ans;.LLLExps))))))))
+                                                    $ans;.LLLExps
+                                                  ))))))))
 
     rule #binOpForPure(/, @tlll(LT, LCODE), @tlll(RT, RCODE))
              => #ifThenElse(RT ==K %num,
@@ -1135,7 +1166,7 @@ module VIPER-LLL
     syntax CTypedLLLExp ::= "#compareOp"    "(" CompareOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
     syntax CTypedLLLExp ::= "#compareOpAux" "(" CompareOp "," TypedLLLExp "," TypedLLLExp ")"
  // -------------------------------------------------------------------------------------------------------------
-    rule #resolveExpr(%compareop(COP, LEFTE, RIGHTE)) => #compareOp(COP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+    rule #compileExpr(%compareop(COP, LEFTE, RIGHTE)) => #compareOp(COP, #compileExpr(LEFTE), #compileExpr(RIGHTE))
 
     rule #compareOp(COP, @tlll(LT, LCODE), @tlll(RT, RCODE))
            => #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
@@ -1202,7 +1233,7 @@ module VIPER-LLL
     syntax CTypedLLLExp ::= "#boolOp" "(" BoolOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
     syntax CTypedLLLExp ::= "#boolOpAux" "(" BoolOp "," TypedLLLExp "," TypedLLLExp ")"
  // ----------------------------------------------------------------------------------------------------
-    rule #resolveExpr(%boolop(BOP, LEFTE, RIGHTE)) => #boolOp(BOP, #resolveExpr(LEFTE), #resolveExpr(RIGHTE))
+    rule #compileExpr(%boolop(BOP, LEFTE, RIGHTE)) => #boolOp(BOP, #compileExpr(LEFTE), #compileExpr(RIGHTE))
 
     rule #boolOp(BOP, @tlll(LT, LCODE), @tlll(RT, RCODE))
              => #ifThenElse((LT ==K %bool) andBool (RT ==K %bool),
@@ -1219,7 +1250,7 @@ module VIPER-LLL
     // Unary
     syntax CTypedLLLExp ::= "#unaryOp" "(" UnaryOp "," CTypedLLLExp ")"    [strict(2)]
  // ----------------------------------------------------------------------------------
-    rule #resolveExpr(%unaryop(UOP, EXPR)) => #unaryOp(UOP, #resolveExpr(EXPR))
+    rule #compileExpr(%unaryop(UOP, EXPR)) => #unaryOp(UOP, #compileExpr(EXPR))
 
     rule #unaryOp(%not, @tlll(T, CODE)) => @tlll(%bool, $iszero(CODE))
 
@@ -1243,20 +1274,77 @@ module VIPER-LLL
     rule #unwrapLocation(@taddr(T, LOC, true, _)) => @tlll(T, $sload(LOC))
 
 
-    syntax KItem       ::= "#cleanConfig"
- // -------------------------------------
-    rule <k> CODE:LLLExps ~> (#cleanConfig => .) ...</k>
-         <env> _ => .Map </env>
-         <nextMem> _ => @reservedMemPos </nextMem>
-         <placeholder> _ => 1 </placeholder>
-         <forvar> _ => .Set </forvar>
-         <return> _ => %void </return>
-         <constant> _ => false </constant>
-         <payable> _ => false </payable>                       [structural]
+// Internal Contract Call
+// ======================
 
 
-    syntax KItem       ::= "#exception" "(" String ")"
- // --------------------------------------------------
+    syntax CTypedLLLExp  ::= "#icall"    "(" Exprs "," FuncRecord ")"
+    syntax CTypedLLLExp  ::= "#icallAux" "(" CPackedArgData              ","
+                                             CTypedAddr /*return start*/ ","
+                                             Int       /*return width*/
+                                         ")"                     [seqstrict]
+ // ------------------------------------------------------------------------
+    rule <k> #compileExpr(%icall(FNAME, ARGS)) => #icall(ARGS, FUNCRECORD) ... </k>
+         <internalSig> FNAME |-> FUNCRECORD SIGS </internalSig>
+
+    // TODO: Is it necessary to enforce that functions cannot call functions defined later than themselves?
+    rule <k> #compileExpr(%icall(FNAME, _)) => #exception("Function not declared yet: " +String Id2String(FNAME)) ... </k>
+         <internalSig> SIGS </internalSig>
+      requires notBool FNAME in keys(SIGS)
+
+    // EVM: CALL GASCAP ACCTTO VALUE ARGSTART ARGWIDTH RETSTART RETWIDTH
+    rule <k> #icall(ARGS, @func(FUNCID, FNAME, PARAMS, T, _, _, _))
+            => #ifThen(#numOfExprs(ARGS) =/=K #numOfParams(PARAMS),
+                       #exception("# of args doesn't match # of params in function" +String Id2String(FNAME) +String
+                                  " expected: " +String Int2String(#numOfParams(PARAMS)) +String
+                                  ", actual: " +String Int2String(#numOfExprs(ARGS))))
+            ~> #icallAux(#packArguments(#newPlaceholder(%bytesT(#sizeOfParams(PARAMS) +Int 32)), FUNCID, ARGS, PARAMS),
+                         #newPlaceholder(T),
+                         #sizeOfType(T))
+         ... </k>
+
+    rule #icallAux(@argdata(CODE, ARGSWIDTH), @taddr(RETT, LOC, _, _), RETWIDTH)
+        => @tlll(RETT, $%seq(
+                         $assert($call($gas, $address, 0, CODE, ARGSWIDTH, LOC, RETWIDTH));
+                         LOC;.LLLExps
+                       ))
+      requires isBaseType(RETT)
+
+
+    syntax CPackedArgData  ::= "#packArguments"    "(" CTypedAddr        ","
+                                                       Int   /*func id*/ ","
+                                                       Exprs             ","
+                                                       Params
+                                                   ")"           [strict(1)]
+    syntax CPackedArgData  ::= "#packArgumentsAux" "(" Int   /*arg loc*/ ","
+                                                       Exprs             ","
+                                                       Params            ","
+                                                       LLLExps           ","
+                                                       Int /*arg start*/ ","
+                                                       Int /*arg width*/ ","
+                                                       Bool  /*need pos?(contains byte array)*/
+                                                   ")"
+    syntax CLLLExps        ::= "#packArgumentBase" "(" TypedAddr         ","
+                                                       CTypedLLLExp
+                                                   ")"           [strict(2)]
+ // -------------------------------------------------------------- -------------------------------------
+    rule #packArguments(@taddr(T, LOC, GLOBAL, MUTABLE), FUNCID, ARGS, PARAMS)
+        => #packArgumentsAux(LOC +Int 32, ARGS, PARAMS, $mstore(LOC, FUNCID);.LLLExps,
+                             LOC +Int 28, #sizeOfParams(PARAMS) +Int 4, false)
+
+    rule #packArgumentsAux(_, .Exprs, .Params, RESULTCODE, ARGSSTART, ARGSWIDTH, false)
+        => @argdata($%seq(RESULTCODE ++LLL (ARGSSTART;.LLLExps)), ARGSWIDTH)
+
+    rule #packArgumentsAux(ARGLOC, (ARG, ARGS), (%param(_, T) PARAMS), RESULTCODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
+        => #packArgumentBase(@taddr(T, ARGLOC, false, true), #compileExpr(ARG))
+        ~> #packArgumentsAux(ARGLOC, ARGS, PARAMS, RESULTCODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
+      requires isBaseType(T)
+
+    rule #packArgumentBase(@taddr(PARAMT, LOC, GLOBAL, MUTABLE), TCODE)
+        => #mkSetter(@taddr(PARAMT, LOC, GLOBAL, MUTABLE), TCODE)
+
+    rule CODE:LLLExps ~> #packArgumentsAux(ARGLOC, ARGS, PARAMS, RESULTCODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
+        => #packArgumentsAux(ARGLOC +Int 32, ARGS, PARAMS, RESULTCODE ++LLL CODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1266,7 +1354,7 @@ module VIPER-LLL
 
     syntax Bool ::= "#isInitFunc" "(" Id ")"    [function]
  // ------------------------------------------------------
-    rule #isInitFunc(NAME) => NAME ==K __init__
+    rule #isInitFunc(FNAME) => FNAME ==K __init__
 
 
     syntax Bool ::= "#isTypeOf" "(" Type "," Type /*target type*/ ")"    [function]
@@ -1289,6 +1377,14 @@ module VIPER-LLL
     syntax Bool ::= "#isTopic" "(" EventParam ")"    [function]
  // -----------------------------------------------------------
     rule #isTopic(%eparam(_, _, ISTOPIC)) => ISTOPIC
+
+
+// Exception
+// ======================
+
+    syntax KItem       ::= "#exception" "(" String ")"
+ // --------------------------------------------------
+
 
 
 // List Concatenation
@@ -1457,8 +1553,8 @@ module VIPER-LLL
     syntax Int     ::= "#computeFuncId"  "(" Id     "," Params ")"    [function]
     syntax String  ::= "#computeFuncSig" "(" String "," Params ")"    [function]
  // ----------------------------------------------------------------------------
-    rule #computeFuncId(NAME, PARAMS)
-        => String2Base(substrString(Keccak256(#computeFuncSig(Id2String(NAME) +String "(", PARAMS)), 0, 8), 16)
+    rule #computeFuncId(FNAME, PARAMS)
+        => String2Base(substrString(Keccak256(#computeFuncSig(Id2String(FNAME) +String "(", PARAMS)), 0, 8), 16)
 
     rule #computeFuncSig(SIG, %param(_,T) PARAM1 PARAMS)
         => #computeFuncSig(SIG +String #canonicalizeType(T, false) +String "," , PARAM1 PARAMS)
@@ -1492,7 +1588,7 @@ module VIPER-LLL
       requires notBool %svar(NAME) in keys(GLOBAL)
 
     rule #lookupVar(%mapelem(V, EXPR))
-        => #computeVarOffset(#lookupVar(V), #resolveExpr(EXPR))
+        => #computeVarOffset(#lookupVar(V), #compileExpr(EXPR))
 
 
     syntax CTypedAddr ::= "#computeVarOffset"    "(" CTypedAddr   /*parent*/ ","
@@ -1578,8 +1674,8 @@ module VIPER-LLL
 // ======
 
 
-    syntax Int    ::= "#convertToWei" "(" Id ")"    [function]
- // ----------------------------------------------------------
+    syntax Int    ::= "#convertToWei" "(" Id ")"  [function]
+ // --------------------------------------------------------
     rule #convertToWei(wei)      => 1
 
     rule #convertToWei(kwei)     => 10 ^Int 3
@@ -1601,35 +1697,42 @@ module VIPER-LLL
     rule #convertToWei(ether)    => 10 ^Int 18
 
 
-    syntax KItem  ::= "#ifThen" "(" Bool /*condition*/ "," K /*then*/ ")"    [function]
- // -----------------------------------------------------------------------------------
+    syntax KItem  ::= "#ifThen" "(" Bool /*condition*/ "," K /*then*/ ")"  [function]
+ // ---------------------------------------------------------------------------------
     rule #ifThen(true, THENCLAUSE) => THENCLAUSE
     rule #ifThen(false, THENCLAUSE) => .
 
 
-    syntax KItem  ::= "#ifThenElse" "(" Bool /*condition*/ "," K /*then*/ "," K /*else*/ ")"    [function]
- // ------------------------------------------------------------------------------------------------------
+    syntax KItem  ::= "#ifThenElse" "(" Bool /*condition*/ "," K /*then*/ "," K /*else*/ ")"  [function]
+ // ----------------------------------------------------------------------------------------------------
     rule #ifThenElse(true, THENCLAUSE, ELSECLAUSE) => THENCLAUSE
     rule #ifThenElse(false, THENCLAUSE, ELSECLAUSE) => ELSECLAUSE
 
 
-    syntax Int    ::= "#numOfExprs" "(" Exprs ")"
- // ---------------------------------------------
+    syntax Int  ::= "#numOfExprs" "(" Exprs ")"  [function]
+ // -------------------------------------------------------
     rule #numOfExprs(.Exprs) => 0
 
     rule #numOfExprs(EXPR, EXPRS) => 1 +Int #numOfExprs(EXPRS)
 
 
-    syntax CPackedArgBy32 ::= "#packArgBy32Base"    "(" CTypedAddr   ","
-                                                        CTypedLLLExp ","
-                                                        Type         ")"     [seqstrict(1,2)]
-    syntax CPackedArgBy32 ::= "#packArgBy32BaseAux" "(" Int          ","
-                                                        TypedLLLExp  ")"
- // -----------------------------------------------------------------------------------------
+    syntax Int  ::= "#numOfParams" "(" Params ")"  [function]
+ // ---------------------------------------------------------
+    rule #numOfParams(.Params) => 0
+
+    rule #numOfParams(PARAM PARAMS) => 1 +Int #numOfParams(PARAMS)
+
+
+    syntax CPackedArgBy32  ::= "#packArgBy32Base"    "(" CTypedAddr   ","
+                                                         CTypedLLLExp ","
+                                                         Type         ")"  [seqstrict(1,2)]
+    syntax CPackedArgBy32  ::= "#packArgBy32BaseAux" "(" Int          ","
+                                                         TypedLLLExp  ")"
+ // ---------------------------------------------------------------------------------------
     rule #packArgBy32Base(@taddr(_, LOC:Int, _, _), TCODE, ARGTYPE)
         => #packArgBy32BaseAux(LOC, #baseTypeConvert(TCODE, ARGTYPE))
 
-    rule #packArgBy32BaseAux(LOC, @tlll(_, CODE)) => ($mstore(LOC, CODE); .LLLExps, 32)
+    rule #packArgBy32BaseAux(LOC, @tlll(_, CODE)) => @argby32($mstore(LOC, CODE);.LLLExps, 32)
 
 
     syntax Int ::= "#getFirstStoreLoc" "(" LLLExps ")"  [function]
