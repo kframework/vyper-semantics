@@ -9,29 +9,24 @@
     %assign(%var(_sender), %msg.sender)
     %assign(%mapelem(%svar(balances), %var(_sender)), %num256_add(%mapelem(%svar(balances), %var(_sender)), %var(_value)))
     %assign(%svar(num_issued), %num256_add(%svar(num_issued), %var(_value)))
-    %log(Transfer, %hex("0000000000000000000000000000000000000000"), %var(_sender), %var(_value))
-  )
+    %log(Transfer, %hex("0000000000000000000000000000000000000000"), %var(_sender), %var(_value)))
   %fdecl(%@public, withdraw, %param(_value, %num256) , %bool,
     %assign(%var(_sender), %msg.sender)
     %assign(%mapelem(%svar(balances), %var(_sender)), %num256_sub(%mapelem(%svar(balances), %var(_sender)), %var(_value)))
     %assign(%svar(num_issued), %num256_sub(%svar(num_issued), %var(_value)))
     %send(%var(_sender), %as_wei_value(%as_num128(%var(_value)), wei))
     %log(Transfer, %var(_sender), %hex("0000000000000000000000000000000000000000"), %var(_value))
-    %return(true)
-  )
+    %return(true))
   %fdecl(%@public %@constant, totalSupply, , %num256,
-    %return(%svar(num_issued))
-  )
+    %return(%svar(num_issued)))
   %fdecl(%@public %@constant, balanceOf, %param(_owner, %address), %num256,
-    %return(%mapelem(%svar(balances), %var(_owner)))
-  )
+    %return(%mapelem(%svar(balances), %var(_owner))))
   %fdecl(%@public, transfer, %param(_to, %address) %param(_value, %num256), %bool,
     %assign(%var(_sender), %msg.sender)
     %assign(%mapelem(%svar(balances), %var(_sender)), %num256_sub(%mapelem(%svar(balances), %var(_sender)), %var(_value)))
     %assign(%mapelem(%svar(balances), %var(_to)), %num256_add(%mapelem(%svar(balances), %var(_to)), %var(_value)))
     %log(Transfer, %var(_sender), %var(_to), %var(_value))
-    %return(true)
-  )
+    %return(true))
   %fdecl(%@public, transferFrom, %param(_from, %address) %param(_to, %address) %param(_value, %num256), %bool,
     %assign(%var(_sender), %msg.sender)
     %assign(%var(allowance), %mapelem(%mapelem(%svar(allowances), %var(_from)), %var(_sender)))
@@ -40,16 +35,13 @@
     %assign(%mapelem(%mapelem(%svar(allowances), %var(_from)), %var(_sender)),
             %num256_sub(%var(allowance), %var(_value)))
     %log(Transfer, %var(_from), %var(_to), %var(_value))
-    %return(true)
-  )
+    %return(true))
   %fdecl(%@public, approve, %param(_spender, %address) %param(_value, %num256), %bool,
     %assign(%var(_sender), %msg.sender)
     %assign(%mapelem(%mapelem(%svar(allowances), %var(_sender)), %var(_spender)), %var(_value))
     %log(Approval, %var(_sender), %var(_spender), %var(_value))
-    %return(true)
-  )
+    %return(true))
   %fdecl(%@public %@constant, allowance, %param(_owner, %address) %param(_spender, %address), %num256,
-    %return(%mapelem(%mapelem(%svar(allowances), %var(_owner)), %var(_spender)))
-  )
+    %return(%mapelem(%mapelem(%svar(allowances), %var(_owner)), %var(_spender))))
 )
 
