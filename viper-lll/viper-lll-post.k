@@ -7,7 +7,7 @@ module VIPER-LLL-POST
     syntax LLLExp   ::= "#convertSeqExp" "(" LLLExps ")"   [function]
  // -----------------------------------------------------------------
     rule $%seq(EXPRS) => #convertSeqExp(EXPRS)             [anywhere]
-    rule #convertSeqExp(EXPR; .LLLExps) => EXPR
-    rule #convertSeqExp(EXPR; (EXPR1; EXPRS)) => $seq(EXPR, #convertSeqExp(EXPR1; EXPRS))
+    rule #convertSeqExp(EXPR, .LLLExps) => EXPR
+    rule #convertSeqExp(EXPR, (EXPR1, EXPRS)) => $seq(EXPR, #convertSeqExp(EXPR1, EXPRS))
 
 endmodule 

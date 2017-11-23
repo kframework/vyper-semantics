@@ -134,17 +134,17 @@ module VIPER-LLL
 
     rule <k> #compileViperToLLLAux(INITIALIZER, INITFUNC, OTHERFUNCS) => . ... </k>
          <lll> _ => $%seq(
-                      ($%seq(INITIALIZER);.LLLExps) ++LLL INITFUNC ++LLL
+                      ($%seq(INITIALIZER),.LLLExps) ++LLL INITFUNC ++LLL
                       ($return(
                          0,
-                         $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0));.LLLExps)
+                         $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0)),.LLLExps)
                     ) </lll>
 
     rule <k> #compileViperToLLLAux(INITIALIZER, OTHERFUNCS) => . ... </k>
          <lll> _ => $%seq(
                       $return(
                         0,
-                        $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0));.LLLExps
+                        $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0)),.LLLExps
                     ) </lll>
 
 
@@ -398,13 +398,12 @@ module VIPER-LLL
     syntax LLLExps  ::= "#initializer_lll"      [function]
  // ------------------------------------------------------
     rule #initializer_lll => $%seq(
-                               $mstore(28 , $calldataload(0));
-                               $mstore(@addrSizePos , 2 ^Int 160);
-                               $mstore(@maxNumPos , 2 ^Int 127 -Int 1);
-                               $mstore(@minNumPos , -2 ^Int 127);
-                               $mstore(@maxDecimalPos, (2 ^Int 127 -Int 1) *Int 10000000000);
-                               $mstore(@minDecimalPos, (-2 ^Int 127) *Int 10000000000)
-                             );.LLLExps
+                               $mstore(28 , $calldataload(0)),
+                               $mstore(@addrSizePos , 2 ^Int 160),
+                               $mstore(@maxNumPos , 2 ^Int 127 -Int 1),
+                               $mstore(@minNumPos , -2 ^Int 127),
+                               $mstore(@maxDecimalPos, (2 ^Int 127 -Int 1) *Int 10000000000),
+                               $mstore(@minDecimalPos, (-2 ^Int 127) *Int 10000000000),.LLLExps),.LLLExps
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -446,12 +445,12 @@ module VIPER-LLL
 
 
     rule #compileFuncAux(COPYARG, CHECKDECS, FILLPARAMS, STMTS, _, true)
-        => $%seq(COPYARG ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL ($%seq(STMTS);.LLLExps));.LLLExps
+        => $%seq(COPYARG ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL ($%seq(STMTS),.LLLExps)),.LLLExps
 
     rule #compileFuncAux(COPYARG, CHECKDECS, FILLPARAMS, STMTS, FUNCID, false)
         => $if(
              $eq($mload(0), FUNCID),
-             $%seq(COPYARG ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL STMTS ++LLL ($stop;.LLLExps)));.LLLExps
+             $%seq(COPYARG ++LLL CHECKDECS ++LLL FILLPARAMS ++LLL STMTS ++LLL ($stop,.LLLExps))),.LLLExps
 
 
 // Copy Arguments
@@ -460,17 +459,17 @@ module VIPER-LLL
 
     syntax CLLLExps ::= "#copyArg" "(" Params "," Bool /*init?*/ ")"
  // ----------------------------------------------------------------
-    rule #copyArg(.Params, _) => $pass;.LLLExps
+    rule #copyArg(.Params, _) => $pass,.LLLExps
 
     rule <k> #copyArg(PARAMS, true) => $codecopy(@reservedMemPos,
                                                  $codelen,
-                                                 #sizeOfParams(PARAMS));.LLLExps ... </k>
+                                                 #sizeOfParams(PARAMS)),.LLLExps ... </k>
          <nextMem> M => M +Int #sizeOfParams(PARAMS) </nextMem>
       requires #sizeOfParams(PARAMS) >Int 0
 
     rule <k> #copyArg(PARAMS, false) => $calldatacopy(@reservedMemPos,
                                                       4,
-                                                      #sizeOfParams(PARAMS));.LLLExps ... </k>
+                                                      #sizeOfParams(PARAMS)),.LLLExps ... </k>
          <nextMem> M => M +Int #sizeOfParams(PARAMS) </nextMem>
       requires #sizeOfParams(PARAMS) >Int 0
 
@@ -487,9 +486,9 @@ module VIPER-LLL
 
     rule #checkPayable(true) => .LLLExps
 
-    rule #checkPayable(false) => $assert($iszero($callvalue));.LLLExps
+    rule #checkPayable(false) => $assert($iszero($callvalue)),.LLLExps
 
-    rule #checkInternal(true) => $assert($eq($caller, $address));.LLLExps
+    rule #checkInternal(true) => $assert($eq($caller, $address)),.LLLExps
 
     rule #checkInternal(false) => .LLLExps
 
@@ -532,31 +531,26 @@ module VIPER-LLL
     rule #mkClamper(%num, DPOS, MPOS, ISINIT) => $clamp(
                                                    $mload(@minNumPos),
                                                    #mkDataDecl(DPOS, ISINIT),
-                                                   $mload(@maxNumPos)
-                                                 );.LLLExps
+                                                   $mload(@maxNumPos)),.LLLExps
 
     rule #mkClamper(%unitT(%num, _, _), DPOS, MPOS, ISINIT) => $clamp(
                                                                  $mload(@minNumPos),
                                                                  #mkDataDecl(DPOS, ISINIT),
-                                                                 $mload(@maxNumPos)
-                                                               );.LLLExps
+                                                                 $mload(@maxNumPos)),.LLLExps
 
-    rule #mkClamper(%bool, DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), 2);.LLLExps
+    rule #mkClamper(%bool, DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), 2),.LLLExps
 
-    rule #mkClamper(%address, DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), $mload(@addrSizePos));.LLLExps
+    rule #mkClamper(%address, DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), $mload(@addrSizePos)),.LLLExps
 
     rule #mkClamper(%bytesT(L), DPOS, MPOS, ISINIT)
         => $%seq(
-             #mkCopier(MPOS, #mkDataDecl(DPOS, ISINIT), 32 +Int L, ISINIT);
+             #mkCopier(MPOS, #mkDataDecl(DPOS, ISINIT), 32 +Int L, ISINIT),
              $assert(
                $le(
                  $calldataload($add(4, #mkDataDecl(DPOS, ISINIT))),
-                 L
-                )
-             )
-           );.LLLExps
+                 L)),.LLLExps),.LLLExps
 
-    rule #mkClamper(%listT(T, N), DPOS, MPOS, ISINIT) => $%seq(#mkClamperListT(N, T, DPOS, MPOS, ISINIT));.LLLExps
+    rule #mkClamper(%listT(T, N), DPOS, MPOS, ISINIT) => $%seq(#mkClamperListT(N, T, DPOS, MPOS, ISINIT)),.LLLExps
 
     rule #mkClamperListT(1, T, DPOS, MPOS, ISINIT) => #mkClamper(T, DPOS, MPOS, ISINIT)
 
@@ -565,17 +559,17 @@ module VIPER-LLL
                 #mkClamperListT(N -Int 1, T, DPOS +Int #sizeOfType(T), MPOS +Int #sizeOfType(T), ISINIT)
       requires N >Int 1
 
-    rule #mkClamper(%decimal, _, _, _) => $pass;.LLLExps
+    rule #mkClamper(%decimal, _, _, _) => $pass,.LLLExps
 
-    rule #mkClamper(%unitT(%decimal, _, _), _, _, _) => $pass;.LLLExps
+    rule #mkClamper(%unitT(%decimal, _, _), _, _, _) => $pass,.LLLExps
 
-    rule #mkClamper(%num256, _, _, _) => $pass;.LLLExps
+    rule #mkClamper(%num256, _, _, _) => $pass,.LLLExps
 
-    rule #mkClamper(%bytes32, _, _, _) => $pass;.LLLExps
+    rule #mkClamper(%bytes32, _, _, _) => $pass,.LLLExps
 
-    rule #mkClamper(%mapT(_, _), _, _, _) => $pass;.LLLExps
+    rule #mkClamper(%mapT(_, _), _, _, _) => $pass,.LLLExps
 
-    rule #mkClamper(%structT(_), _, _, _) => $pass;.LLLExps
+    rule #mkClamper(%structT(_), _, _, _) => $pass,.LLLExps
 
     rule #mkCopier(MPOS, POS, SIZE, true) => $codecopy(MPOS, $add($codelen, POS), SIZE)
 
@@ -619,20 +613,20 @@ module VIPER-LLL
 
     syntax CLLLExps ::= "#compileStmt" "(" Stmt ")"
  // -------------------------------------------------------
-    rule #compileStmt(%break) => $break;.LLLExps
+    rule #compileStmt(%break) => $break,.LLLExps
 
-    rule #compileStmt(%pass) => $pass;.LLLExps
+    rule #compileStmt(%pass) => $pass,.LLLExps
 
-    rule #compileStmt(%throw) => $assert(0);.LLLExps
+    rule #compileStmt(%throw) => $assert(0),.LLLExps
 
 
 // Annotated Assignment
 // ====================
 
 
-    rule #compileStmt(%vdecl(NAME, T)) => #newVar(NAME, T) ~> $pass;.LLLExps
+    rule #compileStmt(%vdecl(NAME, T)) => #newVar(NAME, T) ~> $pass,.LLLExps
 
-    rule (@taddr(T, LOC, LOCATTR) => .) ~> $pass;.LLLExps
+    rule (@taddr(T, LOC, LOCATTR) => .) ~> $pass,.LLLExps
 
 
 // Assignment
@@ -663,9 +657,9 @@ module VIPER-LLL
          <constant> CONSTANT </constant>
 
 
-    syntax CLLLExps ::= "#mkSetter"     "(" TypedLLLExp  /*left variable loc*/  ","
-                                            TypedLLLExp /*right compiled Expr*/ ")"
- // ---------------------------------------------------------------------------------
+    syntax CLLLExps ::= "#mkSetter" "(" TypedLLLExp  /*left variable loc*/  ","
+                                        TypedLLLExp /*right compiled Expr*/ ")"
+ // ---------------------------------------------------------------------------
     rule #mkSetter(@tlll(LT, LOC, LOCATTR), RTCODE)
         => #mkSetterBase(@tlll(LT, LOC, LOCATTR),
                          #baseTypeConvert(RTCODE, LT))
@@ -685,10 +679,10 @@ module VIPER-LLL
  // ----------------------------------------------------------------------
 
     rule #mkSetterBase(@tlll(_, LOC, @locattr(@storage, _)), @tlll(_, CODE, _))
-        => $sstore(LOC, CODE);.LLLExps
+        => $sstore(LOC, CODE),.LLLExps
 
     rule #mkSetterBase(@tlll(_, LOC, @locattr(@memory, _)), @tlll(_, CODE, _))
-        => $mstore(LOC, CODE);.LLLExps
+        => $mstore(LOC, CODE),.LLLExps
 
     // TODO: figure out an efficient way to copy byte array
 
@@ -709,7 +703,7 @@ module VIPER-LLL
 // ==============
 
 
-    rule #compileStmt(%augassign(OP, V, E)) => #augassign(OP, #lookupVar(V), #compileExpr(E))
+    rule #compileStmt(%augassign(OP, V, E)) => #augassign(OP, #compileLocExpr(V), #compileValueExpr(E))
 
 
     syntax CLLLExps ::= "#augassign"    "(" AugAssignOp                     ","
@@ -734,11 +728,26 @@ module VIPER-LLL
 
     rule #augassignAux(OP, @tlll(LT, LOC, @locattr(@storage, MUTABLE)), RTCODE)
         => #desugarAugAssign(@tlll(LT, LOC, @locattr(@storage, MUTABLE)),
-                             #convertToBinaryArith(OP, @tlll(LT, $sload($stloc), @none), RTCODE))
+                             #convertToBinaryArith(OP, @tlll(LT, $sload($_stloc), @none), RTCODE))
 
     rule #augassignAux(OP, @tlll(LT, LOC, @locattr(@memory, MUTABLE)), RTCODE)
         => #desugarAugAssign(@tlll(LT, LOC, @locattr(@memory, MUTABLE)),
-                             #convertToBinaryArith(OP, @tlll(LT, $mload($mloc), @none), RTCODE))
+                             #convertToBinaryArith(OP, @tlll(LT, $mload($_mloc), @none), RTCODE))
+
+
+    syntax CTypedLLLExp ::= "#convertToBinaryArith" "(" AugAssignOp           ","
+                                                        TypedLLLExp  /*left*/ ","
+                                                        TypedLLLExp  /*right*/")"
+ // ------------------------------------------------------------------------------
+    rule #convertToBinaryArith(+=, LTCODE, RTCODE) => #binOp(+, LTCODE, RTCODE)
+
+    rule #convertToBinaryArith(-=, LTCODE, RTCODE) => #binOp(-, LTCODE, RTCODE)
+
+    rule #convertToBinaryArith(*=, LTCODE, RTCODE) => #binOp(*, LTCODE, RTCODE)
+
+    rule #convertToBinaryArith(/=, LTCODE, RTCODE) => #binOp(/, LTCODE, RTCODE)
+
+    rule #convertToBinaryArith(%=, LTCODE, RTCODE) => #binOp(%, LTCODE, RTCODE)
 
 
     syntax CLLLExps ::= "#desugarAugAssign"    "(" TypedLLLExp              ","
@@ -753,25 +762,10 @@ module VIPER-LLL
         => #desugarAugAssignAux(LOC, TARGET, #baseTypeConvert(RTCODE, LT))
 
     rule #desugarAugAssignAux(LOC, @storage, @tlll(_, CODE, _))
-        => $with($stloc, LOC, $sstore($stloc, CODE));.LLLExps
+        => $with($_stloc, LOC, $sstore($_stloc, CODE)),.LLLExps
 
     rule #desugarAugAssignAux(LOC, @memory, @tlll(_, CODE, _))
-        => $with($mloc, LOC, $mstore($mloc, CODE));.LLLExps
-
-
-    syntax CTypedLLLExp ::= "#convertToBinaryArith" "(" AugAssignOp           ","
-                                                        TypedLLLExp  /*left*/ ","
-                                                        TypedLLLExp  /*right*/")"
- // ------------------------------------------------------------------------------
-    rule #convertToBinaryArith(+=, LEXP, REXP) => #binOp(+, LEXP, REXP)
-
-    rule #convertToBinaryArith(-=, LEXP, REXP) => #binOp(-, LEXP, REXP)
-
-    rule #convertToBinaryArith(*=, LEXP, REXP) => #binOp(*, LEXP, REXP)
-
-    rule #convertToBinaryArith(/=, LEXP, REXP) => #binOp(/, LEXP, REXP)
-
-    rule #convertToBinaryArith(%=, LEXP, REXP) => #binOp(%, LEXP, REXP)
+        => $with($_mloc, LOC, $mstore($_mloc, CODE)),.LLLExps
 
 
     // if
@@ -789,9 +783,9 @@ module VIPER-LLL
 
     rule #compileStmt(%if(TEST, THENSTMTS)) => #if(#compileExpr(TEST), #compileStmts(THENSTMTS, .LLLExps))
 
-    rule #if(@tlll(_, CODE, _), THEN:LLLExps, ELSE:LLLExps) => $if(CODE, $%seq(THEN), $%seq(ELSE));.LLLExps
+    rule #if(@tlll(_, CODE, _), THEN:LLLExps, ELSE:LLLExps) => $if(CODE, $%seq(THEN), $%seq(ELSE)),.LLLExps
 
-    rule #if(@tlll(_, CODE, _), THEN:LLLExp) => $if(CODE, $%seq(THEN));.LLLExps
+    rule #if(@tlll(_, CODE, _), THEN:LLLExp) => $if(CODE, $%seq(THEN)),.LLLExps
 
 
 // For Loop
@@ -818,7 +812,7 @@ module VIPER-LLL
                                ")"         [seqstrict(1,2,4)]
  // ---------------------------------------------------------
     rule #for(@tlll(%num, LOC:Int, _), @tlll(_, STARTCODE, _), ROUNDS, BODYCODE:LLLExps)
-        => $repeat(LOC, STARTCODE, ROUNDS, $%seq(BODYCODE));.LLLExps
+        => $repeat(LOC, STARTCODE, ROUNDS, $%seq(BODYCODE)),.LLLExps
 
 
 // Return
@@ -847,7 +841,7 @@ module VIPER-LLL
  // --------------------------------------------------------------
     rule #returnBase(@tlll(T, CODE, _), RETURNTYPE)
              => #ifThenElse(T ==K RETURNTYPE,
-                            $%seq($mstore(0, CODE); $return(0, 32);.LLLExps);.LLLExps,
+                            $%seq($mstore(0, CODE), $return(0, 32),.LLLExps),.LLLExps,
                             #exception("Unsupported type conversion."))
 
 
@@ -864,7 +858,7 @@ module VIPER-LLL
     syntax CLLLExps ::= "#send" "(" CTypedLLLExp /*to*/ "," CTypedLLLExp /*value*/ ")"  [seqstrict]
  // -----------------------------------------------------------------------------------------------
     rule #send(@tlll(%address, TOCODE, _), @tlll(%unitT(%num, %wei, _), VALUECODE, _))
-             => $assert($call(0, TOCODE, VALUECODE, 0, 0, 0, 0)); .LLLExps
+             => $assert($call(0, TOCODE, VALUECODE, 0, 0, 0, 0)),.LLLExps
 
 
 // Log
@@ -935,27 +929,27 @@ module VIPER-LLL
 
 
     rule #log1(@loggingdata(DATACODE, START, SIZE), EID) => $%seq(
-                                                              DATACODE;
-                                                              $log1(START, SIZE, EID);.LLLExps
-                                                            );.LLLExps
+                                                              DATACODE,
+                                                              $log1(START, SIZE, EID),.LLLExps
+                                                            ),.LLLExps
 
     rule #log2(@loggingdata(DATACODE, START, SIZE), EID, @tlll(_, TOPIC1, _))
              => $%seq(
-                  DATACODE;
-                  $log2(START, SIZE, EID, TOPIC1);.LLLExps
-                );.LLLExps
+                  DATACODE,
+                  $log2(START, SIZE, EID, TOPIC1),.LLLExps
+                ),.LLLExps
 
     rule #log3(@loggingdata(DATACODE, START, SIZE), EID, @tlll(_, TOPIC1, _), @tlll(_, TOPIC2, _))
              => $%seq(
-                  DATACODE;
-                  $log3(START, SIZE, EID, TOPIC1, TOPIC2);.LLLExps
-                );.LLLExps
+                  DATACODE,
+                  $log3(START, SIZE, EID, TOPIC1, TOPIC2),.LLLExps
+                ),.LLLExps
 
     rule #log4(@loggingdata(DATACODE, START, SIZE), EID, @tlll(_, TOPIC1, _), @tlll(_, TOPIC2, _), @tlll(_, TOPIC3, _))
              => $%seq(
-                  DATACODE;
-                  $log4(START, SIZE, EID, TOPIC1, TOPIC2, TOPIC3);.LLLExps
-                );.LLLExps
+                  DATACODE,
+                  $log4(START, SIZE, EID, TOPIC1, TOPIC2, TOPIC3),.LLLExps
+                ),.LLLExps
 
 
     syntax CPackedLoggingData ::= "#packLoggingData"    "(" Exprs        ","
@@ -999,6 +993,8 @@ module VIPER-LLL
     rule #compileValueExpr(EXPR) => #compileValueExprAux(#compileExpr(EXPR))
 
     rule #compileValueExprAux(TCODE) => #unwrapLoc(TCODE)
+
+
 
 
     // Compile an expression that represents an address in memory or storage
@@ -1141,9 +1137,8 @@ module VIPER-LLL
 
     rule #num256AddAux(LCODE, RCODE)
              => @tlll(%num256, $%seq(
-                                 $assert($or($iszero(RCODE), $gt($add(LCODE, RCODE), LCODE)));
-                                 $add(LCODE, RCODE);.LLLExps
-                               ), @none)
+                                 $assert($or($iszero(RCODE), $gt($add(LCODE, RCODE), LCODE))),
+                                 $add(LCODE, RCODE),.LLLExps), @none)
 
 
     syntax CTypedLLLExp ::= "#num256Sub"    "(" CTypedLLLExp "," CTypedLLLExp ")"        [seqstrict]
@@ -1156,73 +1151,99 @@ module VIPER-LLL
 
     rule #num256SubAux(LCODE, RCODE)
              => @tlll(%num256, $%seq(
-                                 $assert($ge(LCODE, RCODE));
-                                 $sub(LCODE, RCODE);.LLLExps
-                               ), @none)
+                                 $assert($ge(LCODE, RCODE)),
+                                 $sub(LCODE, RCODE),.LLLExps), @none)
 
 
-    // Arithmetic
-    syntax CTypedLLLExp ::= "#binOp"    "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
-    syntax CTypedLLLExp ::= "#binOpForPure" "(" BinOp "," TypedLLLExp "," TypedLLLExp ")"
- // -----------------------------------------------------------------------------------------------------
-    rule #compileExpr(%binop(BOP, LEFTE, RIGHTE)) => #binOp(BOP, #compileExpr(LEFTE), #compileExpr(RIGHTE))
+// Arithmetic
+// ==========
 
+
+    rule #compileExpr(%binop(BOP, LEXPR, REXPR))
+        => #binOp(BOP, #compileValueExpr(LEXPR), #compileValueExpr(REXPR))
+
+
+    syntax CTypedLLLExp ::= "#binOp"     "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
+ // ------------------------------------------------------------------------------------------------------
     rule #binOp(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
              => #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
                         #exception("Unsupported types for arithmetic op"))
              ~> #ifThenElse(isPureNumType(LT) andBool isPureNumType(RT),
-                            #clampArithResult(#binOpForPure(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))),
+                            #binOpPure(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR)),
                             #exception("Do not support unit type yet."))
+             ~> #clampArithResult
 
-    rule #binOpForPure(+, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
-             => #ifThenElse(LT ==K RT,
-                            @tlll(LT, $add(LCODE, RCODE), @none),
-                  #ifThenElse(LT ==K %num andBool RT ==K %decimal,
-                              @tlll(%decimal, $add($mul(LCODE, @decimalDivisor), RCODE), @none),
-                    #ifThenElse(LT ==K %decimal andBool RT ==K %num,
-                                @tlll(%decimal, $add(LCODE, $mul(RCODE, @decimalDivisor)), @none),
-                                #exception("How did I get here?"))))
 
-    rule #binOpForPure(-, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
-             => #ifThenElse(LT ==K RT,
-                            @tlll(LT, $sub(LCODE, RCODE), @none),
-                  #ifThenElse(LT ==K %num andBool RT ==K %decimal,
-                              @tlll(%decimal, $sub($mul(LCODE, @decimalDivisor), RCODE), @none),
-                    #ifThenElse(LT ==K %decimal andBool RT ==K %num,
-                                @tlll(%decimal, $sub(LCODE, $mul(RCODE, @decimalDivisor)), @none),
-                                #exception("How did I get here?"))))
+    syntax CTypedLLLExp ::= "#binOpPure" "(" BinOp "," TypedLLLExp  "," TypedLLLExp  ")"
+ // ------------------------------------------------------------------------------------
+    rule #binOpPure(+, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+        => #ifThenElse(LT ==K RT,
+                       @tlll(LT, $add(LCODE, RCODE), @none),
+             #ifThenElse(LT ==K %num andBool RT ==K %decimal,
+                         @tlll(%decimal, $add($mul(LCODE, @decimalDivisor), RCODE), @none),
+               #ifThenElse(LT ==K %decimal andBool RT ==K %num,
+                           @tlll(%decimal, $add(LCODE, $mul(RCODE, @decimalDivisor)), @none),
+                           #exception("How did I get here?"))))
 
-    rule #binOpForPure(*, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
-             => #ifThenElse(LT ==K RT andBool LT ==K %num,
-                            @tlll(%num, $mul(LCODE, RCODE), @none),
-                  #ifThenElse(LT ==K RT andBool LT ==K %decimal,
-                              @tlll(%decimal, $with($r, RCODE,
-                                                $with($l, LCODE,
-                                                  $with($ans, $mul($l, $r),
-                                                    $%seq(
-                                                      $assert($or($eq($sdiv($ans, $l), $r), $not($l)));
-                                                      $sdiv($ans, @decimalDivisor);.LLLExps
-                                                    )))), @none),
-                    #ifThen((LT ==K %num andBool RT ==K %decimal) orBool (LT ==K %decimal andBool RT ==K %num),
-                            @tlll(%decimal, $with($r, RCODE,
-                                              $with($l, LCODE,
-                                                $with($ans, $mul($l, $r),
-                                                  $%seq(
-                                                    $assert($or($eq($sdiv($ans, $l), $r), $not($l)));
-                                                    $ans;.LLLExps
-                                                  )))), @none))))
+    rule #binOpPure(-, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+        => #ifThenElse(LT ==K RT,
+                       @tlll(LT, $sub(LCODE, RCODE), @none),
+             #ifThenElse(LT ==K %num andBool RT ==K %decimal,
+                         @tlll(%decimal, $sub($mul(LCODE, @decimalDivisor), RCODE), @none),
+               #ifThenElse(LT ==K %decimal andBool RT ==K %num,
+                           @tlll(%decimal, $sub(LCODE, $mul(RCODE, @decimalDivisor)), @none),
+                           #exception("How did I get here?"))))
 
-    rule #binOpForPure(/, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
-             => #ifThenElse(RT ==K %num,
-                            @tlll(LT, $sdiv(LCODE, $clamp_nonzero(RCODE)), @none),
-                  #ifThenElse(LT ==K RT andBool LT ==K %decimal,
-                              @tlll(%decimal, $with($l, LCODE,
-                                                $with($r, $clamp_nonzero(RCODE),
-                                                  $sdiv($mul($l, @decimalDivisor), $r))), @none),
-                    #ifThen(LT ==K %num andBool RT ==K %decimal,
-                            @tlll(%decimal,
-                                  $sdiv($mul(LCODE, @decimalDivisor ^Int 2), $clamp_nonzero(RCODE)),
-                                  @none))))
+    rule #binOpPure(*, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+        => #ifThenElse(LT ==K RT andBool LT ==K %num,
+                       @tlll(%num, $mul(LCODE, RCODE), @none),
+             #ifThenElse(LT ==K RT andBool LT ==K %decimal,
+                         @tlll(%decimal, $with($_r, RCODE,
+                                           $with($_l, LCODE,
+                                             $with($_ans, $mul($_l, $_r),
+                                               $%seq(
+                                                 $assert($or($eq($sdiv($_ans, $_l), $_r), $not($_l))),
+                                                 $sdiv($_ans, @decimalDivisor),.LLLExps)))), @none),
+               #ifThen((LT ==K %num andBool RT ==K %decimal) orBool (LT ==K %decimal andBool RT ==K %num),
+                       @tlll(%decimal, $with($_r, RCODE,
+                                         $with($_l, LCODE,
+                                           $with($_ans, $mul($_l, $_r),
+                                             $%seq(
+                                               $assert($or($eq($sdiv($_ans, $_l), $_r), $not($_l))),
+                                               $_ans,.LLLExps)))), @none))))
+
+    rule #binOpPure(/, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+        => #ifThenElse(RT ==K %num,
+                       @tlll(LT, $sdiv(LCODE, $clamp_nonzero(RCODE)), @none),
+             #ifThenElse(LT ==K RT andBool LT ==K %decimal,
+                         @tlll(%decimal, $with($_l, LCODE,
+                                           $with($_r, $clamp_nonzero(RCODE),
+                                             $sdiv($mul($_l, @decimalDivisor), $_r))), @none),
+               #ifThen(LT ==K %num andBool RT ==K %decimal,
+                       @tlll(%decimal,
+                             $sdiv($mul(LCODE, @decimalDivisor ^Int 2), $clamp_nonzero(RCODE)), @none))))
+
+    rule #binOpPure(%, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+        => #ifThenElse(LT ==K RT,
+                       @tlll(LT, $smod(LCODE, $clamp_nonzero(RCODE)), @none),
+             #ifThenElse(LT ==K %decimal andBool RT ==K %num,
+                         @tlll(%decimal, $smod(LCODE, $mul($clamp_nonzero(RCODE), @decimalDivisor)), @none),
+               #ifThen(LT ==K %num andBool RT ==K %decimal,
+                       @tlll(%decimal, $smod($mul(LCODE, @decimalDivisor), $clamp_nonzero(RCODE)), @none))))
+
+    rule #binOpPure(**, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+        => #ifThenElse(LT ==K RT andBool LT ==K %num,
+                       @tlll(%num, $exp(LCODE, RCODE), @none),
+                       #exception("Only whole number exponents are supported"))
+
+
+    syntax KItem  ::= "#clampArithResult"
+ // -------------------------------------
+    rule @tlll(%num, CODE, _) ~> #clampArithResult
+        => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)), @none)
+
+    rule @tlll(%decimal, CODE, _) ~> #clampArithResult
+        => @tlll(%decimal, $clamp($mload(@minDecimalPos), CODE, $mload(@maxDecimalPos)), @none)
 
 
     // Compare
@@ -1322,23 +1343,6 @@ module VIPER-LLL
                                                           #exception("Unsupported type for negation."))
 
 
-    syntax CTypedLLLExp ::= "#clampArithResult" "(" CTypedLLLExp ")"                     [strict]
- // ---------------------------------------------------------------------------------------------
-    rule #clampArithResult(@tlll(%num, CODE, _))
-              => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)), @none)
-
-    rule #clampArithResult(@tlll(%decimal, CODE, _))
-              => @tlll(%decimal, $clamp($mload(@minDecimalPos), CODE, $mload(@maxDecimalPos)), @none)
-
-
-    syntax TypedLLLExp ::= "#unwrapLoc" "(" TypedLLLExp ")"  [function]
- // -------------------------------------------------------------------
-    rule #unwrapLoc(@tlll(T, CODE, @locattr(@memory, _)))  => @tlll(T, $mload(CODE), @none)
-
-    rule #unwrapLoc(@tlll(T, CODE, @locattr(@storage, _))) => @tlll(T, $sload(CODE), @none)
-
-    rule #unwrapLoc(@tlll(T, CODE, @none))                 => @tlll(T, CODE, @none)
-
 
 // Internal Contract Call
 // ======================
@@ -1372,8 +1376,8 @@ module VIPER-LLL
 
     rule #icallAux(@argdata(CODE, ARGSWIDTH), @tlll(RETT, LOC, _), RETWIDTH)
         => @tlll(RETT, $%seq(
-                         $assert($call($gas, $address, 0, CODE, ARGSWIDTH, LOC, RETWIDTH));
-                         LOC;.LLLExps
+                         $assert($call($gas, $address, 0, CODE, ARGSWIDTH, LOC, RETWIDTH)),
+                         LOC,.LLLExps
                        ), @locattr(@memory, true))
       requires isBaseType(RETT)
 
@@ -1393,11 +1397,11 @@ module VIPER-LLL
                                                        Bool /*need pos?*/")"
  // ------------------------------------------------------------------------
     rule #packArguments(@tlll(T, LOC, _), FUNCID, ARGS, PARAMS)
-        => #packArgumentsAux(LOC +Int 32, ARGS, PARAMS, $mstore(LOC, FUNCID);.LLLExps,
+        => #packArgumentsAux(LOC +Int 32, ARGS, PARAMS, $mstore(LOC, FUNCID),.LLLExps,
                              LOC +Int 28, #sizeOfParams(PARAMS) +Int 4, false)
 
     rule #packArgumentsAux(_, .Exprs, .Params, RESULTCODE, ARGSSTART, ARGSWIDTH, false)
-        => @argdata($%seq(RESULTCODE ++LLL (ARGSSTART;.LLLExps)), ARGSWIDTH)
+        => @argdata($%seq(RESULTCODE ++LLL (ARGSSTART,.LLLExps)), ARGSWIDTH)
 
     rule #packArgumentsAux(ARGLOC, (ARG, ARGS), (%param(_, T) PARAMS), RESULTCODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
         => #packArgumentBase(@tlll(T, ARGLOC, @locattr(@memory, true)), #compileExpr(ARG))
@@ -1490,12 +1494,12 @@ module VIPER-LLL
 
 
     syntax LLLExp   ::= "$%seq" "(" LLLExps ")"
-    syntax LLLExps  ::= List{LLLExp, ";"}
+    syntax LLLExps  ::= List{LLLExp, ","}
     syntax LLLExps  ::= LLLExps "++LLL" LLLExps    [right, function]
  // ---------------------------------------------------------------
     rule .LLLExps    ++LLL LES:LLLExps => LES
 
-    rule (LE ; LES1) ++LLL LES2        => LE ; (LES1 ++LLL LES2)
+    rule (LE , LES1) ++LLL LES2        => LE , (LES1 ++LLL LES2)
 
 
     syntax Ids   ::= List{Id, ""}
@@ -1750,6 +1754,15 @@ module VIPER-LLL
 // ======
 
 
+    syntax TypedLLLExp ::= "#unwrapLoc" "(" TypedLLLExp ")"  [function]
+ // -------------------------------------------------------------------
+    rule #unwrapLoc(@tlll(T, CODE, @locattr(@memory, _)))  => @tlll(T, $mload(CODE), @none)
+
+    rule #unwrapLoc(@tlll(T, CODE, @locattr(@storage, _))) => @tlll(T, $sload(CODE), @none)
+
+    rule #unwrapLoc(@tlll(T, CODE, @none))                 => @tlll(T, CODE, @none)
+
+
     syntax Int    ::= "#convertToWei" "(" Id ")"  [function]
  // --------------------------------------------------------
     rule #convertToWei(wei)      => 1
@@ -1808,12 +1821,12 @@ module VIPER-LLL
     rule #packArgBy32Base(@tlll(_, LOC:Int, _), TCODE, ARGTYPE)
         => #packArgBy32BaseAux(LOC, #baseTypeConvert(TCODE, ARGTYPE))
 
-    rule #packArgBy32BaseAux(LOC, @tlll(_, CODE, _)) => @argby32($mstore(LOC, CODE);.LLLExps, 32)
+    rule #packArgBy32BaseAux(LOC, @tlll(_, CODE, _)) => @argby32($mstore(LOC, CODE),.LLLExps, 32)
 
 
     syntax Int ::= "#getFirstStoreLoc" "(" LLLExps ")"  [function]
  // --------------------------------------------------------------
-    rule #getFirstStoreLoc($mstore(L:Int, _); CODE) => L
+    rule #getFirstStoreLoc($mstore(L:Int, _), CODE) => L
 
 
 endmodule
