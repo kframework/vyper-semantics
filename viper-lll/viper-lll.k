@@ -399,11 +399,11 @@ module VIPER-LLL
  // ------------------------------------------------------
     rule #initializer_lll => $%seq(
                                $mstore(28 , $calldataload(0)),
-                               $mstore(@addrSizePos , 2 ^Int 160),
-                               $mstore(@maxNumPos , 2 ^Int 127 -Int 1),
-                               $mstore(@minNumPos , -2 ^Int 127),
-                               $mstore(@maxDecimalPos, (2 ^Int 127 -Int 1) *Int 10000000000),
-                               $mstore(@minDecimalPos, (-2 ^Int 127) *Int 10000000000),.LLLExps),.LLLExps
+                               $mstore(@addrSizePos, @addrSize),
+                               $mstore(@maxNumPos, @maxNum),
+                               $mstore(@minNumPos, @minNum),
+                               $mstore(@maxDecimalPos, @maxDecimal),
+                               $mstore(@minDecimalPos, @minDecimal),.LLLExps),.LLLExps
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1014,32 +1014,45 @@ module VIPER-LLL
 
     syntax CTypedLLLExp ::= "#compileExpr" "(" Expr ")"
  // ---------------------------------------------------
-    rule #compileExpr(%self) => @tlll(%address, $address, @none)
 
 
-    // Number
-    rule #compileExpr(I:Int) => #ifThenElse(
-                                  (I >=Int -2 ^Int 127 +Int 1) andBool (I <=Int 2 ^Int 127 -Int 1),
-                                  @tlll(%num, I, @none),
-                                  #exception("Number out of range")
-                                )
-
-    rule #compileExpr(%hex(STR)) => @tlll(%address, String2Base(STR, 16), @none)
-      requires lengthString(STR) ==Int 40
-
-    rule #compileExpr(%hex(STR)) => @tlll(%bytes32, String2Base(STR, 16), @none)
-      requires lengthString(STR) ==Int 64
+// Number
+// ======
 
 
-    // Bool
+    rule #compileExpr(NUM:Int) => #ifThenElse((NUM >=Int @minNum) andBool (NUM <=Int @maxNum),
+                                              @tlll(%num, NUM, @none),
+                                              #exception("Number out of range"))
+
+    rule #compileExpr(%fixed10(NUM, DEN))
+        => #ifThen(notBool((NUM >=Int (@minNum *Int DEN)) andBool (NUM >=Int (@minNum *Int DEN))),
+                   #exception("Number out of range."))
+        ~> #ifThen(@decimalDivisor <Int DEN,
+                   #exception("Too many decimal places."))
+        ~> @tlll(%decimal, (NUM *Int @decimalDivisor) /Int DEN, @none)
+
+    rule #compileExpr(%hex(STR))
+        => #ifThenElse(lengthString(STR) ==Int 40,
+                       @tlll(%address, String2Base(STR, 16), @none),
+             #ifThenElse(lengthString(STR) ==Int 64,
+                         @tlll(%bytes32, String2Base(STR, 16), @none),
+                         #exception("Cannot read 0x value with length:" +String Int2String(lengthString(STR)))))
+
+
+// Bool
+// ====
+
+
     rule #compileExpr(true)  => @tlll(%bool, 1, @none)
 
     rule #compileExpr(false)  => @tlll(%bool, 0, @none)
 
 
-// Send
-// ====
+// Variable
+// ========
 
+
+    rule #compileExpr(%self) => @tlll(%address, $address, @none)
 
     rule #compileExpr(V) => #lookupVar(V)
 

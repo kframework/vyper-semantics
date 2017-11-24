@@ -50,8 +50,6 @@ module VIPER-ABSTRACT-SYNTAX
 
     syntax Expr     ::= Const
                       | Var
-                      | ReservedExpr
-                      | ReservedFunc  // expr dispatch table
                       | "%self"
                       | "%binop"     "(" BinOp     "," Expr "," Expr ")"
                       | "%compareop" "(" CompareOp "," Expr "," Expr ")"
@@ -59,12 +57,15 @@ module VIPER-ABSTRACT-SYNTAX
                       | "%unaryop"   "(" UnaryOp   "," Expr ")"
                       | "%icall"     "(" Id        "," Exprs ")"  // internal contract call
                       | "%ecall"     "(" Id        "," Exprs ")"  // external contract call
+                      | ReservedExpr
+                      | ReservedFunc  // expr dispatch table
 
     syntax Exprs    ::= List{Expr, ","}
 
     syntax Const    ::= Int
                       | "%hex"     "(" String ")"
-                      | "%fixed10" "(" Int ")"  // decimal fixed point value with a precision of 10 decimal places
+                      | "%fixed10" "(" Int "," Int ")"  // decimal fixed point value with a precision of 10 decimal places
+                                                        // %fixed10(A, B) = A/B and B is a power of 10.
                       | String
                       | Bool
 
