@@ -43,7 +43,9 @@ module VIPER-LLL
 ///////////////////////////////////////////////////////////////////////////////
 
 
-    syntax LocTarget   ::= "@storage" | "@memory"
+    syntax Type        ::= "%mixedT"
+
+    syntax LocTarget   ::= "@storage" | "@memory" | "@storage_prehashed"
 
     syntax LocAttr     ::= "@locattr" "(" LocTarget "," Bool /*mutable?*/ ")"
 
@@ -54,10 +56,11 @@ module VIPER-LLL
                                         LLLExp /*loc*/    ","
                                         LocAttr           ")"
 
-    syntax TypedLLLExp ::= "@tlll"  "(" Type              ","
-                                        LLLExp            ","
-                                        LLLExpAttr        ")"  // If an exp has @storage/@memory target, it represents a location.
+    syntax TypedLLLExp  ::= "@tlll"  "(" Type              ","
+                                         LLLExp            ","
+                                         LLLExpAttr        ")"  // If an exp has @storage/@memory target, it represents a location.
                                                                 // You need to call `#unwrapLoc` function to read value from the location.
+    syntax TypedLLLExps ::= List{TypedLLLExp, ""}
 
     syntax EventRecord ::= "@event" "(" Int /*event_id*/  ","
                                         Id  /*name*/      ","
@@ -83,12 +86,12 @@ module VIPER-LLL
 
     // Convention: C'Sort' is a one-one corresponding supersort of Sort. C'Sort'
     //             requires for evaluation (i.e. not KResult).
-    syntax CLLLExp                ::= LLLExp
-    syntax CLLLExps               ::= LLLExps
-    syntax CTypedLLLExp           ::= TypedLLLExp
-    syntax CPackedLoggingData     ::= PackedLoggingData
-    syntax CPackedArgBy32         ::= PackedArgBy32
-    syntax CPackedArgData         ::= PackedArgData
+    syntax CLLLExp             ::= LLLExp
+    syntax CLLLExps            ::= LLLExps
+    syntax CTypedLLLExp        ::= TypedLLLExp
+    syntax CPackedLoggingData  ::= PackedLoggingData
+    syntax CPackedArgBy32      ::= PackedArgBy32
+    syntax CPackedArgData      ::= PackedArgData
 
     syntax KResult  ::= LLLExp
                       | LLLExps
@@ -626,7 +629,7 @@ module VIPER-LLL
 
     rule #compileStmt(%vdecl(NAME, T)) => #newVar(NAME, T) ~> $pass,.LLLExps
 
-    rule (@taddr(T, LOC, LOCATTR) => .) ~> $pass,.LLLExps
+    rule (@tlll(T, LOC, LOCATTR) => .) ~> $pass,.LLLExps
 
 
 // Assignment
@@ -657,9 +660,9 @@ module VIPER-LLL
          <constant> CONSTANT </constant>
 
 
-    syntax CLLLExps ::= "#mkSetter" "(" TypedLLLExp  /*left variable loc*/  ","
-                                        TypedLLLExp /*right compiled Expr*/ ")"
- // ---------------------------------------------------------------------------
+    syntax CLLLExps ::= "#mkSetter" "(" CTypedLLLExp  /*left variable loc*/  ","
+                                        CTypedLLLExp /*right compiled Expr*/ ")"  [seqstrict]
+ // -----------------------------------------------------------------------------------------
     rule #mkSetter(@tlll(LT, LOC, LOCATTR), RTCODE)
         => #mkSetterBase(@tlll(LT, LOC, LOCATTR),
                          #baseTypeConvert(RTCODE, LT))
@@ -669,14 +672,14 @@ module VIPER-LLL
         => #ifThenElse(notBool(isListType(RT)),
                        #exception("Setter type mismatch: left side is array but right side is not."),
              #ifThenElse(#getListTCount(LT) =/=K #getListTCount(RT),
-                         #exception("Mismatched number of elements"),
-                         #mkSetterListT(@taddr(LT, LOC,LOCATTR), @tlll(RT, CODE, EXPRATTR))))
+                         #exception("Mismatched number of elements in left and right side arrays."),
+                         #mkSetterListT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))))
        requires isListType(LT)
 
 
     // Basic Types
-    syntax CLLLExps ::= "#mkSetterBase"  "(" TypedLLLExp "," TypedLLLExp ")"
- // ----------------------------------------------------------------------
+    syntax CLLLExps ::= "#mkSetterBase"  "(" CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict]
+ // ---------------------------------------------------------------------------------------
 
     rule #mkSetterBase(@tlll(_, LOC, @locattr(@storage, _)), @tlll(_, CODE, _))
         => $sstore(LOC, CODE),.LLLExps
@@ -694,9 +697,76 @@ module VIPER-LLL
 
 
     // List
-    syntax CLLLExps ::= "#mkSetterListT" "(" TypedAddr "," TypedLLLExp ")"
- // ---------------------------------------------------------------------------------
+    syntax CLLLExps ::= "#mkSetterListT" "(" TypedLLLExp "," TypedLLLExp ")"
 
+    syntax CLLLExps ::= "#mkSetterListTAux" "(" TypedLLLExp ","  // left
+                                                TypedLLLExp ","  // left token
+                                                TypedLLLExp ")"  // right
+ // ---------------------------------------------------------------------------------
+    rule #mkSetterListT(@tlll(LT, LCODE, @locattr(@storage, MUTABLE)), RTCODE)
+        => #mkSetterListTAux(@tlll(LT, $sha3_32(LCODE), @locattr(@storage, MUTABLE)),
+                             @tlll(LT, $_L, @locattr(@storage_prehashed, MUTABLE)),
+                             RTCODE)
+
+    rule #mkSetterListT(@tlll(LT, LCODE, @locattr(TARGET, MUTABLE)), RTCODE)
+        => #mkSetterListTAux(@tlll(LT, LCODE, @locattr(TARGET, MUTABLE)),
+                             @tlll(LT, $_L, @locattr(TARGET, MUTABLE)),
+                             RTCODE)
+      requires TARGET =/=K @storage
+
+    rule #mkSetterListTAux(LCODE, LTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
+        => #mkSetterListTLiteral(LCODE, LTOKENCODE, 0, @tlll(RT, RCODE, RLOCATTR), .LLLExps)
+      requires isMultiLLLExp(RCODE)
+
+    rule #mkSetterListTAux(LCODE, LTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
+        => #mkSetterListTVar(LCODE, LTOKENCODE, 0,
+                             @tlll(RT, RCODE, RLOCATTR),
+                             @tlll(RT, $_R, RLOCATTR),
+                             .LLLExps)
+      requires notBool isMultiLLLExp(RCODE)
+
+
+    syntax CLLLExps ::= "#mkSetterListTLiteral" "(" TypedLLLExp  ","  // left
+                                                    TypedLLLExp  ","  // left token
+                                                    Int          ","  // index
+                                                    TypedLLLExp  ","  // right
+                                                    LLLExps      ")"  // result code
+ // -------------------------------------------------------------------------------
+    rule #mkSetterListTLiteral(LTCODE, LTOKENCODE, INDEX,
+                               @tlll(%listT(T, N), $multi(TEXPR TEXPRS), EXPRATTR), RESULTCODE)
+        => #mkSetter(#addVarOffset(LTOKENCODE, @tlll(%num, INDEX, @none)),
+                     TEXPR)
+        ~> #mkSetterListTLiteral(LTCODE, LTOKENCODE, INDEX,
+                                 @tlll(%listT(T, N), $multi(TEXPRS), EXPRATTR), RESULTCODE)
+      requires INDEX <Int N
+
+    rule #mkSetterListTLiteral(@tlll(%listT(T, N), LOC, _), _, INDEX, _, RESULTCODE)
+        => $with($_L, LOC, $%seq(RESULTCODE)),.LLLExps
+      requires INDEX ==Int N
+
+    rule CODE:LLLExps ~> #mkSetterListTLiteral(LTCODE, LTOKENCODE, INDEX, RTCODE, RESULTCODE)
+        => #mkSetterListTLiteral(LTCODE, LTOKENCODE, INDEX +Int 1, RTCODE, RESULTCODE ++LLL CODE)
+
+
+    syntax CLLLExps  ::= "#mkSetterListTVar" "(" TypedLLLExp ","  // left
+                                                 TypedLLLExp ","  // left token
+                                                 Int         ","  // index
+                                                 TypedLLLExp ","  // right
+                                                 TypedLLLExp ","  // right token
+                                                 LLLExps     ")"  // result code
+  // --------------------------------------------------------------------------------
+     rule #mkSetterListTVar(@tlll(%listT(T, N), LLOC, LOCATTR), LTOKENCODE, INDEX, RTCODE, RTOKENCODE, RESULTCODE)
+         => #mkSetter(#addVarOffset(LTOKENCODE, @tlll(%num, INDEX, @none)),
+                      #addVarOffset(RTOKENCODE, @tlll(%num, INDEX, @none)))
+         ~> #mkSetterListTVar(@tlll(%listT(T, N), LLOC, LOCATTR), LTOKENCODE, INDEX, RTCODE, RTOKENCODE, RESULTCODE)
+       requires INDEX <Int N
+
+     rule #mkSetterListTVar(@tlll(%listT(T, N), LLOC, _), _, INDEX, @tlll(_, RLOC, _), _, RESULTCODE)
+         => $with($_L, LLOC, $with($_R, RLOC, $%seq(RESULTCODE))),.LLLExps
+       requires INDEX ==Int N
+
+     rule CODE:LLLExps ~> #mkSetterListTVar(LTCODE, LTOKENCODE, INDEX, RTCODE, RTOKENCODE, RESULTCODE)
+         => #mkSetterListTVar(LTCODE, LTOKENCODE, INDEX +Int 1, RTCODE, RTOKENCODE, RESULTCODE ++LLL CODE)
 
 
 // Aug Assignment
@@ -750,14 +820,15 @@ module VIPER-LLL
     rule #convertToBinaryArith(%=, LTCODE, RTCODE) => #binOp(%, LTCODE, RTCODE)
 
 
-    syntax CLLLExps ::= "#desugarAugAssign"    "(" TypedLLLExp              ","
+    syntax CLLLExps ::= "#desugarAugAssign"    "(" TypedLLLExp  ","
                                                    CTypedLLLExp
-                                               ")"                  [strict(2)]
+                                               ")"      [strict(2)]
 
-    syntax CLLLExps ::= "#desugarAugAssignAux" "(" Int  /*loc*/             ","
-                                                   LocTarget                ","
-                                                   TypedLLLExp              ")"
- // -------------------------------------------------------------------------------
+    syntax CLLLExps ::= "#desugarAugAssignAux" "(" Int  /*loc*/ ","
+                                                   LocTarget    ","
+                                                   CTypedLLLExp
+                                               ")"      [strict(3)]
+ // ---------------------------------------------------------------
     rule #desugarAugAssign(@tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
         => #desugarAugAssignAux(LOC, TARGET, #baseTypeConvert(RTCODE, LT))
 
@@ -839,13 +910,41 @@ module VIPER-LLL
         => #returnBase(#unwrapLoc(@tlll(T, CODE, EXPRATTR)), RETURNTYPE)
       requires isBaseType(T)
 
+    // TODO: support byte array
+
+    rule #return(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
+        => #ifThenElse(#isInMemory(EXPRATTR) andBool (notBool(isMultiLLLExp(CODE))),
+                       $return(CODE, #sizeOfType(RETURNTYPE)),
+                       #returnListT(#newPlaceholder(RETURNTYPE),
+                                    @tlll(T, CODE, EXPRATTR),
+                                    RETURNTYPE))
+      requires isListType(T)
+
 
     syntax CLLLExps  ::= "#returnBase" "(" TypedLLLExp "," Type ")"
  // --------------------------------------------------------------
     rule #returnBase(@tlll(T, CODE, _), RETURNTYPE)
-             => #ifThenElse(T ==K RETURNTYPE,
+             => #ifThenElse((T ==K RETURNTYPE) orBool(T ==K %num andBool RETURNTYPE ==K %signed256),
                             $%seq($mstore(0, CODE), $return(0, 32),.LLLExps),.LLLExps,
                             #exception("Unsupported type conversion."))
+
+
+    syntax CLLLExps  ::= "#returnListT"    "(" CTypedLLLExp ","  // place holder
+                                               TypedLLLExp  ","
+                                               Type
+                                           ")"      [strict(1)]
+
+    syntax CLLLExps  ::= "#returnListTAux" "(" CLLLExps     ","
+                                               Int          ","
+                                               Type
+                                           ")"      [strict(1)]
+ // --------------------------------------------------------------------------
+    rule #returnListT(@tlll(T, LOC, LOCATTR), TCODE, RETURNTYPE)
+        => #returnListTAux(#mkSetter(@tlll(T, LOC, LOCATTR), TCODE),
+                           LOC, RETURNTYPE)
+
+    rule #returnListTAux(SETTER, LOC, RETURNTYPE)
+        => $%seq(SETTER ++LLL ($return(LOC, #sizeOfType(RETURNTYPE)),.LLLExps)),.LLLExps
 
 
 // Send
@@ -1057,118 +1156,54 @@ module VIPER-LLL
     rule #compileExpr(V) => #lookupVar(V)
 
 
-    // Reserved Expr
-    rule #compileExpr(%msg.sender)       => @tlll(%address, $caller, @none)
-
-    rule #compileExpr(%msg.value)        => @tlll(%unitT(%num, %wei, false), $callvalue, @none)
-
-    rule #compileExpr(%msg.gas)          => @tlll(%num, $gas, @none)
-
-    rule #compileExpr(%block.difficulty) => @tlll(%num, $difficulty, @none)
-
-    rule #compileExpr(%block.timestamp)  => @tlll(%unitT(%num, %sec, true), $timestamp, @none)
-
-    rule #compileExpr(%block.coinbase)   => @tlll(%address, $coinbase, @none)
-
-    rule #compileExpr(%block.number)     => @tlll(%num, $number, @none)
-
-    rule #compileExpr(%block.prevhash)   => @tlll(%bytes32, $blockhash($sub($number, 1)), @none)
-
-    rule #compileExpr(%tx.origin)        => @tlll(%address, $origin, @none)
+// List
+// ====
 
 
-    // Reserved Func
-    rule #compileExpr(%as_num128(EXPR)) => #asNum128(#compileValueExpr(EXPR))
+    rule #compileExpr(%list(EXPRS)) => #listLiterals(EXPRS)
+      requires #numOfExprs(EXPRS) >Int 0
 
-    rule #compileExpr(%as_num256(EXPR)) => #asNum256(#compileValueExpr(EXPR))
-
-    rule #compileExpr(%as_wei_value(EXPR, UNIT)) => #asWeiValue(#compileValueExpr(EXPR), UNIT)
-
-    rule #compileExpr(%num256_add(LEFTE, RIGHTE)) => #num256Add(#compileValueExpr(LEFTE), #compileValueExpr(RIGHTE))
-
-    rule #compileExpr(%num256_sub(LEFTE, RIGHTE)) => #num256Sub(#compileValueExpr(LEFTE), #compileValueExpr(RIGHTE))
+    rule #compileExpr(%list(EXPRS)) => #exception("List must have elements")
+      requires #numOfExprs(EXPRS) ==Int 0
 
 
-    syntax CTypedLLLExp ::= "#asNum128"    "(" CTypedLLLExp ")"    [strict]
-    syntax CTypedLLLExp ::= "#asNum128Aux" "(" LLLExp ")"
- // -----------------------------------------------------------------------
-    rule #asNum128(@tlll(T, CODE, _))
-             => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %address),
-                            #asNum128Aux(CODE),
-                            #exception("Function arg type does not match expected type."))
-
-    rule #asNum128Aux(CODE) => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)), @none)
+    // Additional LLLExp to handle lists
+    syntax MultiLLLExp  ::= "$multi" "(" TypedLLLExps ")"
+    syntax LLLExp       ::= MultiLLLExp
+ // ------------------------------------------------
 
 
-    syntax CTypedLLLExp ::= "#asNum256"    "(" CTypedLLLExp ")"    [strict]
-    syntax CTypedLLLExp ::= "#asNum256Aux" "(" TypedLLLExp ")"
-    syntax CTypedLLLExp ::= "#asNum256ForNumber" "(" LLLExp ")"
-    syntax CTypedLLLExp ::= "#asNum256ForLLLExp" "(" LLLExp ")"
- // -----------------------------------------------------------------------
-    rule #asNum256(@tlll(T, CODE, EXPRATTR))
-             => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %address),
-                            #asNum256Aux(@tlll(T, CODE, EXPRATTR)),
-                            #exception("Function arg type does not match expected type."))
-
-    rule #asNum256Aux(@tlll(T, CODE, EXPRATTR)) => #ifThenElse(isInt(CODE),
-                                                               #asNum256ForNumber(CODE),
-                                                               #asNum256ForLLLExp(CODE))
-
-    rule #asNum256ForNumber(I:Int) => #ifThenElse((I >=Int 0) andBool (I <=Int 2^Int 256 -Int 1),
-                                                   @tlll(%num256, I, @none),
-                                                   #exception("Number out of range"))
-
-    rule #asNum256ForLLLExp(CODE) => @tlll(%num256, CODE, @none)
+    syntax CTypedLLLExp  ::= "#listLiterals" "(" Exprs ")"
+ // ------------------------------------------------------
+    rule #listLiterals(EXPR, EXPRS) => #processListLiteralsFirstElem(EXPR)
+                                    ~> #processListLiteralsRestElems(EXPRS, .TypedLLLExps)
 
 
-    syntax CTypedLLLExp ::= "#asWeiValue"    "(" CTypedLLLExp "," Id  ")"                [strict(1)]
-    syntax CTypedLLLExp ::= "#asWeiValueAux" "(" TypedLLLExp  "," Int ")"
-    syntax CTypedLLLExp ::= "#asWeiValueForNumber" "(" LLLExp      "," Int ")"
-    syntax CTypedLLLExp ::= "#asWeiValueForLLLExp" "(" TypedLLLExp "," Int ")"
- // ------------------------------------------------------------------------------------------------
-    rule #asWeiValue(@tlll(T, CODE, EXPRATTR), UNIT)
-             => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %decimal),
-                            #asWeiValueAux(@tlll(T, CODE, EXPRATTR), #convertToWei(UNIT)),
-                            #exception("Function arg type does not match expected type."))
-
-    rule #asWeiValueAux(@tlll(T, CODE, EXPRATTR), DENOMINATION)
-             => #ifThenElse(isInt(CODE),
-                            #asWeiValueForNumber(CODE, DENOMINATION),
-                            #asWeiValueForLLLExp(@tlll(T, CODE, EXPRATTR), DENOMINATION))
-
-    rule #asWeiValueForLLLExp(@tlll(%num, CODE, EXPRATTR), DENOMINATION)
-        => @tlll(%unitT(%num, %wei, false), $mul(CODE, DENOMINATION), @none)
-
-    rule #asWeiValueForLLLExp(@tlll(%decimal, CODE, EXPRATTR), DENOMINATION)
-             => @tlll(%unitT(%num, %wei, false), $div($mul(CODE, DENOMINATION), @decimalDivisor), @none)
+    syntax CTypedLLLExp  ::= "#processListLiteralsFirstElem" "(" Expr ")"
+ // ----------------------------------------------------------------------
+    rule #processListLiteralsFirstElem(EXPR) => #compileExpr(EXPR)
 
 
-    syntax CTypedLLLExp ::= "#num256Add"    "(" CTypedLLLExp "," CTypedLLLExp ")"        [seqstrict]
-    syntax CTypedLLLExp ::= "#num256AddAux" "(" LLLExp "," LLLExp ")"
- // ------------------------------------------------------------------------------------------------
-    rule #num256Add(@tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
-            => #ifThenElse(#isTypeOf(LT, %num256) andBool #isTypeOf(RT, %num256),
-                           #num256AddAux(LCODE, RCODE),
-                           #exception("Function arg type does not match expected type."))
+    syntax CTypedLLLExp  ::= "#processListLiteralsRestElems"    "(" Exprs "," TypedLLLExps ")"
+    syntax CTypedLLLExp  ::= "#processListLiteralsRestElemsAux" "(" Type "," Int "," Exprs "," TypedLLLExps ")"
+ // -----------------------------------------------------------------------------------------------------------
+    rule @tlll(T, CODE, EXPRATTR) ~> #processListLiteralsRestElems(EXPRS, .TypedLLLExps)
+        => #processListLiteralsRestElemsAux(T, 1, EXPRS, @tlll(T, CODE, EXPRATTR) .TypedLLLExps)
 
-    rule #num256AddAux(LCODE, RCODE)
-             => @tlll(%num256, $%seq(
-                                 $assert($or($iszero(RCODE), $gt($add(LCODE, RCODE), LCODE))),
-                                 $add(LCODE, RCODE),.LLLExps), @none)
+    rule #processListLiteralsRestElemsAux(T, LEN, .Exprs, RESULTCODE)
+        => @tlll(%listT(T, LEN), $multi(RESULTCODE), @none)
 
+    rule #processListLiteralsRestElemsAux(T, LEN, (EXPR, EXPRS), RESULTCODE)
+        => #compileExpr(EXPR) ~> #processListLiteralsRestElemsAux(T, LEN, EXPRS, RESULTCODE)
 
-    syntax CTypedLLLExp ::= "#num256Sub"    "(" CTypedLLLExp "," CTypedLLLExp ")"        [seqstrict]
-    syntax CTypedLLLExp ::= "#num256SubAux" "(" LLLExp "," LLLExp ")"
- // ------------------------------------------------------------------------------------------------
-    rule #num256Sub(@tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
-            => #ifThenElse(#isTypeOf(LT, %num256) andBool #isTypeOf(RT, %num256),
-                           #num256SubAux(LCODE, RCODE),
-                           #exception("Function arg type does not match expected type."))
+    rule @tlll(T, CODE, EXPRATTR) ~> #processListLiteralsRestElemsAux(T, LEN, EXPRS, RESULTCODE)
+        => #processListLiteralsRestElemsAux(T, LEN +Int 1, EXPRS,
+                                            RESULTCODE ++TLLL (@tlll(T, CODE, EXPRATTR) .TypedLLLExps))
 
-    rule #num256SubAux(LCODE, RCODE)
-             => @tlll(%num256, $%seq(
-                                 $assert($ge(LCODE, RCODE)),
-                                 $sub(LCODE, RCODE),.LLLExps), @none)
+    rule @tlll(T, CODE, EXPRATTR) ~> #processListLiteralsRestElemsAux(ELEMT, LEN, EXPRS:Exprs, RESULTCODE)
+        => #processListLiteralsRestElemsAux(%mixedT, LEN +Int 1, EXPRS,
+                                            RESULTCODE ++TLLL (@tlll(T, CODE, EXPRATTR) .TypedLLLExps))
+      requires T =/=K ELEMT
 
 
 // Arithmetic
@@ -1454,6 +1489,120 @@ module VIPER-LLL
         => #mkSetter(@tlll(PARAMT, LOC, LOCATTR), TCODE)
 
 
+    // Reserved Expr
+    rule #compileExpr(%msg.sender)       => @tlll(%address, $caller, @none)
+
+    rule #compileExpr(%msg.value)        => @tlll(%unitT(%num, %wei, false), $callvalue, @none)
+
+    rule #compileExpr(%msg.gas)          => @tlll(%num, $gas, @none)
+
+    rule #compileExpr(%block.difficulty) => @tlll(%num, $difficulty, @none)
+
+    rule #compileExpr(%block.timestamp)  => @tlll(%unitT(%num, %sec, true), $timestamp, @none)
+
+    rule #compileExpr(%block.coinbase)   => @tlll(%address, $coinbase, @none)
+
+    rule #compileExpr(%block.number)     => @tlll(%num, $number, @none)
+
+    rule #compileExpr(%block.prevhash)   => @tlll(%bytes32, $blockhash($sub($number, 1)), @none)
+
+    rule #compileExpr(%tx.origin)        => @tlll(%address, $origin, @none)
+
+
+    // Reserved Func
+    rule #compileExpr(%as_num128(EXPR)) => #asNum128(#compileValueExpr(EXPR))
+
+    rule #compileExpr(%as_num256(EXPR)) => #asNum256(#compileValueExpr(EXPR))
+
+    rule #compileExpr(%as_wei_value(EXPR, UNIT)) => #asWeiValue(#compileValueExpr(EXPR), UNIT)
+
+    rule #compileExpr(%num256_add(LEFTE, RIGHTE)) => #num256Add(#compileValueExpr(LEFTE), #compileValueExpr(RIGHTE))
+
+    rule #compileExpr(%num256_sub(LEFTE, RIGHTE)) => #num256Sub(#compileValueExpr(LEFTE), #compileValueExpr(RIGHTE))
+
+
+    syntax CTypedLLLExp ::= "#asNum128"    "(" CTypedLLLExp ")"    [strict]
+    syntax CTypedLLLExp ::= "#asNum128Aux" "(" LLLExp ")"
+ // -----------------------------------------------------------------------
+    rule #asNum128(@tlll(T, CODE, _))
+             => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %address),
+                            #asNum128Aux(CODE),
+                            #exception("Function arg type does not match expected type."))
+
+    rule #asNum128Aux(CODE) => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)), @none)
+
+
+    syntax CTypedLLLExp ::= "#asNum256"    "(" CTypedLLLExp ")"    [strict]
+    syntax CTypedLLLExp ::= "#asNum256Aux" "(" TypedLLLExp ")"
+    syntax CTypedLLLExp ::= "#asNum256ForNumber" "(" LLLExp ")"
+    syntax CTypedLLLExp ::= "#asNum256ForLLLExp" "(" LLLExp ")"
+ // -----------------------------------------------------------------------
+    rule #asNum256(@tlll(T, CODE, EXPRATTR))
+             => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %address),
+                            #asNum256Aux(@tlll(T, CODE, EXPRATTR)),
+                            #exception("Function arg type does not match expected type."))
+
+    rule #asNum256Aux(@tlll(T, CODE, EXPRATTR)) => #ifThenElse(isInt(CODE),
+                                                               #asNum256ForNumber(CODE),
+                                                               #asNum256ForLLLExp(CODE))
+
+    rule #asNum256ForNumber(I:Int) => #ifThenElse((I >=Int 0) andBool (I <=Int 2^Int 256 -Int 1),
+                                                   @tlll(%num256, I, @none),
+                                                   #exception("Number out of range"))
+
+    rule #asNum256ForLLLExp(CODE) => @tlll(%num256, CODE, @none)
+
+
+    syntax CTypedLLLExp ::= "#asWeiValue"    "(" CTypedLLLExp "," Id  ")"                [strict(1)]
+    syntax CTypedLLLExp ::= "#asWeiValueAux" "(" TypedLLLExp  "," Int ")"
+    syntax CTypedLLLExp ::= "#asWeiValueForNumber" "(" LLLExp      "," Int ")"
+    syntax CTypedLLLExp ::= "#asWeiValueForLLLExp" "(" TypedLLLExp "," Int ")"
+ // ------------------------------------------------------------------------------------------------
+    rule #asWeiValue(@tlll(T, CODE, EXPRATTR), UNIT)
+             => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %decimal),
+                            #asWeiValueAux(@tlll(T, CODE, EXPRATTR), #convertToWei(UNIT)),
+                            #exception("Function arg type does not match expected type."))
+
+    rule #asWeiValueAux(@tlll(T, CODE, EXPRATTR), DENOMINATION)
+             => #ifThenElse(isInt(CODE),
+                            #asWeiValueForNumber(CODE, DENOMINATION),
+                            #asWeiValueForLLLExp(@tlll(T, CODE, EXPRATTR), DENOMINATION))
+
+    rule #asWeiValueForLLLExp(@tlll(%num, CODE, EXPRATTR), DENOMINATION)
+        => @tlll(%unitT(%num, %wei, false), $mul(CODE, DENOMINATION), @none)
+
+    rule #asWeiValueForLLLExp(@tlll(%decimal, CODE, EXPRATTR), DENOMINATION)
+             => @tlll(%unitT(%num, %wei, false), $div($mul(CODE, DENOMINATION), @decimalDivisor), @none)
+
+
+    syntax CTypedLLLExp ::= "#num256Add"    "(" CTypedLLLExp "," CTypedLLLExp ")"        [seqstrict]
+    syntax CTypedLLLExp ::= "#num256AddAux" "(" LLLExp "," LLLExp ")"
+ // ------------------------------------------------------------------------------------------------
+    rule #num256Add(@tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+            => #ifThenElse(#isTypeOf(LT, %num256) andBool #isTypeOf(RT, %num256),
+                           #num256AddAux(LCODE, RCODE),
+                           #exception("Function arg type does not match expected type."))
+
+    rule #num256AddAux(LCODE, RCODE)
+             => @tlll(%num256, $%seq(
+                                 $assert($or($iszero(RCODE), $gt($add(LCODE, RCODE), LCODE))),
+                                 $add(LCODE, RCODE),.LLLExps), @none)
+
+
+    syntax CTypedLLLExp ::= "#num256Sub"    "(" CTypedLLLExp "," CTypedLLLExp ")"        [seqstrict]
+    syntax CTypedLLLExp ::= "#num256SubAux" "(" LLLExp "," LLLExp ")"
+ // ------------------------------------------------------------------------------------------------
+    rule #num256Sub(@tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+            => #ifThenElse(#isTypeOf(LT, %num256) andBool #isTypeOf(RT, %num256),
+                           #num256SubAux(LCODE, RCODE),
+                           #exception("Function arg type does not match expected type."))
+
+    rule #num256SubAux(LCODE, RCODE)
+             => @tlll(%num256, $%seq(
+                                 $assert($ge(LCODE, RCODE)),
+                                 $sub(LCODE, RCODE),.LLLExps), @none)
+
+
 //////////////////////////////////////////////////////////////////////////////
 // Utils
 //////////////////////////////////////////////////////////////////////////////
@@ -1484,6 +1633,17 @@ module VIPER-LLL
     syntax Bool ::= "#isTopic" "(" EventParam ")"    [function]
  // -----------------------------------------------------------
     rule #isTopic(%eparam(_, _, ISTOPIC)) => ISTOPIC
+
+
+    syntax Bool  ::= "#isInMemory" "(" LLLExpAttr ")"   [function]
+ // --------------------------------------------------------------
+    rule #isInMemory(@locattr(@memory, _)) => true
+
+    rule #isInMemory(@locattr(@storage, _)) => false
+
+    rule #isInMemory(@locattr(@storage_prehashed, _)) => false
+
+    rule #isInMemory(@none) => false
 
 
 // Exception
@@ -1527,12 +1687,19 @@ module VIPER-LLL
 
 
     syntax LLLExp   ::= "$%seq" "(" LLLExps ")"
-    syntax LLLExps  ::= List{LLLExp, ","}
+    syntax LLLExps  ::= List{LLLExp, ","}          [klabel("LLLExpList")]
     syntax LLLExps  ::= LLLExps "++LLL" LLLExps    [right, function]
  // ---------------------------------------------------------------
     rule .LLLExps    ++LLL LES:LLLExps => LES
 
     rule (LE , LES1) ++LLL LES2        => LE , (LES1 ++LLL LES2)
+
+
+    syntax TypedLLLExps ::= TypedLLLExps "++TLLL" TypedLLLExps  [right, function]
+ // -----------------------------------------------------------------------------
+    rule .TypedLLLExps ++TLLL TLLLEXPS:TypedLLLExps => TLLLEXPS
+
+    rule (TLLLEXP TLLLEXPS1) ++TLLL TLLLEXPS2 => TLLLEXP (TLLLEXPS1 ++TLLL TLLLEXPS2)
 
 
     syntax Ids   ::= List{Id, ""}
@@ -1625,9 +1792,9 @@ module VIPER-LLL
 
 
     // Convert from one base type to another. Need to call `#unwrapLoc` first.
-    syntax TypedLLLExp ::= "#baseTypeConvert"    "(" TypedLLLExp "," Type /*to*/ ")"   [function]
-    syntax TypedLLLExp ::= "#baseTypeConvertAux" "(" TypedLLLExp "," Type        ")"   [function]
- // ---------------------------------------------------------------------------------------------
+    syntax CTypedLLLExp  ::= "#baseTypeConvert"    "(" TypedLLLExp "," Type /*to*/ ")"
+    syntax CTypedLLLExp  ::= "#baseTypeConvertAux" "(" TypedLLLExp "," Type        ")"
+ // ----------------------------------------------------------------------------------
     rule #baseTypeConvert(TCODE, TOT) => #baseTypeConvertAux(#unwrapLoc(TCODE), TOT)
 
     rule #baseTypeConvertAux(@tlll(FROMT, CODE, _), TOT)
@@ -1681,7 +1848,7 @@ module VIPER-LLL
 
 
     syntax CTypedLLLExp  ::= "#lookupVar" "(" Var ")"
- // -------------------------------------------------
+ // -------------------------------------------------------------
     rule <k> #lookupVar(%var(NAME)) => @tlll(T, LOC, LOCATTR) ... </k>
          <env> %var(NAME) |-> @taddr(T, LOC, LOCATTR) ENV </env>
 
@@ -1698,28 +1865,70 @@ module VIPER-LLL
          <global> GLOBAL </global>
       requires notBool %svar(NAME) in keys(GLOBAL)
 
+    rule #lookupVar(%listelem(V, EXPR))
+        => #lookupListVar(#lookupVar(V), #compileValueExpr(EXPR))
+
     rule #lookupVar(%mapelem(V, EXPR))
-        => #computeVarOffset(#lookupVar(V), #compileExpr(EXPR))
+        => #lookupMapVar(#lookupVar(V), #compileValueExpr(EXPR))
 
 
-    syntax CTypedLLLExp  ::= "#computeVarOffset"    "(" CTypedLLLExp /*parent*/ ","
-                                                        CTypedLLLExp /*key*/
-                                                    ")"                 [seqstrict]
+    syntax CTypedLLLExp  ::= "#lookupListVar" "(" CTypedLLLExp ","
+                                                  CTypedLLLExp
+                                              ")"      [seqstrict]
+ // --------------------------------------------------------------
+    rule #lookupListVar(SUBEXPR, INDEXEXPR)
+        => #addVarOffset(SUBEXPR, INDEXEXPR)
 
-    syntax CTypedLLLExp  ::= "#computeMapVarOffset" "(" CTypedLLLExp            ","
-                                                        CTypedLLLExp
-                                                    ")"                 [strict(2)]
- // -------------------------------------------------------------------------------
-    rule #computeVarOffset(@tlll(%mapT(VT, KT), LOC, LOCATTR), TCODE)
-        => #computeMapVarOffset(@tlll(%mapT(VT, KT), LOC, LOCATTR),
-                                #baseTypeConvert(TCODE, KT))
 
-    rule #computeMapVarOffset(@tlll(%mapT(VT, KT), LOC, @locattr(@storage, MUTABLE)),
-                              @tlll(_, CODE, _))
+    syntax CTypedLLLExp  ::= "#lookupMapVar" "(" CTypedLLLExp ","
+                                                 CTypedLLLExp
+                                             ")"      [seqstrict]
+ // -------------------------------------------------------------
+    rule #lookupMapVar(BASEEXPR, INDEXEXPR)
+        => #addVarOffset(BASEEXPR, INDEXEXPR)
+
+
+    syntax CTypedLLLExp  ::= "#addVarOffset" "(" TypedLLLExp /*parent*/ ","
+                                                 TypedLLLExp /*key*/    ")"
+ // -----------------------------------------------------------------------
+    rule #addVarOffset(@tlll(%listT(T, N), LOC, LOCATTR), KEYCODE)
+        => #addListVarOffset(@tlll(%listT(T, N), LOC, LOCATTR),
+                             #baseTypeConvert(KEYCODE, %num))
+
+    rule #addVarOffset(@tlll(%mapT(VT, KT), LOC, LOCATTR), KEYCODE)
+        => #addMapVarOffset(@tlll(%mapT(VT, KT), LOC, LOCATTR),
+                            #baseTypeConvert(KEYCODE, KT))
+
+
+    syntax CTypedLLLExp  ::= "#addListVarOffset" "(" CTypedLLLExp ","
+                                                     CTypedLLLExp ")"  [seqstrict]
+ // -----------------------------------------------------------------------------
+    rule #addListVarOffset(@tlll(%listT(T, N), LOC, @locattr(@storage, MUTABLE)),
+                           @tlll(_, CODE, _))
+        => @tlll(T, $add($sha3_32(LOC), $uclamplt(CODE, N)), @locattr(@storage, MUTABLE))
+
+    rule #addListVarOffset(@tlll(%listT(T, N), LOC, @locattr(@storage_prehashed, MUTABLE)),
+                          @tlll(_, CODE, _))
+        => @tlll(T, $add(LOC, $uclamplt(CODE, N)), @locattr(@storage, MUTABLE))
+
+    rule #addListVarOffset(@tlll(%listT(T, N), LOC, @locattr(@memory, MUTABLE)),
+                           @tlll(_, CODE, _))
+        => @tlll(T, $add($mul(#sizeOfType(T), $uclamplt(CODE, N)), LOC), @locattr(@memory, MUTABLE))
+
+
+    syntax CTypedLLLExp  ::= "#addMapVarOffset" "(" CTypedLLLExp ","
+                                                    CTypedLLLExp ")"  [seqstrict]
+ // -----------------------------------------------------------------------------
+    rule #addMapVarOffset(@tlll(%mapT(VT, KT), LOC, @locattr(@storage, MUTABLE)),
+                          @tlll(_, CODE, _))
         => @tlll(VT, $add($sha3_32(LOC), CODE), @locattr(@storage, MUTABLE))
 
-    rule #computeMapVarOffset(@tlll(%mapT(VT, KT), _, @locattr(@memory, _)), _)
-             => #exception("Can only have fixed-side arrays in memory, not mappings")
+    rule #addMapVarOffset(@tlll(%mapT(VT, KT), LOC, @locattr(@storage_prehashed, MUTABLE)),
+                          @tlll(_, CODE, _))
+        => @tlll(VT, $add(LOC, CODE), @locattr(@storage, MUTABLE))
+
+    rule #addMapVarOffset(@tlll(%mapT(VT, KT), _, @locattr(@memory, _)), _)
+        => #exception("Can only have fixed-side arrays in memory, not mappings")
 
 
     syntax CTypedLLLExp  ::= "#newVar" "(" Id "," Type ")"
@@ -1745,6 +1954,8 @@ module VIPER-LLL
       requires notBool %var(NAME) in keys(ENV)
 
     rule #lookupOrNewVar(%svar(NAME), _) => #lookupVar(%svar(NAME))
+
+    rule #lookupOrNewVar(%listelem(V, EXPR), _) => #lookupVar(%listelem(V, EXPR))
 
     rule #lookupOrNewVar(%mapelem(V, EXPR), _) => #lookupVar(%mapelem(V, EXPR))
 
@@ -1849,7 +2060,7 @@ module VIPER-LLL
                                                          CTypedLLLExp ","
                                                          Type         ")"  [seqstrict(1,2)]
     syntax CPackedArgBy32  ::= "#packArgBy32BaseAux" "(" Int          ","
-                                                         TypedLLLExp  ")"
+                                                         CTypedLLLExp ")"  [strict(2)]
  // ---------------------------------------------------------------------------------------
     rule #packArgBy32Base(@tlll(_, LOC:Int, _), TCODE, ARGTYPE)
         => #packArgBy32BaseAux(LOC, #baseTypeConvert(TCODE, ARGTYPE))

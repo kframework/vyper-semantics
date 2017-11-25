@@ -50,6 +50,7 @@ module VIPER-ABSTRACT-SYNTAX
 
     syntax Expr     ::= Const
                       | Var
+                      | "%list"      "(" Exprs ")"
                       | "%self"
                       | "%binop"     "(" BinOp     "," Expr "," Expr ")"
                       | "%compareop" "(" CompareOp "," Expr "," Expr ")"
@@ -60,7 +61,7 @@ module VIPER-ABSTRACT-SYNTAX
                       | ReservedExpr
                       | ReservedFunc  // expr dispatch table
 
-    syntax Exprs    ::= List{Expr, ","}
+    syntax Exprs    ::= List{Expr, ","}    [klabel("ExprList")]
 
     syntax Const    ::= Int
                       | "%hex"     "(" String ")"
@@ -85,15 +86,12 @@ module VIPER-ABSTRACT-SYNTAX
                            | "%num256_add"   "(" Expr "," Expr ")"
                            | "%num256_sub"   "(" Expr "," Expr ")"
 
-
     syntax Unit          ::=  BaseUnit
                            |  Unit "*" Unit       [left]
                            |  Unit "/" Unit       [left]
 
-
     syntax BaseUnit      ::= "%wei" | "%currency" | "%currency1" | "%currency2"
                            | "%sec" | "%m"        | "%kg"
-
 
     syntax Type          ::= "%void"
                            | BaseType
@@ -102,8 +100,9 @@ module VIPER-ABSTRACT-SYNTAX
                            | MappingType
                            | StructType
 
-    syntax BaseType      ::= NumericType
-                           | "%bytes32" | "%num256" | "%bool" | "%address"
+    syntax BaseType      ::= "%bool"
+                           | NumericType | "%num256" | "%signed256"
+                           | "%bytes32"  | "%address"
 
     syntax NumericType   ::= PureNumType
                            | UnitType
@@ -131,12 +130,12 @@ module VIPER-ABSTRACT-SYNTAX
     syntax Id            ::= ReservedWord
 
     syntax ReservedWord  ::= "__init__" [token]
-                           | "wei" [token]
+                           | "wei"  [token]
                            | "kwei" [token] | "ada" [token] | "lovelace" [token]
                            | "babbage" [token]
                            | "shannon" [token] | "gwei" [token]
-                           | "szabo" [token]
-                           | "finney" [token]
-                           | "ether" [token]
+                           | "szabo"   [token]
+                           | "finney"  [token]
+                           | "ether"   [token]
 
 endmodule

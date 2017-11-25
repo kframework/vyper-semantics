@@ -3,17 +3,39 @@
 SCRIPT_DIR=`dirname $(python -c "import os, sys; print(os.path.realpath(\"$0\"))")`
 SEMTANTICS_DIR=`dirname $SCRIPT_DIR`/viper-lll
 
+test_count=0
+
+run_tests() {
+    local tests_dir=$1
+    echo "entering ${tests_dir}"
+
+    for f in ${tests_dir}/*.v
+    do
+        file_name=${f##*/}
+        expected_out=${f/%.v/.v.out}
+        echo "running ${file_name}"
+        test_count=$(($test_count + 1))
+        krun $f --output nowrap --debug -d ${SCRIPT_DIR} | sed 's/.*<lll> \(.*\) <\/lll>.*/\1/' | sed 's/ , .LLLExps//g' > /tmp/viper.txt
+        diff /tmp/viper.txt ${expected_out}
+    done
+}
+
 echo "kompile viper-lll"
-kompile $SEMTANTICS_DIR/viper-lll.k --syntax-module VIPER-ABSTRACT-SYNTAX --debug -d $SCRIPT_DIR
+kompile ${SEMTANTICS_DIR}/viper-lll.k --syntax-module VIPER-ABSTRACT-SYNTAX --debug -d ${SCRIPT_DIR}
 
-echo "running tests/features/test_assignment/test_assignment.v"
-krun $SCRIPT_DIR/features/test_assignment/test_assignment.v --output nowrap --debug -d $SCRIPT_DIR | sed 's/.*<lll> \(.*\) <\/lll>.*/\1/' | sed 's/ , .LLLExps//g' > /tmp/viper.txt
-diff /tmp/viper.txt $SCRIPT_DIR/features/test_assignment/test_assignment.v.out
+#parser/features
+TESTS_DIR=${SCRIPT_DIR}/parser/features/test_assignment
+run_tests $TESTS_DIR
 
-echo "running tests/features/test_conditionals/test_conditional_return_code.v"
-krun $SCRIPT_DIR/features/test_conditionals/test_conditional_return_code.v --output nowrap --debug -d $SCRIPT_DIR | sed 's/.*<lll> \(.*\) <\/lll>.*/\1/' | sed 's/ , .LLLExps//g' > /tmp/viper.txt
-diff /tmp/viper.txt $SCRIPT_DIR/features/test_conditionals/test_conditional_return_code.v.out
+TESTS_DIR=$SCRIPT_DIR/parser/features/test_conditionals
+run_tests $TESTS_DIR
 
-echo "running tests/examples/token/ERC20.v"
-krun $SCRIPT_DIR/examples/token/ERC20.v --output nowrap --debug -d $SCRIPT_DIR | sed 's/.*<lll> \(.*\) <\/lll>.*/\1/' | sed 's/ , .LLLExps//g' > /tmp/viper.txt
-diff /tmp/viper.txt $SCRIPT_DIR/examples/token/ERC20.v.out
+#parser/syntax
+TESTS_DIR=$SCRIPT_DIR/parser/syntax/test_list
+run_tests $TESTS_DIR
+
+#examples
+TESTS_DIR=$SCRIPT_DIR/examples/token
+run_tests $TESTS_DIR
+
+echo "total tests: ${test_count}"

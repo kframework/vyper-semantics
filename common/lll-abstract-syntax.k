@@ -109,5 +109,6 @@ module LLL-ABSTRACT-SYNTAX
 
     syntax Id     ::= "$_stloc" [token] | "$_mloc" [token] | "$_loc" [token]
                     | "$_l"     [token] | "$_r"    [token] | "$_ans" [token]
+                    | "$_L"     [token] | "$_R"    [token]
 
 endmodule
