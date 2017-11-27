@@ -1,5 +1,6 @@
 # Semantics of Viper in K
 
+In this repository we present a formal semantics of [Viper](https://github.com/ethereum/viper). See [wiki](https://github.com/kframework/viper-semantics/wiki) for more details.
 
 ### Example Runs
 
