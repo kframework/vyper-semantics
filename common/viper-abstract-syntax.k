@@ -23,13 +23,14 @@ module VIPER-ABSTRACT-SYNTAX
     syntax Param    ::= "%param" "(" Id "," Type ")"
     syntax Params   ::= List{Param, ""}
 
-    syntax Stmt     ::= VarDecl  // annotated assign
+    syntax Stmt     ::= VarDecl                                              // annotated assign
                       | "%assign"    "(" Var "," Expr ")"
                       | "%augassign" "(" AugAssignOp "," Var "," Expr ")"
                       | "%if"        "(" Expr "," Stmts "," Stmts ")"
                       | "%if"        "(" Expr "," Stmts ")"
-                      | "%for"       "(" Id "," Int "," Stmts ")"
-                      | "%for"       "(" Id "," Expr "," Expr "," Stmts ")"
+                      | "%forrange"  "(" Id "," Int  "," Stmts ")"            // for i in range(rounds)
+                      | "%forrange"  "(" Id "," Expr "," Expr  "," Stmts ")"  // for i in range(start, start + rounds)
+                      | "%forlist"   "(" Id "," Expr "," Stmts ")"            // for i in list()
                       | "%break"
                       | "%pass"
                       | "%return"
@@ -50,7 +51,7 @@ module VIPER-ABSTRACT-SYNTAX
 
     syntax Expr     ::= Const
                       | Var
-                      | "%list"      "(" Exprs ")"
+                      | ListExpr
                       | "%self"
                       | "%binop"     "(" BinOp     "," Expr "," Expr ")"
                       | "%compareop" "(" CompareOp "," Expr "," Expr ")"
@@ -72,9 +73,17 @@ module VIPER-ABSTRACT-SYNTAX
 
     syntax Var      ::= "%var"      "(" Id ")"
                       | "%svar"     "(" Id ")"
-                      | "%mem"      "(" Var "," Id   ")"  // struct field access
-                      | "%listelem" "(" Var "," Expr ")"  // list element
-                      | "%mapelem"  "(" Var "," Expr ")"  // map element
+                      | StructFieldVar
+                      | ListElemVar
+                      | MapElemVar
+
+    syntax StructFieldVar  ::= "%mem"      "(" Var "," Id   ")"  // struct field access
+
+    syntax ListElemVar     ::= "%listelem" "(" Var "," Expr ")"  // list element
+
+    syntax MapElemVar      ::= "%mapelem"  "(" Var "," Expr ")"  // map element
+
+    syntax ListExpr      ::= "%list" "(" Exprs ")"
 
     syntax ReservedExpr  ::= "%msg.sender" | "%msg.value" | "%msg.gas"
                            | "%block.difficulty" | "%block.timestamp" | "%block.coinbase" | "%block.number" | "%block.prevhash"
@@ -101,7 +110,7 @@ module VIPER-ABSTRACT-SYNTAX
                            | StructType
 
     syntax BaseType      ::= "%bool"
-                           | NumericType | "%num256" | "%signed256"
+                           | NumericType | "%num256"  | "%signed256"
                            | "%bytes32"  | "%address"
 
     syntax NumericType   ::= PureNumType

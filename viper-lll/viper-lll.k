@@ -35,6 +35,7 @@ module VIPER-LLL
         <constant> false </constant>  // Is the function constant?
         <payable> false </payable>  // Is the function payable?
         <placeholder> 1 </placeholder>  // Number of placeholders generated (used to generate random names)
+        <inLoop> .Set </inLoop>  // In Loop status. Whether body is currently evaluating within a for-loop or not.
     </T>
 
 
@@ -596,7 +597,8 @@ module VIPER-LLL
          <return> _ => %void </return>
          <constant> _ => false </constant>
          <payable> _ => false </payable>
-         <placeholder> _ => 1 </placeholder>    [structural]
+         <placeholder> _ => 1 </placeholder>
+         <inLoop> _ => .Set </inLoop>
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -616,11 +618,6 @@ module VIPER-LLL
 
     syntax CLLLExps ::= "#compileStmt" "(" Stmt ")"
  // -------------------------------------------------------
-    rule #compileStmt(%break) => $break,.LLLExps
-
-    rule #compileStmt(%pass) => $pass,.LLLExps
-
-    rule #compileStmt(%throw) => $assert(0),.LLLExps
 
 
 // Annotated Assignment
@@ -639,30 +636,61 @@ module VIPER-LLL
     rule #compileStmt(%assign(V, E)) => #assign(V, #compileExpr(E))
 
 
-    syntax CLLLExps ::= "#assign"    "(" Var                             ","
-                                         CTypedLLLExp  /*compiled Expr*/
-                                     ")"                         [strict(2)]
+    syntax CLLLExps  ::= "#assign"    "(" Var                             ","
+                                          CTypedLLLExp  /*compiled Expr*/
+                                      ")"                         [strict(2)]
 
-    syntax CLLLExps ::= "#assignAux" "(" CTypedLLLExp /*variable address*/ ","
-                                         TypedLLLExp
-                                     ")"                           [strict(1)]
- // --------------------------------------------------------------------------
+    syntax CLLLExps  ::= "#assignAux" "(" CTypedLLLExp /*variable address*/ ","
+                                          TypedLLLExp
+                                      ")"                           [strict(1)]
+ // ---------------------------------------------------------------------------
     rule #assign(V, @tlll(T, CODE, EXPRATTR))
-        => #assignAux(#lookupOrNewVar(V, T), @tlll(T, CODE, EXPRATTR))
+        => #assignAux(#getTarget(V, #lookupOrNewVar(V, T)),
+                      @tlll(T, CODE, EXPRATTR))
 
-    rule <k> #assignAux(@tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
+    rule #assignAux(LTCODE, RTCODE) => #mkSetter(LTCODE, RTCODE)
+
+
+    syntax CTypedLLLExp  ::= "#getTarget" "(" Var "," CTypedLLLExp ")"  [strict(2)]
+    syntax CTypedLLLExp  ::= "#getTargetAux" "(" TypedLLLExp ")"
+ // -------------------------------------------------------------------------------
+    rule <k> #getTarget(%var(NAME), TCODE)
+            => #exception("Altering iterator which is in use!") ... </k>
+         <forvar> FORVARS </forvar>
+      requires %var(NAME) in FORVARS
+
+    rule <k> #getTarget(%var(NAME), TCODE) => #getTargetAux(TCODE) ... </k>
+         <forvar> FORVARS </forvar>
+      requires notBool %var(NAME) in FORVARS
+
+    rule #getTarget(%svar(NAME), TCODE) => #getTargetAux(TCODE)
+
+    rule #getTarget(%mem(V, FIELD), TCODE) => #getTargetAux(TCODE)
+
+    rule <k> #getTarget(%listelem(V, INDEX), TCODE)
+            => #exception("Altering list while being iterated!") ... </k>
+         <inLoop> INLOOP </inLoop>
+      requires V in INLOOP
+
+    rule <k> #getTarget(%listelem(V, INDEX), TCODE) => #getTargetAux(TCODE) ... </k>
+         <inLoop> INLOOP </inLoop>
+      requires notBool V in INLOOP
+
+    rule #getTarget(%mapelem(V, INDEX), TCODE) => #getTargetAux(TCODE)
+
+    rule <k> #getTargetAux(@tlll(T, LOC, @locattr(TARGET, MUTABLE)))
             => #ifThen(TARGET ==K @storage andBool CONSTANT ==K true,
                        #exception("Cannot modify storage inside a constant function!"))
             ~> #ifThen(MUTABLE ==K false,
                        #exception("Cannot modify function argument"))
-            ~> #mkSetter(@tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
+            ~> @tlll(T, LOC, @locattr(TARGET, MUTABLE))
          ... </k>
          <constant> CONSTANT </constant>
 
 
-    syntax CLLLExps ::= "#mkSetter" "(" CTypedLLLExp  /*left variable loc*/  ","
-                                        CTypedLLLExp /*right compiled Expr*/ ")"  [seqstrict]
- // -----------------------------------------------------------------------------------------
+    syntax CLLLExps  ::= "#mkSetter" "(" CTypedLLLExp  /*left variable loc*/  ","
+                                         CTypedLLLExp /*right compiled Expr*/ ")"  [seqstrict]
+ // ------------------------------------------------------------------------------------------
     rule #mkSetter(@tlll(LT, LOC, LOCATTR), RTCODE)
         => #mkSetterBase(@tlll(LT, LOC, LOCATTR),
                          #baseTypeConvert(RTCODE, LT))
@@ -678,8 +706,8 @@ module VIPER-LLL
 
 
     // Basic Types
-    syntax CLLLExps ::= "#mkSetterBase"  "(" CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict]
- // ---------------------------------------------------------------------------------------
+    syntax CLLLExps  ::= "#mkSetterBase"  "(" CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict]
+ // ----------------------------------------------------------------------------------------
 
     rule #mkSetterBase(@tlll(_, LOC, @locattr(@storage, _)), @tlll(_, CODE, _))
         => $sstore(LOC, CODE),.LLLExps
@@ -697,12 +725,12 @@ module VIPER-LLL
 
 
     // List
-    syntax CLLLExps ::= "#mkSetterListT" "(" TypedLLLExp "," TypedLLLExp ")"
+    syntax CLLLExps  ::= "#mkSetterListT" "(" TypedLLLExp "," TypedLLLExp ")"
 
-    syntax CLLLExps ::= "#mkSetterListTAux" "(" TypedLLLExp ","  // left
-                                                TypedLLLExp ","  // left token
-                                                TypedLLLExp ")"  // right
- // ---------------------------------------------------------------------------------
+    syntax CLLLExps  ::= "#mkSetterListTAux" "(" TypedLLLExp ","  // left
+                                                 TypedLLLExp ","  // left token
+                                                 TypedLLLExp ")"  // right
+ // ----------------------------------------------------------------------------
     rule #mkSetterListT(@tlll(LT, LCODE, @locattr(@storage, MUTABLE)), RTCODE)
         => #mkSetterListTAux(@tlll(LT, $sha3_32(LCODE), @locattr(@storage, MUTABLE)),
                              @tlll(LT, $_L, @locattr(@storage_prehashed, MUTABLE)),
@@ -726,11 +754,11 @@ module VIPER-LLL
       requires notBool isMultiLLLExp(RCODE)
 
 
-    syntax CLLLExps ::= "#mkSetterListTLiteral" "(" TypedLLLExp  ","  // left
-                                                    TypedLLLExp  ","  // left token
-                                                    Int          ","  // index
-                                                    TypedLLLExp  ","  // right
-                                                    LLLExps      ")"  // result code
+    syntax CLLLExps  ::= "#mkSetterListTLiteral" "(" TypedLLLExp  ","  // left
+                                                     TypedLLLExp  ","  // left token
+                                                     Int          ","  // index
+                                                     TypedLLLExp  ","  // right
+                                                     LLLExps      ")"  // result code
  // -------------------------------------------------------------------------------
     rule #mkSetterListTLiteral(LTCODE, LTOKENCODE, INDEX,
                                @tlll(%listT(T, N), $multi(TEXPR TEXPRS), EXPRATTR), RESULTCODE)
@@ -773,7 +801,9 @@ module VIPER-LLL
 // ==============
 
 
-    rule #compileStmt(%augassign(OP, V, E)) => #augassign(OP, #compileLocExpr(V), #compileValueExpr(E))
+    rule #compileStmt(%augassign(OP, V, E)) => #augassign(OP,
+                                                          #getTarget(V, #compileLocExpr(V)),
+                                                          #compileValueExpr(E))
 
 
     syntax CLLLExps ::= "#augassign"    "(" AugAssignOp                     ","
@@ -785,16 +815,10 @@ module VIPER-LLL
                                             CTypedLLLExp                    ","
                                             TypedLLLExp                     ")"
  // ---------------------------------------------------------------------------
-    rule <k> #augassign(OP, @tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
-            => #ifThen(notBool(isBaseType(LT)),
-                       #exception("Can only use aug-assign operators with simple types!"))
-            ~> #ifThen(TARGET ==K @storage andBool CONSTANT ==K true,
-                       #exception("Cannot modify storage inside a constant function!"))
-            ~> #ifThen(MUTABLE ==K false,
-                       #exception("Cannot modify function argument"))
-            ~> #augassignAux(OP, @tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
-         ... </k>
-         <constant> CONSTANT </constant>
+    rule #augassign(OP, @tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
+        => #ifThen(notBool(isBaseType(LT)),
+                   #exception("Can only use aug-assign operators with simple types!"))
+        ~> #augassignAux(OP, @tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
 
     rule #augassignAux(OP, @tlll(LT, LOC, @locattr(@storage, MUTABLE)), RTCODE)
         => #desugarAugAssign(@tlll(LT, LOC, @locattr(@storage, MUTABLE)),
@@ -839,8 +863,8 @@ module VIPER-LLL
         => $with($_mloc, LOC, $mstore($_mloc, CODE)),.LLLExps
 
 
-// If statement
-// ============
+// If...Then...(Else)
+// ==================
 
 
     syntax CLLLExps ::= "#if" "(" CTypedLLLExp /*TEST*/ ","
@@ -867,26 +891,42 @@ module VIPER-LLL
 
 
     // e.g. for i in range(10): ...
-    rule #compileStmt(%for(NAME, ROUNDS, STMTS))
-        => #for(#newLoopVar(NAME), @tlll(%num, 0, @none), ROUNDS, #compileStmts(STMTS, .LLLExps))
+    rule #compileStmt(%forrange(NAME, ROUNDS, STMTS))
+        => #forrange(#newLoopVar(NAME), @tlll(%num, 0, @none), ROUNDS, #compileStmts(STMTS, .LLLExps))
 
     // e.g. for i in range(100, 110): ...
-    rule #compileStmt(%for(NAME, START:Int, END:Int, STMTS))
-        => #for(#newLoopVar(NAME), @tlll(%num, START, @none), END -Int START, #compileStmts(STMTS, .LLLExps))
+    rule #compileStmt(%forrange(NAME, START:Int, END:Int, STMTS))
+        => #forrange(#newLoopVar(NAME), @tlll(%num, START, @none), END -Int START, #compileStmts(STMTS, .LLLExps))
 
     // e.g. for i in range(x, x + 10): ...
-    rule #compileStmt(%for(NAME, %var(V), %binop(+, %var(V), ROUNDS:Int), STMTS))
-        => #for(#newLoopVar(NAME), #compileExpr(%var(V)), ROUNDS, #compileStmts(STMTS, .LLLExps))
+    rule #compileStmt(%forrange(NAME, %var(V), %binop(+, %var(V), ROUNDS:Int), STMTS))
+        => #forrange(#newLoopVar(NAME), #compileValueExpr(%var(V)), ROUNDS, #compileStmts(STMTS, .LLLExps))
+
+    //TODO: e.g. for i in list(): ...
 
 
-    syntax CLLLExps ::= "#for" "(" CTypedLLLExp           ","
-                                   CTypedLLLExp /*start*/ ","
-                                   Int         /*rounds*/ ","
-                                   CLLLExps
-                               ")"         [seqstrict(1,2,4)]
- // ---------------------------------------------------------
-    rule #for(@tlll(%num, LOC:Int, _), @tlll(_, STARTCODE, _), ROUNDS, BODYCODE:LLLExps)
+    syntax CLLLExps ::= "#forrange" "(" CTypedLLLExp           ","
+                                        CTypedLLLExp /*start*/ ","
+                                        Int         /*rounds*/ ","
+                                        CLLLExps
+                                    ")"         [seqstrict(1,2,4)]
+ // --------------------------------------------------------------
+    rule #forrange(@tlll(%num, LOC:Int, _), @tlll(_, STARTCODE, _), ROUNDS, BODYCODE:LLLExps)
         => $repeat(LOC, STARTCODE, ROUNDS, $%seq(BODYCODE)),.LLLExps
+
+
+// Break
+// =====
+
+
+    rule #compileStmt(%break) => $break,.LLLExps
+
+
+// Pass
+// =====
+
+
+    rule #compileStmt(%pass)  => $pass,.LLLExps
 
 
 // Return
@@ -895,7 +935,7 @@ module VIPER-LLL
 
     rule <k> #compileStmt(%return) => #ifThenElse(T =/=K %void,
                                                   #exception("Expecting to return a value"),
-                                                  .LLLExps) ... </k>
+                                                  $return(0, 0)) ... </k>
          <return> T </return>
 
     rule <k> #compileStmt(%return(E)) => #ifThenElse(T =/=K %void,
@@ -904,10 +944,12 @@ module VIPER-LLL
          <return> T </return>
 
 
-    syntax CLLLExps ::= "#return" "(" CTypedLLLExp "," Type /*return type*/ ")"  [strict(1)]
- // ----------------------------------------------------------------------------------------
+    syntax CLLLExps  ::= "#return" "(" CTypedLLLExp "," Type /*return type*/ ")"  [strict(1)]
+ // -----------------------------------------------------------------------------------------
     rule #return(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
-        => #returnBase(#unwrapLoc(@tlll(T, CODE, EXPRATTR)), RETURNTYPE)
+        => #ifThen(notBool(isBaseType(RETURNTYPE)),
+                   #exception("Trying to return base type but output expecting non base type."))
+        ~> #returnBase(#unwrapLoc(@tlll(T, CODE, EXPRATTR)), RETURNTYPE)
       requires isBaseType(T)
 
     // TODO: support byte array
@@ -922,9 +964,9 @@ module VIPER-LLL
 
 
     syntax CLLLExps  ::= "#returnBase" "(" TypedLLLExp "," Type ")"
- // --------------------------------------------------------------
+ // ---------------------------------------------------------------
     rule #returnBase(@tlll(T, CODE, _), RETURNTYPE)
-             => #ifThenElse((T ==K RETURNTYPE) orBool(T ==K %num andBool RETURNTYPE ==K %signed256),
+             => #ifThenElse((T ==K RETURNTYPE) orBool (T ==K %num andBool RETURNTYPE ==K %signed256),
                             $%seq($mstore(0, CODE), $return(0, 32),.LLLExps),.LLLExps,
                             #exception("Unsupported type conversion."))
 
@@ -945,6 +987,25 @@ module VIPER-LLL
 
     rule #returnListTAux(SETTER, LOC, RETURNTYPE)
         => $%seq(SETTER ++LLL ($return(LOC, #sizeOfType(RETURNTYPE)),.LLLExps)),.LLLExps
+
+
+// Assert
+// ======
+
+
+    rule #compileStmt(%assert(EXPR)) => #assert(#compileValueExpr(EXPR))
+
+
+    syntax CLLLExps  ::= "#assert" "(" CTypedLLLExp ")"  [strict]
+ // -------------------------------------------------------------
+    rule #assert(@tlll(_, CODE, _)) => $assert(CODE)
+
+
+// Throw
+// =====
+
+
+    rule #compileStmt(%throw) => $assert(0),.LLLExps
 
 
 // Send
@@ -1963,12 +2024,12 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#newLoopVar" "(" Id ")"
  // -------------------------------------------------
     rule <k> #newLoopVar(NAME) => #lookupVar(%var(NAME)) ... </k>
-         <forvar> FORNAMES </forvar>
-      requires NAME in FORNAMES
+         <forvar> FORVARS </forvar>
+      requires %var(NAME) in FORVARS
 
     rule <k> #newLoopVar(NAME) => #newVar(NAME, %num) ... </k>
-         <forvar> FORNAMES (.Set => SetItem(NAME)) </forvar>
-      requires notBool NAME in FORNAMES
+         <forvar> FORVARS (.Set => SetItem(%var(NAME))) </forvar>
+      requires notBool %var(NAME) in FORVARS
 
 
     syntax CTypedLLLExp  ::= "#newPlaceholder" "(" Type ")"

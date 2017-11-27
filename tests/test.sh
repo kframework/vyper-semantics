@@ -31,6 +31,9 @@ TESTS_DIR=$SCRIPT_DIR/parser/features/test_conditionals
 run_tests $TESTS_DIR
 
 #parser/syntax
+TESTS_DIR=$SCRIPT_DIR/parser/syntax/test_for_range
+run_tests $TESTS_DIR
+
 TESTS_DIR=$SCRIPT_DIR/parser/syntax/test_list
 run_tests $TESTS_DIR
 
