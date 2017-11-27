@@ -1055,7 +1055,7 @@ module VIPER-LLL
  // ------------------------------------------------------------
     rule #log(ARGS, @event(EID, ENAME, EPARAMS)) => #logAux(EID, ARGS, EPARAMS, .Exprs, .EventParams, .Exprs, .EventParams)
 
-    rule #logAux(EID, (ARG1, ARGS), (EPARAM1 EPARAMS), TARGS, TEPARAMS, DARGS, DEPARAMS)
+    rule #logAux(EID, (ARG1 ARGS), (EPARAM1 EPARAMS), TARGS, TEPARAMS, DARGS, DEPARAMS)
              => #ifThenElse(#isTopic(EPARAM1),
                             #logAux(EID, ARGS, EPARAMS, TARGS ++Expr ARG1, TEPARAMS ++Eparam EPARAM1, DARGS, DEPARAMS),
                             #logAux(EID, ARGS, EPARAMS, TARGS, TEPARAMS, DARGS ++Expr ARG1, DEPARAMS ++Eparam EPARAM1))
@@ -1077,24 +1077,24 @@ module VIPER-LLL
                                      CTypedLLLExp       ")" [seqstrict(1,3,4,5)]
  // --------------------------------------------------------------------------------
     // 0 topic
-    rule #logAux(EID, .Exprs, .EventParams, (TARG1, .Exprs), (TEPARAM1 .EventParams), DARGS, DEPARAMS)
+    rule #logAux(EID, .Exprs, .EventParams, (TARG1 .Exprs), (TEPARAM1 .EventParams), DARGS, DEPARAMS)
            => #log1(#packLoggingData(DARGS, DEPARAMS), EID)
 
     // 1 topic
-    rule #logAux(EID, .Exprs, .EventParams, (TARG1, .Exprs), (TEPARAM1 .EventParams), DARGS, DEPARAMS)
+    rule #logAux(EID, .Exprs, .EventParams, (TARG1 .Exprs), (TEPARAM1 .EventParams), DARGS, DEPARAMS)
            => #log2(#packLoggingData(DARGS, DEPARAMS),
                     EID,
                     #packLoggingTopic(#compileExpr(TARG1), TEPARAM1))
 
     // 2 topics
-    rule #logAux(EID, .Exprs, .EventParams, (TARG1, TARG2, .Exprs), (TEPARAM1 TEPARAM2 .EventParams), DARGS, DEPARAMS)
+    rule #logAux(EID, .Exprs, .EventParams, (TARG1 TARG2 .Exprs), (TEPARAM1 TEPARAM2 .EventParams), DARGS, DEPARAMS)
            => #log3(#packLoggingData(DARGS, DEPARAMS),
                     EID,
                     #packLoggingTopic(#compileExpr(TARG1), TEPARAM1),
                     #packLoggingTopic(#compileExpr(TARG2), TEPARAM2))
 
     // 3 topics
-    rule #logAux(EID, .Exprs, .EventParams, (TARG1, TARG2, TARG3, .Exprs), (TEPARAM1 TEPARAM2 TEPARAM3 .EventParams), DARGS, DEPARAMS)
+    rule #logAux(EID, .Exprs, .EventParams, (TARG1 TARG2 TARG3 .Exprs), (TEPARAM1 TEPARAM2 TEPARAM3 .EventParams), DARGS, DEPARAMS)
            => #log4(#packLoggingData(DARGS, DEPARAMS),
                     EID,
                     #packLoggingTopic(#compileExpr(TARG1), TEPARAM1),
@@ -1140,7 +1140,7 @@ module VIPER-LLL
     rule #packLoggingDataAux(.Exprs, .EventParams, CODE, SIZE)
              => @loggingdata($%seq(CODE), #getFirstStoreLoc(CODE), SIZE)
 
-    rule #packLoggingDataAux((DARG, DARGS), %eparam(_, T, _) DEPARAMS, CODE, SIZE)
+    rule #packLoggingDataAux((DARG DARGS), %eparam(_, T, _) DEPARAMS, CODE, SIZE)
              => #packArgBy32Base(#newPlaceholder(T), #compileExpr(DARG), T)
              ~> #packLoggingDataAux(DARGS, DEPARAMS, CODE, SIZE)
       requires isBaseType(T)
@@ -1247,8 +1247,8 @@ module VIPER-LLL
 
     syntax CTypedLLLExp  ::= "#listLiterals" "(" Exprs ")"
  // ------------------------------------------------------
-    rule #listLiterals(EXPR, EXPRS) => #processListLiteralsFirstElem(EXPR)
-                                    ~> #processListLiteralsRestElems(EXPRS, .TypedLLLExps)
+    rule #listLiterals(EXPR EXPRS) => #processListLiteralsFirstElem(EXPR)
+                                   ~> #processListLiteralsRestElems(EXPRS, .TypedLLLExps)
 
 
     syntax CTypedLLLExp  ::= "#processListLiteralsFirstElem" "(" Expr ")"
@@ -1265,14 +1265,14 @@ module VIPER-LLL
     rule #processListLiteralsRestElemsAux(T, LEN, .Exprs, RESULTCODE)
         => @tlll(%listT(T, LEN), $multi(RESULTCODE), @none)
 
-    rule #processListLiteralsRestElemsAux(T, LEN, (EXPR, EXPRS), RESULTCODE)
+    rule #processListLiteralsRestElemsAux(T, LEN, (EXPR EXPRS), RESULTCODE)
         => #compileExpr(EXPR) ~> #processListLiteralsRestElemsAux(T, LEN, EXPRS, RESULTCODE)
 
     rule @tlll(T, CODE, EXPRATTR) ~> #processListLiteralsRestElemsAux(T, LEN, EXPRS, RESULTCODE)
         => #processListLiteralsRestElemsAux(T, LEN +Int 1, EXPRS,
                                             RESULTCODE ++TLLL (@tlll(T, CODE, EXPRATTR) .TypedLLLExps))
 
-    rule @tlll(T, CODE, EXPRATTR) ~> #processListLiteralsRestElemsAux(ELEMT, LEN, EXPRS:Exprs, RESULTCODE)
+    rule @tlll(T, CODE, EXPRATTR) ~> #processListLiteralsRestElemsAux(ELEMT, LEN, EXPRS, RESULTCODE)
         => #processListLiteralsRestElemsAux(%mixedT, LEN +Int 1, EXPRS,
                                             RESULTCODE ++TLLL (@tlll(T, CODE, EXPRATTR) .TypedLLLExps))
       requires T =/=K ELEMT
@@ -1543,7 +1543,7 @@ module VIPER-LLL
     rule #packArgumentsAux(_, .Exprs, .Params, RESULTCODE, ARGSSTART, ARGSWIDTH, false)
         => @argdata($%seq(RESULTCODE ++LLL (ARGSSTART,.LLLExps)), ARGSWIDTH)
 
-    rule #packArgumentsAux(ARGLOC, (ARG, ARGS), (%param(_, T) PARAMS), RESULTCODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
+    rule #packArgumentsAux(ARGLOC, (ARG ARGS), (%param(_, T) PARAMS), RESULTCODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
         => #packArgumentBase(@tlll(T, ARGLOC, @locattr(@memory, true)), #compileExpr(ARG))
         ~> #packArgumentsAux(ARGLOC, ARGS, PARAMS, RESULTCODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
       requires isBaseType(T)
@@ -1755,7 +1755,7 @@ module VIPER-LLL
  // ----------------------------------------------------------
     rule .Exprs     ++Expr EXPRS:Exprs => EXPRS
 
-    rule (EXPR , EXPRS1) ++Expr EXPRS2 => EXPR , (EXPRS1 ++Expr EXPRS2)
+    rule (EXPR EXPRS1) ++Expr EXPRS2 => EXPR (EXPRS1 ++Expr EXPRS2)
 
 
     syntax LLLExp   ::= "$%seq" "(" LLLExps ")"
@@ -1775,10 +1775,9 @@ module VIPER-LLL
 
 
     syntax Ids   ::= List{Id, ""}
-    syntax Ids   ::= Ids "++Id" Ids                 [right, function]
-    syntax Ids   ::= Ids "++Id" Id                  [right, function]
-    syntax Bool  ::= "#inIds" "(" Id "," Ids ")"    [function]
- // ----------------------------------------------------------------
+    syntax Ids   ::= Ids "++Id" Ids    [right, function]
+    syntax Ids   ::= Ids "++Id" Id     [right, function]
+ // ----------------------------------------------------
     rule .Ids ++Id IDS:Ids   => IDS
 
     rule (ID IDS1) ++Id IDS2 => ID (IDS1 ++Id IDS2)
@@ -1787,6 +1786,13 @@ module VIPER-LLL
 
     rule (ID1 IDS) ++Id ID   => (ID1 IDS) ++Id (ID .Ids)
 
+
+// In List
+// =======
+
+
+    syntax Bool  ::= "#inIds" "(" Id "," Ids ")"    [function]
+ // ----------------------------------------------------------
     rule #inIds(ID, .Ids) => false
 
     rule #inIds(ID, ID1 IDS) => true               requires ID ==K ID1
@@ -1801,6 +1807,31 @@ module VIPER-LLL
     rule #inDecorators(D, DEC DECS) => true                     requires D ==K DEC
 
     rule #inDecorators(D, DEC DECS) => #inDecorators(D, DECS)   requires D =/=K DEC
+
+
+// Size of List
+// ============
+
+
+    syntax Int  ::= "#numOfExprs" "(" Exprs ")"  [function]
+ // -------------------------------------------------------
+    rule #numOfExprs(.Exprs) => 0
+
+    rule #numOfExprs(EXPR EXPRS) => 1 +Int #numOfExprs(EXPRS)
+
+
+    syntax Int  ::= "#numOfParams" "(" Params ")"  [function]
+ // ---------------------------------------------------------
+    rule #numOfParams(.Params) => 0
+
+    rule #numOfParams(PARAM PARAMS) => 1 +Int #numOfParams(PARAMS)
+
+
+    syntax Int  ::= "#numOfEventParams" "(" EventParams ")"  [function]
+ // -------------------------------------------------------------------
+    rule #numOfEventParams(.EventParams) => 0
+
+    rule #numOfEventParams(EPARAM EPARAMS) => 1 +Int #numOfEventParams(EPARAMS)
 
 
 // Type Related
@@ -2112,20 +2143,6 @@ module VIPER-LLL
  // ----------------------------------------------------------------------------------------------------
     rule #ifThenElse(true, THENCLAUSE, ELSECLAUSE) => THENCLAUSE
     rule #ifThenElse(false, THENCLAUSE, ELSECLAUSE) => ELSECLAUSE
-
-
-    syntax Int  ::= "#numOfExprs" "(" Exprs ")"  [function]
- // -------------------------------------------------------
-    rule #numOfExprs(.Exprs) => 0
-
-    rule #numOfExprs(EXPR, EXPRS) => 1 +Int #numOfExprs(EXPRS)
-
-
-    syntax Int  ::= "#numOfParams" "(" Params ")"  [function]
- // ---------------------------------------------------------
-    rule #numOfParams(.Params) => 0
-
-    rule #numOfParams(PARAM PARAMS) => 1 +Int #numOfParams(PARAMS)
 
 
     syntax CPackedArgBy32  ::= "#packArgBy32Base"    "(" CTypedLLLExp ","

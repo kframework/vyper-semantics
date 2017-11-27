@@ -62,7 +62,7 @@ module VIPER-ABSTRACT-SYNTAX
                       | ReservedExpr
                       | ReservedFunc  // expr dispatch table
 
-    syntax Exprs    ::= List{Expr, ","}    [klabel("ExprList")]
+    syntax Exprs    ::= List{Expr, ""}    [klabel("ExprList")]
 
     syntax Const    ::= Int
                       | "%hex"     "(" String ")"
