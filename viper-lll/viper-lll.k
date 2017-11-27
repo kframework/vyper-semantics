@@ -164,17 +164,22 @@ module VIPER-LLL
 
     rule #addEvents(E ES) => #addEvent(E) ~> #addEvents(ES)
 
-    rule #addEvent(%event(NAME, EPARAMS)) => #checkEventParams(EPARAMS, 0, .Ids)
-                                          ~> #addEventAux(NAME, EPARAMS)
+    rule <k> #addEvent(%event(NAME, EPARAMS))
+            => #checkEventParams(EPARAMS, 0, .Ids)
+            ~> #addEventAux(NAME, EPARAMS)
+         ... </k>
+         <internalSig> SIGS </internalSig>
+      requires notBool NAME in keys(SIGS)
+
+    rule <k> #addEvent(%event(NAME, EPARAMS))
+            => #exception("Duplicate event name: " +String Id2String(NAME))
+         ... </k>
+         <internalSig> SIGS </internalSig>
+      requires NAME in keys(SIGS)
 
     rule <k> #addEventAux(NAME, EPARAMS) => . ... </k>
          <internalSig> SIGS
                       => SIGS[NAME <- @event(#computeEventId(NAME, EPARAMS), NAME, EPARAMS)] </internalSig>
-      requires notBool NAME in keys(SIGS)
-
-    rule <k> #addEventAux(NAME, EPARAMS) => #exception("Duplicate event name: " +String Id2String(NAME)) ... </k>
-         <internalSig> SIGS </internalSig>
-      requires NAME in keys(SIGS)
 
 
     syntax KItem  ::= "#checkEventParams"      "(" EventParams "," Int "," Ids ")"
@@ -415,7 +420,7 @@ module VIPER-LLL
 ///////////////////////////////////////////////////////////////////////////////
 
 
-    syntax CLLLExps ::= "#compileFuncs" "(" Defs "," LLLExps ")"
+    syntax CLLLExps  ::= "#compileFuncs" "(" Defs "," LLLExps ")"
  // ------------------------------------------------------------
     rule #compileFuncs(.Defs, RESULTCODE) => RESULTCODE
 
@@ -425,15 +430,15 @@ module VIPER-LLL
         => #compileFuncs(DEFS, RESULTCODE ++LLL FUNCCODE)
 
 
-    syntax CLLLExps ::= "#compileFunc"    "(" Def  ")"
-    syntax CLLLExps ::= "#compileFuncAux" "(" CLLLExps /*copy input*/      ","
-                                              CLLLExps /*check decorator*/ ","
-                                              CLLLExps /*fill params*/     ","
-                                              CLLLExps /*compile stmts*/   ","
-                                              Int      /*func id*/         ","
-                                              Bool     /*init?*/
-                                          ")"                      [seqstrict]
- // --------------------------------------------------------------------------
+    syntax CLLLExps  ::= "#compileFunc"    "(" Def  ")"
+    syntax CLLLExps  ::= "#compileFuncAux" "(" CLLLExps /*copy input*/      ","
+                                               CLLLExps /*check decorator*/ ","
+                                               CLLLExps /*fill params*/     ","
+                                               CLLLExps /*compile stmts*/   ","
+                                               Int      /*func id*/         ","
+                                               Bool     /*init?*/
+                                           ")"                      [seqstrict]
+ // ---------------------------------------------------------------------------
     rule <k> #compileFunc(%fdecl(DECS, FNAME, PARAMS, T, STMTS))
             => #compileFuncAux(#copyArg(PARAMS, #isInitFunc(FNAME)),
                                #addClampersForDecorators(PAYABLE, INTERNAL),
@@ -461,8 +466,8 @@ module VIPER-LLL
 // ==============
 
 
-    syntax CLLLExps ::= "#copyArg" "(" Params "," Bool /*init?*/ ")"
- // ----------------------------------------------------------------
+    syntax CLLLExps  ::= "#copyArg" "(" Params "," Bool /*init?*/ ")"
+ // -----------------------------------------------------------------
     rule #copyArg(.Params, _) => $pass,.LLLExps
 
     rule <k> #copyArg(PARAMS, true) => $codecopy(@reservedMemPos,
@@ -482,10 +487,10 @@ module VIPER-LLL
 // ===========================
 
 
-    syntax CLLLExps ::= "#addClampersForDecorators" "(" Bool "," Bool ")"
-    syntax LLLExps  ::= "#checkPayable"    "(" Bool ")"    [function]
-    syntax LLLExps  ::= "#checkInternal"   "(" Bool ")"    [function]
- // -----------------------------------------------------------------
+    syntax CLLLExps  ::= "#addClampersForDecorators" "(" Bool "," Bool ")"
+    syntax LLLExps   ::= "#checkPayable"    "(" Bool ")"        [function]
+    syntax LLLExps   ::= "#checkInternal"   "(" Bool ")"        [function]
+ // ----------------------------------------------------------------------
     rule #addClampersForDecorators(PAYABLE, INTERNAL) => #checkPayable(PAYABLE) ++LLL #checkInternal(INTERNAL)
 
     rule #checkPayable(true) => .LLLExps
@@ -501,8 +506,8 @@ module VIPER-LLL
 // ===============
 
 
-    syntax CLLLExps ::= "#fillParams" "(" Params "," Int /*data pos*/ "," Bool /*init?*/ "," LLLExps ")"
- // ----------------------------------------------------------------------------------------------------
+    syntax CLLLExps  ::= "#fillParams" "(" Params "," Int /*data pos*/ "," Bool /*init?*/ "," LLLExps ")"
+ // -----------------------------------------------------------------------------------------------------
     rule #fillParams(.Params, _, _, RESULTCODE) => RESULTCODE
 
     rule #fillParams(P PS, DATAPOS, ISINIT, RESULTCODE)
@@ -512,8 +517,8 @@ module VIPER-LLL
         => #fillParams(PS, DATAPOS, ISINIT, RESULTCODE ++LLL FILLCODE)
 
 
-    syntax CLLLExps ::= "#fillParam"  "(" Param  "," Int "," Bool ")"
- // -----------------------------------------------------------------
+    syntax CLLLExps  ::= "#fillParam"  "(" Param  "," Int "," Bool ")"
+ // ------------------------------------------------------------------
     rule <k> #fillParam(%param(NAME, %bytesT(L)), DATAPOS, ISINIT) => #mkClamper(%bytesT(L), DATAPOS, LOC, ISINIT) ... </k>
          <env> ENV => #updateEnv(ENV, %var(NAME), %bytesT(L), LOC, false) </env>
          <nextMem> LOC => LOC +Int #sizeOfType(%bytesT(L)) </nextMem>
@@ -588,8 +593,8 @@ module VIPER-LLL
 // ===================
 
 
-    syntax KItem       ::= "#cleanConfig"
- // -------------------------------------
+    syntax KItem  ::= "#cleanConfig"
+ // --------------------------------
     rule <k> CODE:LLLExps ~> (#cleanConfig => .) ...</k>
          <env> _ => .Map </env>
          <nextMem> _ => @reservedMemPos </nextMem>
@@ -606,8 +611,8 @@ module VIPER-LLL
 ///////////////////////////////////////////////////////////////////////////////
 
 
-    syntax CLLLExps ::= "#compileStmts" "(" Stmts "," LLLExps ")"
- // ----------------------------------------------------------------
+    syntax CLLLExps  ::= "#compileStmts" "(" Stmts "," LLLExps ")"
+ // --------------------------------------------------------------
     rule #compileStmts(.Stmts, RESULTCODE) => RESULTCODE
 
     rule #compileStmts(STMT STMTS, RESULTCODE) => #compileStmt(STMT) ~> #compileStmts(STMTS, RESULTCODE)
@@ -616,8 +621,8 @@ module VIPER-LLL
         => #compileStmts(STMTS, RESULTCODE ++LLL STMTCODE)
 
 
-    syntax CLLLExps ::= "#compileStmt" "(" Stmt ")"
- // -------------------------------------------------------
+    syntax CLLLExps  ::= "#compileStmt" "(" Stmt ")"
+ // ------------------------------------------------
 
 
 // Annotated Assignment
@@ -806,14 +811,14 @@ module VIPER-LLL
                                                           #compileValueExpr(E))
 
 
-    syntax CLLLExps ::= "#augassign"    "(" AugAssignOp                     ","
-                                            CTypedLLLExp   /*variable loc*/ ","
-                                            CTypedLLLExp  /*compiled expr*/
-                                        ")"                    [seqstrict(2,3)]
+    syntax CLLLExps  ::= "#augassign"    "(" AugAssignOp                    ","
+                                             CTypedLLLExp  /*variable loc*/ ","
+                                             CTypedLLLExp /*compiled expr*/
+                                         ")"                   [seqstrict(2,3)]
 
-    syntax CLLLExps ::= "#augassignAux" "(" AugAssignOp                     ","
-                                            CTypedLLLExp                    ","
-                                            TypedLLLExp                     ")"
+    syntax CLLLExps  ::= "#augassignAux" "(" AugAssignOp                    ","
+                                             CTypedLLLExp                   ","
+                                             TypedLLLExp                    ")"
  // ---------------------------------------------------------------------------
     rule #augassign(OP, @tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
         => #ifThen(notBool(isBaseType(LT)),
@@ -829,9 +834,9 @@ module VIPER-LLL
                              #convertToBinaryArith(OP, @tlll(LT, $mload($_mloc), @none), RTCODE))
 
 
-    syntax CTypedLLLExp ::= "#convertToBinaryArith" "(" AugAssignOp           ","
-                                                        TypedLLLExp  /*left*/ ","
-                                                        TypedLLLExp  /*right*/")"
+    syntax CTypedLLLExp  ::= "#convertToBinaryArith" "(" AugAssignOp           ","
+                                                         TypedLLLExp  /*left*/ ","
+                                                         TypedLLLExp  /*right*/")"
  // ------------------------------------------------------------------------------
     rule #convertToBinaryArith(+=, LTCODE, RTCODE) => #binOp(+, LTCODE, RTCODE)
 
@@ -844,15 +849,15 @@ module VIPER-LLL
     rule #convertToBinaryArith(%=, LTCODE, RTCODE) => #binOp(%, LTCODE, RTCODE)
 
 
-    syntax CLLLExps ::= "#desugarAugAssign"    "(" TypedLLLExp  ","
-                                                   CTypedLLLExp
-                                               ")"      [strict(2)]
+    syntax CLLLExps  ::= "#desugarAugAssign"    "(" TypedLLLExp  ","
+                                                    CTypedLLLExp
+                                                ")"      [strict(2)]
 
-    syntax CLLLExps ::= "#desugarAugAssignAux" "(" Int  /*loc*/ ","
-                                                   LocTarget    ","
-                                                   CTypedLLLExp
-                                               ")"      [strict(3)]
- // ---------------------------------------------------------------
+    syntax CLLLExps  ::= "#desugarAugAssignAux" "(" Int  /*loc*/ ","
+                                                    LocTarget    ","
+                                                    CTypedLLLExp
+                                                ")"      [strict(3)]
+ // ----------------------------------------------------------------
     rule #desugarAugAssign(@tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
         => #desugarAugAssignAux(LOC, TARGET, #baseTypeConvert(RTCODE, LT))
 
@@ -867,14 +872,15 @@ module VIPER-LLL
 // ==================
 
 
-    syntax CLLLExps ::= "#if" "(" CTypedLLLExp /*TEST*/ ","
-                                  CLLLExps     /*Then*/ ","
-                                  CLLLExps     /*Else*/
-                              ")"               [seqstrict]
-    syntax CLLLExps ::= "#if" "(" CTypedLLLExp /*TEST*/ ","
-                                  CLLLExps     /*Then*/
-                              ")"               [seqstrict]
- // -------------------------------------------------------
+    syntax CLLLExps  ::= "#if" "(" CTypedLLLExp /*TEST*/ ","
+                                   CLLLExps     /*Then*/ ","
+                                   CLLLExps     /*Else*/
+                               ")"               [seqstrict]
+
+    syntax CLLLExps  ::= "#if" "(" CTypedLLLExp /*TEST*/ ","
+                                   CLLLExps     /*Then*/
+                               ")"               [seqstrict]
+ // --------------------------------------------------------
     rule #compileStmt(%if(TEST, THENSTMTS, ELSESTMTS)) => #if(#compileValueExpr(TEST),
                                                               #compileStmts(THENSTMTS, .LLLExps),
                                                               #compileStmts(ELSESTMTS, .LLLExps))
@@ -905,12 +911,12 @@ module VIPER-LLL
     //TODO: e.g. for i in list(): ...
 
 
-    syntax CLLLExps ::= "#forrange" "(" CTypedLLLExp           ","
-                                        CTypedLLLExp /*start*/ ","
-                                        Int         /*rounds*/ ","
-                                        CLLLExps
-                                    ")"         [seqstrict(1,2,4)]
- // --------------------------------------------------------------
+    syntax CLLLExps  ::= "#forrange" "(" CTypedLLLExp           ","
+                                         CTypedLLLExp /*start*/ ","
+                                         Int         /*rounds*/ ","
+                                         CLLLExps
+                                     ")"         [seqstrict(1,2,4)]
+ // ---------------------------------------------------------------
     rule #forrange(@tlll(%num, LOC:Int, _), @tlll(_, STARTCODE, _), ROUNDS, BODYCODE:LLLExps)
         => $repeat(LOC, STARTCODE, ROUNDS, $%seq(BODYCODE)),.LLLExps
 
@@ -1018,8 +1024,8 @@ module VIPER-LLL
          <constant> CONSTANT </constant>
 
 
-    syntax CLLLExps ::= "#send" "(" CTypedLLLExp /*to*/ "," CTypedLLLExp /*value*/ ")"  [seqstrict]
- // -----------------------------------------------------------------------------------------------
+    syntax CLLLExps  ::= "#send" "(" CTypedLLLExp /*to*/ "," CTypedLLLExp /*value*/ ")"  [seqstrict]
+ // ------------------------------------------------------------------------------------------------
     rule #send(@tlll(%address, TOCODE, _), @tlll(%unitT(%num, %wei, _), VALUECODE, _))
              => $assert($call(0, TOCODE, VALUECODE, 0, 0, 0, 0)),.LLLExps
 
@@ -1028,14 +1034,33 @@ module VIPER-LLL
 // ====
 
 
-    syntax CLLLExps ::= "#log"    "(" Exprs "," EventRecord ")"
-    syntax CLLLExps ::= "#logAux" "(" Int /*event id*/  ","
-                                      Exprs             ","
-                                      EventParams       ","
-                                      Exprs /*topic*/   ","
-                                      EventParams       ","
-                                      Exprs /*data*/    ","
-                                      EventParams       ")"
+    rule <k> #compileStmt(%log(NAME, ARGS)) => #log(ARGS, EVENTRECORD) ... </k>
+         <internalSig> NAME |-> EVENTRECORD:EventRecord SIGS </internalSig>
+
+    rule <k> #compileStmt(%log(NAME, _))
+            => #exception("Event not declared yet: " +String Id2String(NAME)) ... </k>
+         <internalSig> SIGS </internalSig>
+      requires notBool NAME in keys(SIGS)
+
+
+    syntax CLLLExps  ::= "#log"    "(" Exprs "," EventRecord ")"
+
+    syntax CLLLExps  ::= "#logAux" "(" Int /*event id*/  ","
+                                       Exprs             ","
+                                       EventParams       ","
+                                       Exprs /*topic*/   ","
+                                       EventParams       ","
+                                       Exprs /*data*/    ","
+                                       EventParams       ")"
+ // ------------------------------------------------------------
+    rule #log(ARGS, @event(EID, ENAME, EPARAMS)) => #logAux(EID, ARGS, EPARAMS, .Exprs, .EventParams, .Exprs, .EventParams)
+
+    rule #logAux(EID, (ARG1, ARGS), (EPARAM1 EPARAMS), TARGS, TEPARAMS, DARGS, DEPARAMS)
+             => #ifThenElse(#isTopic(EPARAM1),
+                            #logAux(EID, ARGS, EPARAMS, TARGS ++Expr ARG1, TEPARAMS ++Eparam EPARAM1, DARGS, DEPARAMS),
+                            #logAux(EID, ARGS, EPARAMS, TARGS, TEPARAMS, DARGS ++Expr ARG1, DEPARAMS ++Eparam EPARAM1))
+
+
     syntax CLLLExps ::= "#log1"  "(" CPackedLoggingData ","
                                      Int                ")"          [strict(1)]
     syntax CLLLExps ::= "#log2"  "(" CPackedLoggingData ","
@@ -1051,20 +1076,6 @@ module VIPER-LLL
                                      CTypedLLLExp       ","
                                      CTypedLLLExp       ")" [seqstrict(1,3,4,5)]
  // --------------------------------------------------------------------------------
-    rule <k> #compileStmt(%log(NAME, ARGS)) => #log(ARGS, EVENTRECORD) ... </k>
-         <internalSig> NAME |-> EVENTRECORD SIGS </internalSig>
-
-    rule <k> #compileStmt(%log(NAME, _)) => #exception("Event not declared yet: " +String Id2String(NAME)) ... </k>
-         <internalSig> SIGS </internalSig>
-      requires notBool NAME in keys(SIGS)
-
-    rule #log(ARGS, @event(EID, ENAME, EPARAMS)) => #logAux(EID, ARGS, EPARAMS, .Exprs, .EventParams, .Exprs, .EventParams)
-
-    rule #logAux(EID, (ARG1, ARGS), (EPARAM1 EPARAMS), TARGS, TEPARAMS, DARGS, DEPARAMS)
-             => #ifThenElse(#isTopic(EPARAM1),
-                            #logAux(EID, ARGS, EPARAMS, TARGS ++Expr ARG1, TEPARAMS ++Eparam EPARAM1, DARGS, DEPARAMS),
-                            #logAux(EID, ARGS, EPARAMS, TARGS, TEPARAMS, DARGS ++Expr ARG1, DEPARAMS ++Eparam EPARAM1))
-
     // 0 topic
     rule #logAux(EID, .Exprs, .EventParams, (TARG1, .Exprs), (TEPARAM1 .EventParams), DARGS, DEPARAMS)
            => #log1(#packLoggingData(DARGS, DEPARAMS), EID)
@@ -1115,12 +1126,12 @@ module VIPER-LLL
                 ),.LLLExps
 
 
-    syntax CPackedLoggingData ::= "#packLoggingData"    "(" Exprs        ","
-                                                            EventParams  ")"
-    syntax CPackedLoggingData ::= "#packLoggingDataAux" "(" Exprs        ","
-                                                            EventParams  ","
-                                                            LLLExps      ","
-                                                            Int /*size*/ ")"
+    syntax CPackedLoggingData  ::= "#packLoggingData"    "(" Exprs        ","
+                                                             EventParams  ")"
+    syntax CPackedLoggingData  ::= "#packLoggingDataAux" "(" Exprs        ","
+                                                             EventParams  ","
+                                                             LLLExps      ","
+                                                             Int /*size*/ ")"
  // -----------------------------------------------------------------------------
     rule #packLoggingData(DARGS, DEPARAMS) => #ifThenElse(#numOfExprs(DARGS) ==Int 0,
                                                           @loggingdata($pass, 0, 0),
@@ -1138,8 +1149,8 @@ module VIPER-LLL
              => #packLoggingDataAux(DARGS, DEPARAMS, CODE ++LLL ARGCODE, TOTALSIZE +Int ARGSIZE)
 
 
-    syntax CTypedLLLExp ::= "#packLoggingTopic" "(" CTypedLLLExp "," EventParams ")"  [strict(1)]
- // ---------------------------------------------------------------------------------------------
+    syntax CTypedLLLExp  ::= "#packLoggingTopic" "(" CTypedLLLExp "," EventParams ")"  [strict(1)]
+ // ----------------------------------------------------------------------------------------------
     rule #packLoggingTopic(ARGCODE, %eparam(_, T, _)) => #baseTypeConvert(ARGCODE, T)
       requires isBaseType(T)
 
@@ -1172,8 +1183,8 @@ module VIPER-LLL
                        @tlll(T, CODE, EXPRATTR))
 
 
-    syntax CTypedLLLExp ::= "#compileExpr" "(" Expr ")"
- // ---------------------------------------------------
+    syntax CTypedLLLExp  ::= "#compileExpr" "(" Expr ")"
+ // ----------------------------------------------------
 
 
 // Number
@@ -1275,8 +1286,8 @@ module VIPER-LLL
         => #binOp(BOP, #compileValueExpr(LEXPR), #compileValueExpr(REXPR))
 
 
-    syntax CTypedLLLExp ::= "#binOp"     "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
- // ------------------------------------------------------------------------------------------------------
+    syntax CTypedLLLExp  ::= "#binOp" "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
+ // ---------------------------------------------------------------------------------------------------
     // TODO: support unit type
 
     rule #binOp(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
@@ -1288,8 +1299,8 @@ module VIPER-LLL
              ~> #clampArithResult
 
 
-    syntax CTypedLLLExp ::= "#binOpPure" "(" BinOp "," TypedLLLExp  "," TypedLLLExp  ")"
- // ------------------------------------------------------------------------------------
+    syntax CTypedLLLExp  ::= "#binOpPure" "(" BinOp "," TypedLLLExp  "," TypedLLLExp  ")"
+ // -------------------------------------------------------------------------------------
     rule #binOpPure(+, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
         => #ifThenElse(LT ==K RT,
                        @tlll(LT, $add(LCODE, RCODE), @none),
@@ -1368,9 +1379,9 @@ module VIPER-LLL
         => #compareOp(COP, #compileValueExpr(LEXP), #compileValueExpr(REXP))
 
 
-    syntax CTypedLLLExp ::= "#compareOp"    "(" CompareOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
-    syntax CTypedLLLExp ::= "#compareOpAux" "(" CompareOp "," TypedLLLExp  "," TypedLLLExp ")"
- // -------------------------------------------------------------------------------------------------------------
+    syntax CTypedLLLExp  ::= "#compareOp"    "(" CompareOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
+    syntax CTypedLLLExp  ::= "#compareOpAux" "(" CompareOp "," TypedLLLExp  "," TypedLLLExp ")"
+ // --------------------------------------------------------------------------------------------------------------
     //TODO: support `in` operator
 
     rule #compareOp(COP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
@@ -1441,8 +1452,8 @@ module VIPER-LLL
     rule #compileExpr(%boolop(BOP, LEXP, REXP)) => #boolOp(BOP, #compileValueExpr(LEXP), #compileExpr(REXP))
 
 
-    syntax CTypedLLLExp ::= "#boolOp" "(" BoolOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
-    syntax CTypedLLLExp ::= "#boolOpAux" "(" BoolOp "," TypedLLLExp "," TypedLLLExp ")"
+    syntax CTypedLLLExp  ::= "#boolOp" "(" BoolOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
+    syntax CTypedLLLExp  ::= "#boolOpAux" "(" BoolOp "," TypedLLLExp "," TypedLLLExp ")"
  // ----------------------------------------------------------------------------------------------------
     rule #boolOp(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
         => #ifThenElse((LT ==K %bool) andBool (RT ==K %bool),
@@ -1463,8 +1474,8 @@ module VIPER-LLL
     rule #compileExpr(%unaryop(UOP, EXPR)) => #unaryOp(UOP, #compileValueExpr(EXPR))
 
 
-    syntax CTypedLLLExp ::= "#unaryOp" "(" UnaryOp "," CTypedLLLExp ")"    [strict(2)]
- // ----------------------------------------------------------------------------------
+    syntax CTypedLLLExp  ::= "#unaryOp" "(" UnaryOp "," CTypedLLLExp ")"    [strict(2)]
+ // -----------------------------------------------------------------------------------
     rule #unaryOp(%not, @tlll(T, CODE, _)) => @tlll(%bool, $iszero(CODE), @none)
 
     rule #unaryOp(%neg, @tlll(T, CODE, _)) => #ifThenElse(isNumericType(T),
@@ -1669,13 +1680,13 @@ module VIPER-LLL
 //////////////////////////////////////////////////////////////////////////////
 
 
-    syntax Bool ::= "#isInitFunc" "(" Id ")"    [function]
- // ------------------------------------------------------
+    syntax Bool  ::= "#isInitFunc" "(" Id ")"    [function]
+ // -------------------------------------------------------
     rule #isInitFunc(FNAME) => FNAME ==K __init__
 
 
-    syntax Bool ::= "#isTypeOf" "(" Type "," Type /*target type*/ ")"    [function]
- // -------------------------------------------------------------------------------
+    syntax Bool  ::= "#isTypeOf" "(" Type "," Type /*target type*/ ")"    [function]
+ // --------------------------------------------------------------------------------
     rule #isTypeOf(T, TARGET) => #isUnitTypeOf(T, TARGET)
       requires isUnitType(T)
 
@@ -1683,16 +1694,16 @@ module VIPER-LLL
       requires notBool isUnitType(T)
 
 
-    syntax Bool ::= "#isUnitTypeOf" "(" UnitType "," Type ")"    [function]
- // -----------------------------------------------------------------------
+    syntax Bool  ::= "#isUnitTypeOf" "(" UnitType "," Type ")"    [function]
+ // ------------------------------------------------------------------------
     rule #isUnitTypeOf(%unitT(T, _, _), T) => true
 
     rule #isUnitTypeOf(%unitT(T, _, _), TARGET) => false
       requires T =/=K TARGET
 
 
-    syntax Bool ::= "#isTopic" "(" EventParam ")"    [function]
- // -----------------------------------------------------------
+    syntax Bool  ::= "#isTopic" "(" EventParam ")"    [function]
+ // ------------------------------------------------------------
     rule #isTopic(%eparam(_, _, ISTOPIC)) => ISTOPIC
 
 
@@ -1710,8 +1721,8 @@ module VIPER-LLL
 // Exception
 // ======================
 
-    syntax KItem       ::= "#exception" "(" String ")"
- // --------------------------------------------------
+    syntax KItem  ::= "#exception" "(" String ")"
+ // ---------------------------------------------
 
 
 
@@ -1720,21 +1731,21 @@ module VIPER-LLL
 
 
     syntax Defs  ::= Defs "++Def" Defs    [right, function]
- // ------------------------------------------------------
+ // -------------------------------------------------------
     rule .Defs ++Def DEFS:Defs => DEFS
 
     rule (DEF DEFS1) ++Def DEFS2:Defs => DEF (DEFS1 ++Def DEFS2)
 
 
-    syntax Params ::= Params "++Param" Params    [right, function]
- // -------------------------------------------------------------
+    syntax Params  ::= Params "++Param" Params    [right, function]
+ // ---------------------------------------------------------------
     rule .Params ++Param PARAMS:Params => PARAMS
 
     rule (PARAM PARAMS1) ++Param PARAMS2 => PARAM (PARAMS1 ++Param PARAMS2)
 
 
-    syntax EventParams ::= EventParams "++Eparam" EventParams    [right, function]
- // -----------------------------------------------------------------------------
+    syntax EventParams  ::= EventParams "++Eparam" EventParams    [right, function]
+ // -------------------------------------------------------------------------------
     rule .EventParams ++Eparam EPARAMS:EventParams => EPARAMS
 
     rule (EPARAM EPARAMS1) ++Eparam EPARAMS2 => EPARAM (EPARAMS1 ++Eparam EPARAMS2)
@@ -1756,8 +1767,8 @@ module VIPER-LLL
     rule (LE , LES1) ++LLL LES2        => LE , (LES1 ++LLL LES2)
 
 
-    syntax TypedLLLExps ::= TypedLLLExps "++TLLL" TypedLLLExps  [right, function]
- // -----------------------------------------------------------------------------
+    syntax TypedLLLExps  ::= TypedLLLExps "++TLLL" TypedLLLExps  [right, function]
+ // ------------------------------------------------------------------------------
     rule .TypedLLLExps ++TLLL TLLLEXPS:TypedLLLExps => TLLLEXPS
 
     rule (TLLLEXP TLLLEXPS1) ++TLLL TLLLEXPS2 => TLLLEXP (TLLLEXPS1 ++TLLL TLLLEXPS2)
@@ -1783,8 +1794,8 @@ module VIPER-LLL
     rule #inIds(ID, ID1 IDS) => #inIds(ID, IDS)    requires ID =/=K ID1
 
 
-    syntax Bool ::= "#inDecorators" "(" Decorator "," Decorators ")"  [function]
- // ----------------------------------------------------------------------------
+    syntax Bool  ::= "#inDecorators" "(" Decorator "," Decorators ")"  [function]
+ // -----------------------------------------------------------------------------
     rule #inDecorators(D, .Decorators) => false
 
     rule #inDecorators(D, DEC DECS) => true                     requires D ==K DEC
@@ -1847,8 +1858,8 @@ module VIPER-LLL
     rule #canonicalizeType(%bytes32, _) => "bytes32"
 
 
-    syntax Int ::= "#getListTCount" "(" Type ")"    [function]
- // ----------------------------------------------------------
+    syntax Int  ::= "#getListTCount" "(" Type ")"    [function]
+ // -----------------------------------------------------------
     rule #getListTCount(%listT(T, N)) => N
 
 
@@ -2129,8 +2140,8 @@ module VIPER-LLL
     rule #packArgBy32BaseAux(LOC, @tlll(_, CODE, _)) => @argby32($mstore(LOC, CODE),.LLLExps, 32)
 
 
-    syntax Int ::= "#getFirstStoreLoc" "(" LLLExps ")"  [function]
- // --------------------------------------------------------------
+    syntax Int  ::= "#getFirstStoreLoc" "(" LLLExps ")"  [function]
+ // ---------------------------------------------------------------
     rule #getFirstStoreLoc($mstore(L:Int, _), CODE) => L
 
 
