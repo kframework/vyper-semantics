@@ -17,14 +17,17 @@ $ kompile --syntax-module LLL-EVM-INTERFACE lll-evm/lll-evm.k
 KViper consists of three components:
 
  * Generating an AST from a given Viper program
+   ```
+   $ python parser/viper_parser.py PGM.v.py >PGM.v.ast
+   ```
  * Translating from Viper (AST) to LLL
+   ```
+   $ krun -d viper-lll PGM.v.ast | sed 's/.*<lll> \(.*\) <\/lll>.*/\1/' >PGM.v.lll
+   ```
  * Translating from LLL to EVM
-
-```
-$ python parser/viper_parser.py PGM.v.py >PGM.v.ast
-$ krun -d viper-lll PGM.v.ast | sed 's/.*<lll> \(.*\) <\/lll>.*/\1/' >PGM.v.lll
-$ krun -d lll-evm PGM.v.lll | sed 's/.*<evm> ListItem ( \(.*\) ) <\/evm>.*/\1/' | sed 's/ ) ListItem ( / /g' | python lll-evm/opcodes2bytecodes.py
-```
+   ```
+   $ krun -d lll-evm PGM.v.lll | sed 's/.*<evm> ListItem ( \(.*\) ) <\/evm>.*/\1/' | sed 's/ ) ListItem ( / /g' | python lll-evm/opcodes2bytecodes.py
+   ```
 
 #### Example Run
 
