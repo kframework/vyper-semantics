@@ -1,20 +1,35 @@
-# Semantics of Viper in K
+# KViper: Semantics of Viper in K
 
-In this repository we present a formal semantics of [Viper](https://github.com/ethereum/viper). See [wiki](https://github.com/kframework/viper-semantics/wiki) for more details.
+In this repository we present a formal semantics of [Viper](https://github.com/ethereum/viper).
+For more details, refer to [wiki](https://github.com/kframework/viper-semantics/wiki).
 
-### Example Runs
+KViper can be used to compile Viper programs to EVM bytecodes.
 
-Viper to LLL:
+#### Building KViper
+
 ```
-$ cd viper-lll
-$ kompile --syntax-module VIPER-ABSTRACT-SYNTAX viper-lll-post.k
-$ krun ../tests/examples/token/ERC20.v | sed 's/.*<lll> \(.*\) <\/lll>.*/\1/' | diff - ../tests/examples/token/ERC20.v.lll
+$ kompile --syntax-module VIPER-ABSTRACT-SYNTAX viper-lll/viper-lll-post.k
+$ kompile --syntax-module LLL-EVM-INTERFACE lll-evm/lll-evm.k
 ```
 
-LLL to EVM:
+#### Running KViper
+
+KViper consists of three components:
+
+ * Generating an AST from a given Viper program
+ * Translating from Viper (AST) to LLL
+ * Translating from LLL to EVM
+
 ```
-$ cd lll-evm
-$ kompile --syntax-module LLL-EVM-INTERFACE lll-evm.k
-$ krun ../tests/examples/token/ERC20.v.lll | diff - ../tests/examples/token/ERC20.v.lll.out
-$ krun ../tests/examples/token/ERC20.v.lll | sed 's/.*<evm> ListItem ( \(.*\) ) <\/evm>.*/\1/' | sed 's/ ) ListItem ( / /g' | python opcodes2bytecodes.py
+$ python parser/viper_parser.py PGM.v.py >PGM.v.ast
+$ krun -d viper-lll PGM.v.ast | sed 's/.*<lll> \(.*\) <\/lll>.*/\1/' >PGM.v.lll
+$ krun -d lll-evm PGM.v.lll | sed 's/.*<evm> ListItem ( \(.*\) ) <\/evm>.*/\1/' | sed 's/ ) ListItem ( / /g' | python lll-evm/opcodes2bytecodes.py
+```
+
+#### Example Run
+
+```
+$ python parser/viper_parser.py tests/examples/token/ERC20.v.py | diff - tests/examples/token/ERC20.v.ast
+$ krun -d viper-lll tests/examples/token/ERC20.v.ast | sed 's/.*<lll> \(.*\) <\/lll>.*/\1/' | diff - tests/examples/token/ERC20.v.lll
+$ krun -d lll-evm tests/examples/token/ERC20.v.lll | sed 's/.*<evm> ListItem ( \(.*\) ) <\/evm>.*/\1/' | sed 's/ ) ListItem ( / /g' | python lll-evm/opcodes2bytecodes.py
 ```
