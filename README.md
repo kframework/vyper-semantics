@@ -16,4 +16,5 @@ LLL to EVM:
 $ cd lll-evm
 $ kompile --syntax-module LLL-EVM-INTERFACE lll-evm.k
 $ krun ../tests/examples/token/ERC20.v.lll | diff - ../tests/examples/token/ERC20.v.lll.out
+$ krun ../tests/examples/token/ERC20.v.lll | sed 's/.*<evm> ListItem ( \(.*\) ) <\/evm>.*/\1/' | sed 's/ ) ListItem ( / /g' | python opcodes2bytecodes.py
 ```
