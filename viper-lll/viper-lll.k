@@ -75,15 +75,15 @@ module VIPER-LLL
                                        Bool /*payable?*/  ","
                                        Bool /*internal?*/ ")"
 
-    syntax PackedLoggingData  ::= "@loggingdata" "(" LLLExp    /*code*/ ","
-                                                     Int  /*start loc*/ ","
-                                                     Int       /*size*/ ")"
+    syntax PackedLoggingData  ::= "@loggingdata" "(" LLLExp ","  // code
+                                                     Int    ","  // start loc
+                                                     Int    ")"  // size
 
-    syntax PackedArgBy32      ::= "@argby32" "(" LLLExps /*code*/ ","
-                                                 Int     /*size*/ ")"
+    syntax PackedArgBy32      ::= "@argby32" "(" LLLExps ","  // code
+                                                 Int     ")"  // size
 
-    syntax PackedArgData      ::= "@argdata" "(" LLLExp /*code*/ ","
-                                                 Int    /*size*/ ")"
+    syntax PackedArgData      ::= "@argdata" "(" LLLExp ","  // code
+                                                 Int    ")"  // size
 
     // Convention: C'Sort' is a one-one corresponding supersort of Sort. C'Sort'
     //             requires for evaluation (i.e. not KResult).
@@ -97,7 +97,6 @@ module VIPER-LLL
     syntax KResult  ::= LLLExp
                       | LLLExps
                       | TypedLLLExp
-                      | TypedAddr
                       | PackedLoggingData
                       | PackedArgBy32
                       | PackedArgData
@@ -1045,108 +1044,145 @@ module VIPER-LLL
 
     syntax CLLLExps  ::= "#log"    "(" Exprs "," EventRecord ")"
 
-    syntax CLLLExps  ::= "#logAux" "(" Int /*event id*/  ","
-                                       Exprs             ","
-                                       EventParams       ","
-                                       Exprs /*topic*/   ","
-                                       EventParams       ","
-                                       Exprs /*data*/    ","
-                                       EventParams       ")"
- // ------------------------------------------------------------
-    rule #log(ARGS, @event(EID, ENAME, EPARAMS)) => #logAux(EID, ARGS, EPARAMS, .Exprs, .EventParams, .Exprs, .EventParams)
+    syntax CLLLExps  ::= "#logAux" "(" Int         ","  // event id
+                                       Exprs       ","
+                                       EventParams ","
+                                       Exprs       ","  // topic args
+                                       EventParams ","  // topic params
+                                       Exprs       ","  // data args
+                                       EventParams ")"  // data params
+ // --------------------------------------------------
+    rule #log(ARGS, @event(EID, ENAME, EPARAMS))
+        => #ifThenElse(#numOfExprs(ARGS) =/=K #numOfEventParams(EPARAMS),
+                       #exception("# of args doesn't match # of params in event " +String
+                                  Id2String(ENAME) +String
+                                  " expected: " +String Int2String(#numOfEventParams(EPARAMS)) +String
+                                  ", actual: " +String Int2String(#numOfExprs(ARGS))),
+                       #logAux(EID, ARGS, EPARAMS, .Exprs, .EventParams, .Exprs, .EventParams))
 
     rule #logAux(EID, (ARG1 ARGS), (EPARAM1 EPARAMS), TARGS, TEPARAMS, DARGS, DEPARAMS)
-             => #ifThenElse(#isTopic(EPARAM1),
-                            #logAux(EID, ARGS, EPARAMS, TARGS ++Expr ARG1, TEPARAMS ++Eparam EPARAM1, DARGS, DEPARAMS),
-                            #logAux(EID, ARGS, EPARAMS, TARGS, TEPARAMS, DARGS ++Expr ARG1, DEPARAMS ++Eparam EPARAM1))
+        => #ifThenElse(#isTopic(EPARAM1),
+                       #logAux(EID, ARGS, EPARAMS, TARGS ++Expr ARG1, TEPARAMS ++Eparam EPARAM1, DARGS, DEPARAMS),
+                       #logAux(EID, ARGS, EPARAMS, TARGS, TEPARAMS, DARGS ++Expr ARG1, DEPARAMS ++Eparam EPARAM1))
 
-
-    syntax CLLLExps ::= "#log1"  "(" CPackedLoggingData ","
-                                     Int                ")"          [strict(1)]
-    syntax CLLLExps ::= "#log2"  "(" CPackedLoggingData ","
-                                     Int                ","
-                                     CTypedLLLExp       ")"     [seqstrict(1,3)]
-    syntax CLLLExps ::= "#log3"  "(" CPackedLoggingData ","
-                                     Int                ","
-                                     CTypedLLLExp       ","
-                                     CTypedLLLExp       ")"   [seqstrict(1,3,4)]
-    syntax CLLLExps ::= "#log4"  "(" CPackedLoggingData ","
-                                     Int                ","
-                                     CTypedLLLExp       ","
-                                     CTypedLLLExp       ","
-                                     CTypedLLLExp       ")" [seqstrict(1,3,4,5)]
- // --------------------------------------------------------------------------------
     // 0 topic
-    rule #logAux(EID, .Exprs, .EventParams, (TARG1 .Exprs), (TEPARAM1 .EventParams), DARGS, DEPARAMS)
-           => #log1(#packLoggingData(DARGS, DEPARAMS), EID)
+    rule #logAux(EID, .Exprs, .EventParams, .Exprs, .EventParams, DARGS, DEPARAMS)
+        => #log1(EID, #packLoggingData(DARGS, DEPARAMS))
 
     // 1 topic
     rule #logAux(EID, .Exprs, .EventParams, (TARG1 .Exprs), (TEPARAM1 .EventParams), DARGS, DEPARAMS)
-           => #log2(#packLoggingData(DARGS, DEPARAMS),
-                    EID,
-                    #packLoggingTopic(#compileExpr(TARG1), TEPARAM1))
+        => #log2(EID,
+                 #packLoggingTopic(#compileExpr(TARG1), TEPARAM1),
+                 #packLoggingData(DARGS, DEPARAMS))
 
     // 2 topics
     rule #logAux(EID, .Exprs, .EventParams, (TARG1 TARG2 .Exprs), (TEPARAM1 TEPARAM2 .EventParams), DARGS, DEPARAMS)
-           => #log3(#packLoggingData(DARGS, DEPARAMS),
-                    EID,
-                    #packLoggingTopic(#compileExpr(TARG1), TEPARAM1),
-                    #packLoggingTopic(#compileExpr(TARG2), TEPARAM2))
+        => #log3(EID,
+                 #packLoggingTopic(#compileExpr(TARG1), TEPARAM1),
+                 #packLoggingTopic(#compileExpr(TARG2), TEPARAM2),
+                 #packLoggingData(DARGS, DEPARAMS))
 
     // 3 topics
     rule #logAux(EID, .Exprs, .EventParams, (TARG1 TARG2 TARG3 .Exprs), (TEPARAM1 TEPARAM2 TEPARAM3 .EventParams), DARGS, DEPARAMS)
-           => #log4(#packLoggingData(DARGS, DEPARAMS),
-                    EID,
-                    #packLoggingTopic(#compileExpr(TARG1), TEPARAM1),
-                    #packLoggingTopic(#compileExpr(TARG2), TEPARAM2),
-                    #packLoggintTopic(#compileExpr(TARG3), TEPARAM3))
+        => #log4(EID,
+                 #packLoggingTopic(#compileExpr(TARG1), TEPARAM1),
+                 #packLoggingTopic(#compileExpr(TARG2), TEPARAM2),
+                 #packLoggintTopic(#compileExpr(TARG3), TEPARAM3),
+                 #packLoggingData(DARGS, DEPARAMS))
 
 
-    rule #log1(@loggingdata(DATACODE, START, SIZE), EID) => $%seq(
-                                                              DATACODE,
-                                                              $log1(START, SIZE, EID),.LLLExps
-                                                            ),.LLLExps
+    syntax CLLLExps ::= "#log1" "(" Int                ","
+                                    CPackedLoggingData
+                                ")"            [strict(2)]
 
-    rule #log2(@loggingdata(DATACODE, START, SIZE), EID, @tlll(_, TOPIC1, _))
-             => $%seq(
-                  DATACODE,
-                  $log2(START, SIZE, EID, TOPIC1),.LLLExps
-                ),.LLLExps
+    syntax CLLLExps ::= "#log2" "(" Int                ","
+                                    CTypedLLLExp       ","
+                                    CPackedLoggingData
+                                ")"       [seqstrict(2,3)]
 
-    rule #log3(@loggingdata(DATACODE, START, SIZE), EID, @tlll(_, TOPIC1, _), @tlll(_, TOPIC2, _))
-             => $%seq(
-                  DATACODE,
-                  $log3(START, SIZE, EID, TOPIC1, TOPIC2),.LLLExps
-                ),.LLLExps
+    syntax CLLLExps ::= "#log3" "(" Int                ","
+                                    CTypedLLLExp       ","
+                                    CTypedLLLExp       ","
+                                    CPackedLoggingData
+                                ")"     [seqstrict(2,3,4)]
 
-    rule #log4(@loggingdata(DATACODE, START, SIZE), EID, @tlll(_, TOPIC1, _), @tlll(_, TOPIC2, _), @tlll(_, TOPIC3, _))
-             => $%seq(
-                  DATACODE,
-                  $log4(START, SIZE, EID, TOPIC1, TOPIC2, TOPIC3),.LLLExps
-                ),.LLLExps
+    syntax CLLLExps ::= "#log4" "(" Int                ","
+                                    CTypedLLLExp       ","
+                                    CTypedLLLExp       ","
+                                    CTypedLLLExp       ","
+                                    CPackedLoggingData
+                                ")"   [seqstrict(2,3,4,5)]
+ // ------------------------------------------------------
+    rule #log1(EID, @loggingdata(DATACODE, START, SIZE))
+        => $%seq(
+             DATACODE,
+             $log1(START, SIZE, EID),.LLLExps),.LLLExps
+
+    rule #log2(EID, @tlll(_, TOPIC1, _), @loggingdata(DATACODE, START, SIZE))
+        => $%seq(
+             DATACODE,
+             $log2(START, SIZE, EID, TOPIC1),.LLLExps),.LLLExps
+
+    rule #log3(EID, @tlll(_, TOPIC1, _), @tlll(_, TOPIC2, _), @loggingdata(DATACODE, START, SIZE))
+        => $%seq(
+             DATACODE,
+             $log3(START, SIZE, EID, TOPIC1, TOPIC2),.LLLExps),.LLLExps
+
+    rule #log4(EID, @tlll(_, TOPIC1, _), @tlll(_, TOPIC2, _), @tlll(_, TOPIC3, _), @loggingdata(DATACODE, START, SIZE))
+        => $%seq(
+             DATACODE,
+             $log4(START, SIZE, EID, TOPIC1, TOPIC2, TOPIC3),.LLLExps),.LLLExps
 
 
     syntax CPackedLoggingData  ::= "#packLoggingData"    "(" Exprs        ","
                                                              EventParams  ")"
+
     syntax CPackedLoggingData  ::= "#packLoggingDataAux" "(" Exprs        ","
                                                              EventParams  ","
                                                              LLLExps      ","
-                                                             Int /*size*/ ")"
- // -----------------------------------------------------------------------------
-    rule #packLoggingData(DARGS, DEPARAMS) => #ifThenElse(#numOfExprs(DARGS) ==Int 0,
-                                                          @loggingdata($pass, 0, 0),
-                                                          #packLoggingDataAux(DARGS, DEPARAMS, .LLLExps, 0))
+                                                             Int          ")"  // size of the packed data
+ // -------------------------------------------------------------------------
+    rule #packLoggingData(DARGS, DEPARAMS)
+        => #ifThenElse(#numOfExprs(DARGS) ==Int 0,
+                       @loggingdata($pass, 0, 0),
+                       #packLoggingDataAux(DARGS, DEPARAMS, .LLLExps, 0))
 
     rule #packLoggingDataAux(.Exprs, .EventParams, CODE, SIZE)
-             => @loggingdata($%seq(CODE), #getFirstStoreLoc(CODE), SIZE)
+        => @loggingdata($%seq(CODE), #getFirstStoreLoc(CODE), SIZE)
 
     rule #packLoggingDataAux((DARG DARGS), %eparam(_, T, _) DEPARAMS, CODE, SIZE)
-             => #packArgBy32Base(#newPlaceholder(T), #compileExpr(DARG), T)
-             ~> #packLoggingDataAux(DARGS, DEPARAMS, CODE, SIZE)
-      requires isBaseType(T)
+        => #packArgBy32(#newPlaceholder(T), DARG, T)
+        ~> #packLoggingDataAux(DARGS, DEPARAMS, CODE, SIZE)
 
     rule @argby32(ARGCODE, ARGSIZE) ~> #packLoggingDataAux(DARGS, DEPARAMS, CODE, TOTALSIZE)
-             => #packLoggingDataAux(DARGS, DEPARAMS, CODE ++LLL ARGCODE, TOTALSIZE +Int ARGSIZE)
+        => #packLoggingDataAux(DARGS, DEPARAMS, CODE ++LLL ARGCODE, TOTALSIZE +Int ARGSIZE)
+
+
+    syntax CPackedArgBy32  ::= "#packArgBy32" "(" CTypedLLLExp ","  // start loc
+                                                  Expr         ","  // value
+                                                  Type
+                                              ")"      [strict(1)]
+ // --------------------------------------------------------------
+    rule #packArgBy32(PLACEHOLDER, EXPR, T)
+        => #packArgBy32Base(PLACEHOLDER, #compileExpr(EXPR), T)
+      requires isBaseType(T)
+
+    // TODO: Add support for ByteArray
+
+    // TODO: Add support for List
+
+
+    syntax CPackedArgBy32  ::= "#packArgBy32Base"    "(" TypedLLLExp  ","
+                                                         CTypedLLLExp ","
+                                                         Type         ")"  [strict(2)]
+
+    syntax CPackedArgBy32  ::= "#packArgBy32BaseAux" "(" Int          ","
+                                                         CTypedLLLExp ")"  [strict(2)]
+ // ----------------------------------------------------------------------------------
+    rule #packArgBy32Base(@tlll(_, LOC:Int, _), TCODE, ARGTYPE)
+        => #packArgBy32BaseAux(LOC, #baseTypeConvert(TCODE, ARGTYPE))
+
+    rule #packArgBy32BaseAux(LOC, @tlll(_, CODE, _)) => @argby32($mstore(LOC, CODE),.LLLExps, 32)
 
 
     syntax CTypedLLLExp  ::= "#packLoggingTopic" "(" CTypedLLLExp "," EventParams ")"  [strict(1)]
@@ -1865,10 +1901,10 @@ module VIPER-LLL
 
     syntax String  ::= "#canonicalizeType" "(" Type "," Bool /*is event?*/")"  [function]
  // -------------------------------------------------------------------------------------
-    rule #canonicalizeType(%bytesT(L), true) => "bytes" +String Int2String(L)
+    rule #canonicalizeType(%bytesT(L), ISEVENT) => "bytes" +String Int2String(L)
       requires L <=Int 32
 
-    rule #canonicalizeType(%bytesT(L), true) => "bytes"
+    rule #canonicalizeType(%bytesT(L), _) => "bytes"
       requires notBool(L <=Int 32)
 
     rule #canonicalizeType(%bytesT(L), false) => "bytes"
@@ -2143,18 +2179,6 @@ module VIPER-LLL
  // ----------------------------------------------------------------------------------------------------
     rule #ifThenElse(true, THENCLAUSE, ELSECLAUSE) => THENCLAUSE
     rule #ifThenElse(false, THENCLAUSE, ELSECLAUSE) => ELSECLAUSE
-
-
-    syntax CPackedArgBy32  ::= "#packArgBy32Base"    "(" CTypedLLLExp ","
-                                                         CTypedLLLExp ","
-                                                         Type         ")"  [seqstrict(1,2)]
-    syntax CPackedArgBy32  ::= "#packArgBy32BaseAux" "(" Int          ","
-                                                         CTypedLLLExp ")"  [strict(2)]
- // ---------------------------------------------------------------------------------------
-    rule #packArgBy32Base(@tlll(_, LOC:Int, _), TCODE, ARGTYPE)
-        => #packArgBy32BaseAux(LOC, #baseTypeConvert(TCODE, ARGTYPE))
-
-    rule #packArgBy32BaseAux(LOC, @tlll(_, CODE, _)) => @argby32($mstore(LOC, CODE),.LLLExps, 32)
 
 
     syntax Int  ::= "#getFirstStoreLoc" "(" LLLExps ")"  [function]

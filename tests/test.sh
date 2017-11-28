@@ -20,7 +20,7 @@ run_tests() {
     done
 }
 
-echo "kompile viper-lll"
+echo "kompile ${SEMTANTICS_DIR}/viper-lll.k"
 kompile ${SEMTANTICS_DIR}/viper-lll.k --syntax-module VIPER-ABSTRACT-SYNTAX --debug -d ${SCRIPT_DIR}
 
 #parser/features
@@ -28,6 +28,9 @@ TESTS_DIR=${SCRIPT_DIR}/parser/features/test_assignment
 run_tests $TESTS_DIR
 
 TESTS_DIR=$SCRIPT_DIR/parser/features/test_conditionals
+run_tests $TESTS_DIR
+
+TESTS_DIR=$SCRIPT_DIR/parser/features/test_logging
 run_tests $TESTS_DIR
 
 #parser/syntax
