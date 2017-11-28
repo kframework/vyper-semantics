@@ -102,6 +102,7 @@ module VIPER-LLL
                       | PackedArgData
                       | Bool
                       | Int
+                      | String
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -157,15 +158,15 @@ module VIPER-LLL
 
     syntax KItem  ::= "#addEvents"     "(" Events ")"
     syntax KItem  ::= "#addEvent"      "(" Event ")"
-    syntax KItem  ::= "#addEventAux"   "(" Id "," EventParams ")"
- // -------------------------------------------------------------
+    syntax KItem  ::= "#addEventAux"   "(" K "," Id "," EventParams ")"  [strict(1)]
+ // --------------------------------------------------------------------------------
     rule #addEvents(.Events) => .
 
     rule #addEvents(E ES) => #addEvent(E) ~> #addEvents(ES)
 
     rule <k> #addEvent(%event(NAME, EPARAMS))
             => #checkEventParams(EPARAMS, 0, .Ids)
-            ~> #addEventAux(NAME, EPARAMS)
+            ~> #addEventAux(#computeEventId(NAME, EPARAMS), NAME, EPARAMS)
          ... </k>
          <internalSig> SIGS </internalSig>
       requires notBool NAME in keys(SIGS)
@@ -176,9 +177,8 @@ module VIPER-LLL
          <internalSig> SIGS </internalSig>
       requires NAME in keys(SIGS)
 
-    rule <k> #addEventAux(NAME, EPARAMS) => . ... </k>
-         <internalSig> SIGS
-                      => SIGS[NAME <- @event(#computeEventId(NAME, EPARAMS), NAME, EPARAMS)] </internalSig>
+    rule <k> #addEventAux(EID:Int, NAME, EPARAMS) => . ... </k>
+         <internalSig> SIGS => SIGS[NAME <- @event(EID, NAME, EPARAMS)] </internalSig>
 
 
     syntax KItem  ::= "#checkEventParams"      "(" EventParams "," Int "," Ids ")"
@@ -247,17 +247,23 @@ module VIPER-LLL
 
     syntax KItem  ::= "#addFuncs"   "(" Defs ")"
 
-    syntax KItem  ::= "#addFunc"    "(" Id   "," Params "," Type ","
-                                        Bool /*constant?*/ ","
-                                        Bool /*payable?*/  ","
-                                        Bool /*internal?*/ ","
-                                        Bool /*public?*/   ")"
+    syntax KItem  ::= "#addFunc"    "(" Id     ","
+                                        Params ","
+                                        Type   ","
+                                        Bool   ","  // constant?
+                                        Bool   ","  // payable?
+                                        Bool   ","  // internal?
+                                        Bool   ")"  // public?
 
-    syntax KItem  ::= "#addFuncAux" "(" Id   "," Params "," Type ","
-                                        Bool /*constant?*/ ","
-                                        Bool /*payable?*/  ","
-                                        Bool /*internal?*/ ")"
- // ----------------------------------------------------------------
+    syntax KItem  ::= "#addFuncAux" "(" K      ","  // func id
+                                        Id     ","
+                                        Params ","
+                                        Type   ","
+                                        Bool   ","
+                                        Bool   ","
+                                        Bool
+                                    ")" [strict(1)]
+ // -----------------------------------------------
     rule #addFuncs(.Defs) => .
 
     rule #addFuncs(%fdecl(DECS, FNAME, PARAMS, T, STMTS) DEFS)
@@ -268,26 +274,28 @@ module VIPER-LLL
                     #inDecorators(%@public, DECS))
         ~> #addFuncs(DEFS)
 
-    rule #addFunc(FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL, PUBLIC)
-        => #checkFuncParams(PARAMS, .Ids)
-        ~> #checkInternalPublicMECE(INTERNAL, PUBLIC)
-        ~> #addFuncAux(FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL)
+    rule <k> #addFunc(FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL, PUBLIC)
+            => #checkFuncParams(PARAMS, .Ids)
+            ~> #checkInternalPublicMECE(INTERNAL, PUBLIC)
+            ~> #addFuncAux(#computeFuncId(FNAME, PARAMS), FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL)
+         ... </k>
+         <internalSig> SIGS </internalSig>
+      requires notBool FNAME in keys(SIGS)
 
-    rule <k> #addFuncAux(FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL) => . ... </k>
+    rule <k> #addFunc(FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL, PUBLIC)
+            => #exception("Duplicate event or function name: " +String Id2String(FNAME)) ... </k>
+         <internalSig> SIGS </internalSig>
+      requires FNAME in keys(SIGS)
+
+    rule <k> #addFuncAux(FID:Int, FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL) => . ... </k>
          <internalSig> SIGS
-                      => SIGS[FNAME <- @func(#computeFuncId(FNAME, PARAMS),
+                      => SIGS[FNAME <- @func(FID,
                                              FNAME,
                                              PARAMS,
                                              T,
                                              CONSTANT,
                                              PAYABLE,
                                              INTERNAL)] </internalSig>
-      requires notBool FNAME in keys(SIGS)
-
-    rule <k> #addFuncAux(FNAME, _, _, _, _, _)
-        => #exception("Duplicate event or function name: " +String Id2String(FNAME)) ... </k>
-         <internalSig> SIGS </internalSig>
-      requires FNAME in keys(SIGS)
 
 
     syntax KItem  ::= "#checkFuncParams"       "(" Params "," Ids ")"
@@ -1899,18 +1907,20 @@ module VIPER-LLL
     rule #sizeOfType(%structT(%vdecl(_, T) VS)) => #sizeOfType(T) +Int #sizeOfType(%structT(VS))
 
 
-    syntax String  ::= "#canonicalizeType" "(" Type "," Bool /*is event?*/")"  [function]
- // -------------------------------------------------------------------------------------
-    rule #canonicalizeType(%bytesT(L), ISEVENT) => "bytes" +String Int2String(L)
-      requires L <=Int 32
+    syntax KItem  ::= "#canonicalizeType" "(" Type "," Bool /*event?*/ ")"
+ // ------------------------------------------------------------------------
+    rule #canonicalizeType(%bytesT(L), EVENT)
+        => #ifThenElse(EVENT ==K true andBool L <=Int 32,
+                       "bytes" +String Int2String(L),
+                       "bytes")
 
-    rule #canonicalizeType(%bytesT(L), _) => "bytes"
-      requires notBool(L <=Int 32)
+    rule #canonicalizeType(%listT(T, N), _)
+        => #canonicalizeListType(#canonicalizeType(T, false), N)
+      requires isBaseType(T) orBool isListType(T)
 
-    rule #canonicalizeType(%bytesT(L), false) => "bytes"
-
-    rule #canonicalizeType(%listT(T, N), _) => #canonicalizeType(T, false) +String "[" +String Int2String(N) +String "]"
-         requires isBaseType(T) orBool isListType(T)
+    rule #canonicalizeType(%listT(T, N), _)
+        => #exception("List of byte arrays not allowed.")
+      requires isByteArrayType(T)
 
     rule #canonicalizeType(%num, _) => "int128"
 
@@ -1923,6 +1933,12 @@ module VIPER-LLL
     rule #canonicalizeType(%address, _) => "address"
  
     rule #canonicalizeType(%bytes32, _) => "bytes32"
+
+
+    syntax KItem  ::= "#canonicalizeListType" "(" K "," Int ")"  [strict(1)]
+ // ------------------------------------------------------------------------
+    rule #canonicalizeListType(T:String, N)
+        => T +String "[" +String Int2String(N) +String "]"
 
 
     syntax Int  ::= "#getListTCount" "(" Type ")"    [function]
@@ -1952,32 +1968,55 @@ module VIPER-LLL
 // ==================
 
 
-    syntax Int     ::= "#computeEventId"     "(" Id     "," EventParams ")"    [function]
-    syntax String  ::= "#computeEventSig"    "(" String "," EventParams ")"    [function]
- // -------------------------------------------------------------------------------------
+    syntax KItem  ::= "#computeEventId"    "(" Id "," EventParams ")"
+    syntax KItem  ::= "#computeEventIdAux"
+ // -----------------------------------------------------------------
     rule #computeEventId(NAME, EPARAMS)
-        => String2Base(Keccak256(#computeEventSig(Id2String(NAME) +String "(" , EPARAMS)), 16)
+        => #computeEventSig(Id2String(NAME) +String "(", EPARAMS)
+        ~> #computeEventIdAux
 
-    rule #computeEventSig(SIG, %eparam(_, T, _) EPARAM1 EPARAMS)
-        => #computeEventSig(SIG +String #canonicalizeType(T, true) +String "," , EPARAM1 EPARAMS)
+    rule EVENTSIG:String ~> #computeEventIdAux
+        => String2Base(Keccak256(EVENTSIG), 16)
 
-    rule #computeEventSig(SIG, %eparam(_, T, _) .EventParams)
-        => #computeEventSig(SIG +String #canonicalizeType(T, true), .EventParams)
+
+    syntax KItem  ::= "#computeEventSig"    "(" String "," EventParams ")"
+    syntax KItem  ::= "#computeEventSigAux" "(" String "," EventParams ")"
+ // ----------------------------------------------------------------------
+    rule #computeEventSig(SIG, %eparam(_, T, _) EPARAMS)
+        => #canonicalizeType(T, true)
+        ~> #computeEventSigAux(SIG, EPARAMS)
+
+    rule TYPE:String ~> #computeEventSigAux(SIG, EPARAM1 EPARAMS)
+        => #computeEventSig(SIG +String TYPE +String ",", EPARAM1 EPARAMS)
+
+    rule TYPE:String ~> #computeEventSigAux(SIG, .EventParams)
+        => #computeEventSig(SIG +String TYPE, .EventParams)
 
     rule #computeEventSig(SIG, .EventParams) => SIG +String ")"
 
 
-    syntax Int     ::= "#computeFuncId"  "(" Id     "," Params ")"    [function]
-    syntax String  ::= "#computeFuncSig" "(" String "," Params ")"    [function]
- // ----------------------------------------------------------------------------
+    syntax KItem  ::= "#computeFuncId"  "(" Id "," Params ")"
+    syntax KItem  ::= "#computeFuncIdAux"
+ // ---------------------------------------------------------
     rule #computeFuncId(FNAME, PARAMS)
-        => String2Base(substrString(Keccak256(#computeFuncSig(Id2String(FNAME) +String "(", PARAMS)), 0, 8), 16)
+        => #computeFuncSig(Id2String(FNAME) +String "(", PARAMS)
+        ~> #computeFuncIdAux
 
-    rule #computeFuncSig(SIG, %param(_,T) PARAM1 PARAMS)
-        => #computeFuncSig(SIG +String #canonicalizeType(T, false) +String "," , PARAM1 PARAMS)
+    rule FUNCSIG:String ~> #computeFuncIdAux
+        => String2Base(substrString(Keccak256(FUNCSIG), 0, 8), 16)
 
-    rule #computeFuncSig(SIG, %param(_,T) .Params)
-        => #computeFuncSig(SIG +String #canonicalizeType(T, false), .Params)
+    syntax KItem  ::= "#computeFuncSig"    "(" String "," Params ")"
+    syntax KItem  ::= "#computeFuncSigAux" "(" String "," Params ")"
+ // ----------------------------------------------------------------
+    rule #computeFuncSig(SIG, %param(_,T) PARAMS)
+        => #canonicalizeType(T, false)
+        ~> #computeFuncSigAux(SIG, PARAMS)
+
+    rule TYPE:String ~> #computeFuncSigAux(SIG, PARAM1 PARAMS)
+        => #computeFuncSig(SIG +String TYPE +String ",", PARAM1 PARAMS)
+
+    rule TYPE:String ~> #computeFuncSigAux(SIG, .Params)
+        => #computeFuncSig(SIG +String TYPE, .Params)
 
     rule #computeFuncSig(SIG, .Params) => SIG +String ")"
 
