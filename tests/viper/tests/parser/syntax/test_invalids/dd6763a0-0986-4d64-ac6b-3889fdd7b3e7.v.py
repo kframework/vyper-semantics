@@ -1,0 +1,4 @@
+
+@public
+def foo():
+    throw
