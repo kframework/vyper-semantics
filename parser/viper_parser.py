@@ -2,6 +2,7 @@
 
 import sys
 import ast
+import types
 
 from typing import List
 
@@ -16,6 +17,18 @@ def parse(code):
     # decorate_ast_with_source(o, code)
     # o = resolve_negative_literals(o)
     return o.body
+
+
+def parseList(nodeList, parseElement: types.FunctionType, separator):
+    rez = ""
+    first = True
+    for node in nodeList:
+        if first:
+            first = False
+        else:
+            rez += separator
+        rez += parseElement(node)
+    return rez
 
 
 #    syntax BaseType      ::= "%bool"
@@ -102,15 +115,7 @@ def parseDecorator(name):
 
 
 def parseDecorators(decorator_list):
-    rez = ""
-    first = True
-    for decorator in decorator_list:
-        if first:
-            first = False
-        else:
-            rez += " "
-        rez += parseDecorator(decorator)
-    return rez
+    return parseList(decorator_list, parseDecorator, " ")
 
 
 # syntax Param    ::= "%param" "(" Id "," Type ")"
@@ -122,15 +127,7 @@ def parseParam(arg: ast.arg):
 
 # syntax Params   ::= List{Param, ""}
 def parseParams(args: List[ast.arg]):
-    rez = ""
-    first = True
-    for arg in args:
-        if first:
-            first = False
-        else:
-            rez += " "
-        rez += parseParam(arg)
-    return rez
+    return parseList(args, parseParam, " ")
 
 
 #    syntax Var      ::= "%var"      "(" Id ")"
@@ -236,15 +233,7 @@ def parseExpr(expr):
 
 # syntax Exprs    ::= List{Expr, ""}
 def parseExprs(exprs, separator=" "):
-    rez = ""
-    first = True
-    for expr in exprs:
-        if first:
-            first = False
-        else:
-            rez += separator
-        rez += parseExpr(expr)
-    return rez
+    return parseList(exprs, parseExpr, separator)
 
 
 # syntax Stmt     ::= VarDecl  // annotated assign
@@ -299,10 +288,7 @@ def parseStmt(stmt):
 
 # syntax Stmts    ::= List{Stmt, ""}
 def parseStmts(body):
-    rez = ""
-    for stmt in body:
-        rez += parseStmt(stmt)
-    return rez
+    return parseList(body, parseStmt, "")
 
 
 #    syntax Def      ::= "%fdecl" "(" Decorators "," Id "," Params "," Type "," Stmts ")"
