@@ -232,11 +232,14 @@ def parseReservedExpr(expr):
 #   %as_num256(%msg.value)
 #   %msg.value
 #   %mapelem(%svar(balances), %var(_sender))
+#   %binop(+, %var(x), 10)
 def parseExpr(expr):
     if type(expr) == ast.Num or (type(expr) == ast.Name and expr.id in ["true", "false"]):
         return parseConst(expr)
     elif type(expr) == ast.Name and expr.id == "self":
         return "%self"
+    elif type(expr) == ast.BinOp:
+        return "%binop({}, {}, {})".format(parseBinOp(expr.op), parseExpr(expr.left), parseExpr(expr.right))
     elif type(expr) == ast.Name or type(expr) == ast.Index or type(expr) == ast.Subscript \
             or (type(expr) == ast.Attribute and expr.value.id == "self"):
         return parseVar(expr)
@@ -253,58 +256,64 @@ def parseExprs(exprs, separator=" "):
     return parseList(exprs, parseExpr, separator)
 
 
-# syntax AugAssignOp ::= "+=" | "-=" | "*=" | "/=" | "%="
+# syntax BinOp         ::= "+" | "-" | "*" | "/" | "%" | "**"
 #
 # we'll support all operators from Python.
-def parseAugAssignOp(op: ast.operator):
+def parseBinOp(op: ast.operator):
     opType = type(op)
     if opType == ast.Add:
-        return "+="
+        return "+"
     elif opType == ast.BitAnd:
-        return "&="
+        return "&"
     elif opType == ast.BitOr:
-        return "|="
+        return "|"
     elif opType == ast.BitXor:
-        return "^="
+        return "^"
     elif opType == ast.Div:
-        return "/="
+        return "/"
     elif opType == ast.FloorDiv:
-        return "//="
+        return "//"
     elif opType == ast.LShift:
-        return "<<="
+        return "<<"
     elif opType == ast.MatMult:
-        return "@="
+        return "@"
     elif opType == ast.Mod:
-        return "%="
+        return "%"
     elif opType == ast.Mult:
-        return "*="
+        return "*"
     elif opType == ast.Pow:
-        return "**="
+        return "**"
     elif opType == ast.RShift:
-        return ">>="
+        return ">>"
     elif opType == ast.Sub:
-        return "-="
+        return "-"
     else:
         raise ParserException("Unsupported AugAssign operator: " + str(op))
 
 
-# syntax Stmt     ::= VarDecl  // annotated assign
-#                  | "%assign"    "(" Var "," Expr ")"
-#                  | "%augassign" "(" AugAssignOp "," Var "," Expr ")"
-#                  | "%if"        "(" Expr "," Stmts "," Stmts ")"
-#                  | "%if"        "(" Expr "," Stmts ")"
-#                  | "%for"       "(" Id "," Int "," Stmts ")"
-#                  | "%for"       "(" Id "," Expr "," Expr "," Stmts ")"
-#                  | "%break"
-#                  | "%pass"
-#                  | "%return"
-#                  | "%return"    "(" Expr ")"
-#                  | "%assert"    "(" Expr ")"
-#                  | "%throw"
-#                  | "%log"       "(" Id "," Exprs ")"
-#                  // stmt dispatch table
-#                  | "%send"      "(" Expr  "," Expr ")"
-#                  | "%selfdestruct" "(" Expr ")"
+# syntax AugAssignOp ::= "+=" | "-=" | "*=" | "/=" | "%="
+def parseAugAssignOp(op: ast.operator):
+    return "{}=".format(parseBinOp(op))
+
+
+# syntax Stmt     ::= VarDecl                                              // annotated assign
+#                   | "%assign"    "(" Var "," Expr ")"
+#                   | "%augassign" "(" AugAssignOp "," Var "," Expr ")"
+#                   | "%if"        "(" Expr "," Stmts "," Stmts ")"
+#                   | "%if"        "(" Expr "," Stmts ")"
+#                   | "%forrange"  "(" Id "," Int  "," Stmts ")"            // for i in range(rounds)
+#                   | "%forrange"  "(" Id "," Expr "," Expr  "," Stmts ")"  // for i in range(start, start + rounds)
+#                   | "%forlist"   "(" Id "," Expr "," Stmts ")"            // for i in list()
+#                   | "%break"
+#                   | "%pass"
+#                   | "%return"
+#                   | "%return"    "(" Expr ")"
+#                   | "%assert"    "(" Expr ")"
+#                   | "%throw"
+#                   | "%log"       "(" Id "," Exprs ")"
+#                   // stmt dispatch table
+#                   | "%send"      "(" Expr  "," Expr ")"
+#                   | "%selfdestruct" "(" Expr ")"
 #
 # examples:
 #   _value = as_num256(msg.value)
@@ -324,6 +333,8 @@ def parseAugAssignOp(op: ast.operator):
 #  %if(%var(i),
 #    %return(5),
 #    %return(7))
+#
+# %forrange(i, 10, %pass)
 def parseStmt(stmt):
     if type(stmt) == ast.Assign:
         return "%assign({}, {})".format(parseVar(stmt.targets[0]), parseExpr(stmt.value))
@@ -342,6 +353,14 @@ def parseStmt(stmt):
             return "%if({},{})".format(parseExpr(stmt.test), parseStmts(stmt.body))
         else:
             return "%if({},{},{})".format(parseExpr(stmt.test), parseStmts(stmt.body), parseStmts(stmt.orelse))
+    elif type(stmt) == ast.For and stmt.iter.func.id == "range":
+        if len(stmt.iter.args) == 1:
+            return "%forrange({}, {},{})".format(stmt.target.id, parseExpr(stmt.iter.args[0]), parseStmts(stmt.body))
+        else:
+            return "%forrange({}, {}, {},{})".format(stmt.target.id, parseExpr(stmt.iter.args[0]),
+                                                     parseExpr(stmt.iter.args[1]), parseStmts(stmt.body))
+    elif type(stmt) == ast.Pass:
+        return "%pass"
     elif type(stmt) == ast.Return:
         if stmt.value is None:
             return "%return"
