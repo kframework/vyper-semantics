@@ -11,6 +11,16 @@ class ParserException(Exception):
     pass
 
 
+def get_original_if_0x_prefixed(expr):
+    context_slice = inputLines[expr.lineno - 1][expr.col_offset:]
+    if context_slice[:2] != '0x':
+        return None
+    t = 0
+    while t + 2 < len(context_slice) and context_slice[t + 2] in '0123456789abcdefABCDEF':
+        t += 1
+    return context_slice[:t + 2]
+
+
 def parse(code):
     o = ast.parse(code)
     # todo fix those
@@ -163,7 +173,11 @@ def parseVar(var):
 # note: hex is not possible because Python converts it to regular int.
 def parseConst(node):
     if type(node) == ast.Num:
-        return str(node.n)
+        hexFormat = get_original_if_0x_prefixed(node)
+        if hexFormat is None:
+            return str(node.n)
+        else:
+            return "%hex(\"{}\")".format(hexFormat[2:])
     elif type(node) == ast.Name and node.id in ["true", "false"]:
         return node.id
     else:
@@ -335,6 +349,8 @@ def parseProgram(nodeList):
     return rez
 
 
+inputLines: List[str]
+
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print("One argument expected: the file name.")
@@ -342,5 +358,6 @@ if __name__ == '__main__':
     fileName = sys.argv[1]
     with open(fileName, "r") as fin:
         input = fin.read()
+    inputLines = input.splitlines()
     astList = parse(input)
     print(parseProgram(astList))
