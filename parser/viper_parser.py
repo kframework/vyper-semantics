@@ -6,6 +6,8 @@ import types
 
 from typing import List
 
+from decimal import Decimal
+
 
 class ParserException(Exception):
     pass
@@ -45,6 +47,8 @@ def parseList(nodeList, parseElement: types.FunctionType, separator, initSeparat
 #    syntax BaseType      ::= "%bool"
 #                           | NumericType | "%num256"  | "%signed256"
 #                           | "%bytes32" | "%address"
+#
+# syntax PureNumType   ::= "%num" | "%decimal"
 def parseBaseType(name):  # value is Str. NumericType not yet supported
     if type(name) == ast.Name:
         return "%" + name.id
@@ -52,27 +56,29 @@ def parseBaseType(name):  # value is Str. NumericType not yet supported
         raise ParserException("BaseType parsing not yet implemented for: " + str(id))
 
 
-# syntax MappingType   ::= "%mapT"    "(" Type "," BaseType ")"
-#
-# example:
-#   %mapT(%num256, %address)
-def parseMappingType(param):
-    return "%mapT(" + parseType(param.value) + ", " + parseType(param.slice.value) + ")"
-
-
-#     syntax Type          ::= "%void"
+# syntax Type          ::= "%void"
 #                           | BaseType
 #                           | ByteArrayType
 #                           | ListType
 #                           | MappingType
 #                           | StructType
+#
+# syntax ListType      ::= "%listT"   "(" Type "," Int ")"
+#
+# syntax MappingType   ::= "%mapT"    "(" Type "," BaseType ")"
+#
+# example:
+#   %mapT(%num256, %address)
 def parseType(param):
     if param is None:
         return "%void"
     elif type(param) == ast.Name:
         return parseBaseType(param)
     elif type(param) == ast.Subscript:
-        return parseMappingType(param)
+        if type(param.slice.value) == ast.Num:
+            return "%listT({}, {})".format(parseType(param.value), parseConst(param.slice.value))
+        else:
+            return "%mapT({}, {})".format(parseType(param.value), parseType(param.slice.value))
     else:
         raise ParserException("Type parsing not yet implemented for: " + str(param))
 
@@ -164,6 +170,19 @@ def parseVar(var):
         raise ParserException("Unsupported Var format: " + str(var))
 
 
+# taken from viper compiler.
+DECIMAL_DIVISOR = 10000000000
+
+
+def parseFixed10Const(node):
+    num = Decimal(node.n)
+    divisor = 1
+    while num % 1 != 0 and divisor < DECIMAL_DIVISOR:
+        num *= 10
+        divisor *= 10
+    return "%fixed10({0:.0f}, {1})".format(num, divisor)
+
+
 # syntax Const    ::= Int
 #                   | "%hex"     "(" String ")"
 #                   | "%fixed10" "(" Int "," Int ")"  // decimal fixed point value with a precision of 10 decimal places
@@ -171,14 +190,15 @@ def parseVar(var):
 #                   | String
 #                   | Bool
 #
-# note: hex is not possible because Python converts it to regular int.
 def parseConst(node):
-    if type(node) == ast.Num:
+    if type(node) == ast.Num and type(node.n) == int:
         hexFormat = get_original_if_0x_prefixed(node)
         if hexFormat is None:
             return str(node.n)
         else:
             return "%hex(\"{}\")".format(hexFormat[2:])
+    elif type(node) == ast.Num and type(node.n == float):
+        return parseFixed10Const(node)
     elif type(node) == ast.Name and node.id in ["true", "false"]:
         return node.id
     else:
@@ -215,17 +235,20 @@ def parseReservedExpr(expr):
     return "%" + expr.value.id + "." + expr.attr
 
 
-#    syntax Expr     ::= Const
-#                      | Var
-#                      | ReservedExpr
-#                      | ReservedFunc  // expr dispatch table
-#                      | "%self"
-#                      | "%binop"     "(" BinOp     "," Expr "," Expr ")"
-#                      | "%compareop" "(" CompareOp "," Expr "," Expr ")"
-#                      | "%boolop"    "(" BoolOp    "," Expr "," Expr ")"
-#                      | "%unaryop"   "(" UnaryOp   "," Expr ")"
-#                      | "%icall"     "(" Id        "," Exprs ")"  // internal contract call
-#                      | "%ecall"     "(" Id        "," Exprs ")"  // external contract call
+# syntax Expr     ::= Const
+#                   | Var
+#                   | ListExpr
+#                   | "%self"
+#                   | "%binop"     "(" BinOp     "," Expr "," Expr ")"
+#                   | "%compareop" "(" CompareOp "," Expr "," Expr ")"
+#                   | "%boolop"    "(" BoolOp    "," Expr "," Expr ")"
+#                   | "%unaryop"   "(" UnaryOp   "," Expr ")"
+#                   | "%icall"     "(" Id        "," Exprs ")"  // internal contract call
+#                   | "%ecall"     "(" Id        "," Exprs ")"  // external contract call
+#                   | ReservedExpr
+#                   | ReservedFunc  // expr dispatch table
+#
+# syntax ListExpr      ::= "%list" "(" Exprs ")"
 #
 # examples:
 #   %var(_sender)
@@ -243,6 +266,8 @@ def parseExpr(expr):
     elif type(expr) == ast.Name or type(expr) == ast.Index or type(expr) == ast.Subscript \
             or (type(expr) == ast.Attribute and expr.value.id == "self"):
         return parseVar(expr)
+    elif type(expr) == ast.List:
+        return "%list({})".format(parseExprs(expr.elts))
     elif type(expr) == ast.Attribute:
         return parseReservedExpr(expr)
     elif type(expr) == ast.Call:
