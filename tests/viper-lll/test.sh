@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 SCRIPT_DIR=`dirname $(python -c "import os, sys; print(os.path.realpath(\"$0\"))")`
-SEMTANTICS_DIR=`dirname $SCRIPT_DIR`/viper-lll
+SEMTANTICS_DIR=$(dirname $(dirname ${SCRIPT_DIR}))/viper-lll
 
 test_count=0
 
@@ -9,10 +9,10 @@ run_tests() {
     local tests_dir=$1
     echo "entering ${tests_dir}"
 
-    for f in ${tests_dir}/*.v
+    for f in ${tests_dir}/*.ast
     do
         file_name=${f##*/}
-        expected_out=${f/%.v/.v.out}
+        expected_out=${f/%.ast/.ast.out}
         echo "running ${file_name}"
         test_count=$(($test_count + 1))
         krun $f --output nowrap --debug -d ${SCRIPT_DIR} | sed 's/.*<lll> \(.*\) <\/lll>.*/\1/' | sed 's/ , .LLLExps//g' > /tmp/viper.txt
@@ -27,21 +27,28 @@ kompile ${SEMTANTICS_DIR}/viper-lll.k --syntax-module VIPER-ABSTRACT-SYNTAX --de
 TESTS_DIR=${SCRIPT_DIR}/parser/features/test_assignment
 run_tests $TESTS_DIR
 
-TESTS_DIR=$SCRIPT_DIR/parser/features/test_conditionals
+TESTS_DIR=${SCRIPT_DIR}/parser/features/test_conditionals
 run_tests $TESTS_DIR
 
-TESTS_DIR=$SCRIPT_DIR/parser/features/test_logging
+TESTS_DIR=${SCRIPT_DIR}/parser/features/test_logging
+run_tests $TESTS_DIR
+
+#parser/functions
+TESTS_DIR=${SCRIPT_DIR}/parser/functions/test_send
 run_tests $TESTS_DIR
 
 #parser/syntax
-TESTS_DIR=$SCRIPT_DIR/parser/syntax/test_for_range
+TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_for_range
 run_tests $TESTS_DIR
 
-TESTS_DIR=$SCRIPT_DIR/parser/syntax/test_list
+TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_list
+run_tests $TESTS_DIR
+
+TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_public
 run_tests $TESTS_DIR
 
 #examples
-TESTS_DIR=$SCRIPT_DIR/examples/token
+TESTS_DIR=${SCRIPT_DIR}/examples/token
 run_tests $TESTS_DIR
 
 echo "total tests: ${test_count}"

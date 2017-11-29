@@ -1,0 +1,8 @@
+%pgm( , ,
+  %fdecl(%@public, double, %param(x, %num), %num,
+    %return(%binop(*, %var(x), 2))
+  )
+  %fdecl(%@public, returnten, , %num,
+    %return(%icall(double, 5))
+  )
+)

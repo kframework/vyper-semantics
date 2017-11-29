@@ -71,8 +71,8 @@ module VIPER-ABSTRACT-SYNTAX
                       | String
                       | Bool
 
-    syntax Var      ::= "%var"      "(" Id ")"
-                      | "%svar"     "(" Id ")"
+    syntax Var      ::= "%var"  "(" Id ")"
+                      | "%svar" "(" Id ")"
                       | StructFieldVar
                       | ListElemVar
                       | MapElemVar
@@ -85,7 +85,8 @@ module VIPER-ABSTRACT-SYNTAX
 
     syntax ListExpr      ::= "%list" "(" Exprs ")"
 
-    syntax ReservedExpr  ::= "%msg.sender" | "%msg.value" | "%msg.gas"
+    syntax ReservedExpr  ::= "%balance" "(" Expr ")" | "%codesize" "(" Expr ")" | "%is_contract" "(" Expr ")"
+                           | "%msg.sender" | "%msg.value" | "%msg.gas"
                            | "%block.difficulty" | "%block.timestamp" | "%block.coinbase" | "%block.number" | "%block.prevhash"
                            | "%tx.origin"
 
@@ -95,9 +96,10 @@ module VIPER-ABSTRACT-SYNTAX
                            | "%num256_add"   "(" Expr "," Expr ")"
                            | "%num256_sub"   "(" Expr "," Expr ")"
 
-    syntax Unit          ::=  BaseUnit
-                           |  Unit "*" Unit       [left]
-                           |  Unit "/" Unit       [left]
+    syntax Unit          ::= BaseUnit
+                           | "%umul" "(" Unit "," Unit ")"
+                           | "%udiv" "(" Unit "," Unit ")"
+                           | "%upow" "(" BaseUnit "," Int ")"
 
     syntax BaseUnit      ::= "%wei" | "%currency" | "%currency1" | "%currency2"
                            | "%sec" | "%m"        | "%kg"
@@ -124,13 +126,13 @@ module VIPER-ABSTRACT-SYNTAX
 
     syntax ListType      ::= "%listT"   "(" Type "," Int ")"
 
-    syntax MappingType   ::= "%mapT"    "(" Type "," BaseType ")"
+    syntax MappingType   ::= "%mapT"    "(" Type "," Type ")"
 
     syntax StructType    ::= "%structT" "(" VarDecls ")"
 
     syntax BinOp         ::= "+" | "-" | "*" | "/" | "%" | "**"
 
-    syntax CompareOp     ::= "%lt" | "%le" | "%gt" | "%ge" | "%eq" | "%ne"
+    syntax CompareOp     ::= "%lt" | "%le" | "%gt" | "%ge" | "%eq" | "%ne" | "%in"
 
     syntax BoolOp        ::= "%and" | "%or"
 

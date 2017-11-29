@@ -59,7 +59,7 @@ module LLL-ABSTRACT-SYNTAX
                     | "$byte"          "(" LLLExp "," LLLExp ")"
                     | "$sha3"          "(" LLLExp "," LLLExp ")"
                     | "$address"
-                    | "$balance"
+                    | "$balance"       "(" LLLExp ")"
                     | "$origin"
                     | "$caller"
                     | "$callvalue"

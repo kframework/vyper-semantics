@@ -1,0 +1,6 @@
+%pgm(, ,
+  %fdecl(%@public, foo, , %void,
+    %send(%msg.sender, %binop(+, %balance(%self), 1)))
+  %fdecl(%@public, fop, , %void,
+    %send(%msg.sender, 10))
+)

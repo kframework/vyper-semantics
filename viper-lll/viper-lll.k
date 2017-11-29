@@ -87,6 +87,9 @@ module VIPER-LLL
 
     // Convention: C'Sort' is a one-one corresponding supersort of Sort. C'Sort'
     //             requires for evaluation (i.e. not KResult).
+    syntax CType               ::= Type
+    syntax CParams             ::= Params
+    syntax CEventParams        ::= EventParams
     syntax CLLLExp             ::= LLLExp
     syntax CLLLExps            ::= LLLExps
     syntax CTypedLLLExp        ::= TypedLLLExp
@@ -94,12 +97,16 @@ module VIPER-LLL
     syntax CPackedArgBy32      ::= PackedArgBy32
     syntax CPackedArgData      ::= PackedArgData
 
-    syntax KResult  ::= LLLExp
+    syntax KResult  ::= Type
+                      | Params
+                      | EventParams
+                      | LLLExp
                       | LLLExps
                       | TypedLLLExp
                       | PackedLoggingData
                       | PackedArgBy32
                       | PackedArgData
+                      | UnitTuple
                       | Bool
                       | Int
                       | String
@@ -141,15 +148,13 @@ module VIPER-LLL
                       ($%seq(INITIALIZER),.LLLExps) ++LLL INITFUNC ++LLL
                       ($return(
                          0,
-                         $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0)),.LLLExps)
-                    ) </lll>
+                         $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0)),.LLLExps)) </lll>
 
     rule <k> #compileViperToLLLAux(INITIALIZER, OTHERFUNCS) => . ... </k>
          <lll> _ => $%seq(
                       $return(
                         0,
-                        $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0)),.LLLExps
-                    ) </lll>
+                        $lll($%seq(INITIALIZER ++LLL OTHERFUNCS), 0)),.LLLExps) </lll>
 
 
 // Process Events
@@ -158,24 +163,26 @@ module VIPER-LLL
 
     syntax KItem  ::= "#addEvents"     "(" Events ")"
     syntax KItem  ::= "#addEvent"      "(" Event ")"
-    syntax KItem  ::= "#addEventAux"   "(" K "," Id "," EventParams ")"  [strict(1)]
- // --------------------------------------------------------------------------------
+    syntax KItem  ::= "#addEventAux"   "(" K "," Id "," CEventParams ")"  [strict(1, 3)]
+ // ------------------------------------------------------------------------------------
     rule #addEvents(.Events) => .
 
     rule #addEvents(E ES) => #addEvent(E) ~> #addEvents(ES)
 
     rule <k> #addEvent(%event(NAME, EPARAMS))
             => #checkEventParams(EPARAMS, 0, .Ids)
-            ~> #addEventAux(#computeEventId(NAME, EPARAMS), NAME, EPARAMS)
+            ~> #addEventAux(#computeEventId(NAME, EPARAMS),
+                            NAME,
+                            #parseTypeForEventParams(EPARAMS, .EventParams))
          ... </k>
          <internalSig> SIGS </internalSig>
-      requires notBool NAME in keys(SIGS)
+      requires notBool NAME in_keys(SIGS)
 
     rule <k> #addEvent(%event(NAME, EPARAMS))
             => #exception("Duplicate event name: " +String Id2String(NAME))
          ... </k>
          <internalSig> SIGS </internalSig>
-      requires NAME in keys(SIGS)
+      requires NAME in_keys(SIGS)
 
     rule <k> #addEventAux(EID:Int, NAME, EPARAMS) => . ... </k>
          <internalSig> SIGS => SIGS[NAME <- @event(EID, NAME, EPARAMS)] </internalSig>
@@ -183,7 +190,6 @@ module VIPER-LLL
 
     syntax KItem  ::= "#checkEventParams"      "(" EventParams "," Int "," Ids ")"
     syntax KItem  ::= "#checkEventParamType"   "(" Type ")"
-    syntax KItem  ::= "#checkNameDuplicateWithParams" "(" Id "," Ids ")"
  // ------------------------------------------------------------------------------
     rule #checkEventParams(.EventParams, TOPICNUM, NAMES) => .
       requires TOPICNUM <=Int 3
@@ -212,6 +218,9 @@ module VIPER-LLL
     rule #checkEventParamType(T) => .
       requires notBool isByteArrayType(T)
 
+
+    syntax KItem  ::= "#checkNameDuplicateWithParams" "(" Id "," Ids ")"
+ // --------------------------------------------------------------------
     rule #checkNameDuplicateWithParams(NAME, NAMES)
         => #exception("Duplicate function argument name: " +String Id2String(NAME))
       requires #inIds(NAME, NAMES)
@@ -226,19 +235,26 @@ module VIPER-LLL
 
     syntax KItem  ::= "#addGlobals"   "(" Globals ")"
     syntax KItem  ::= "#addGlobal"    "(" Global  ")"
- // -------------------------------------------------
+    syntax KItem  ::= "#addGlobalAux" "(" Id "," CType ")"    [strict(2)]
+ // ---------------------------------------------------------------------
     rule #addGlobals(.Globals) => .
 
     rule #addGlobals(G GS) => #addGlobal(G) ~> #addGlobals(GS)
 
-    rule <k> #addGlobal(%svdecl(NAME, T, _)) => . ... </k>
+    rule <k> #addGlobal(%svdecl(NAME, T, _))
+            => #addGlobalAux(NAME, #parseType(T)) ... </k>
+         <global> GLOBALS </global>
+      requires notBool %svar(NAME) in_keys(GLOBALS)
+
+    rule <k> #addGlobal(%svdecl(NAME, T, _))
+            => #exception("Cannot declare a persistent variable twice! " +String Id2String(NAME))
+         ... </k>
+         <global> GLOBALS </global>
+      requires %svar(NAME) in_keys(GLOBALS)
+
+    rule <k> #addGlobalAux(NAME, T:Type) => . ... </k>
          <global> GLOBALS => GLOBALS[%svar(NAME) <- @taddr(T, LOC, @locattr(@storage, true))] </global>
          <nextStorage> LOC => LOC +Int 1 </nextStorage>
-      requires notBool NAME in keys(GLOBALS)
-
-    rule <k> #addGlobal(%svdecl(NAME, T, _)) => #exception("Cannot declare a persistent variable twice!") ... </k>
-         <global> GLOBALS </global>
-      requires NAME in keys(GLOBALS)
 
 
 // Process Funcs
@@ -255,15 +271,15 @@ module VIPER-LLL
                                         Bool   ","  // internal?
                                         Bool   ")"  // public?
 
-    syntax KItem  ::= "#addFuncAux" "(" K      ","  // func id
-                                        Id     ","
-                                        Params ","
-                                        Type   ","
-                                        Bool   ","
-                                        Bool   ","
+    syntax KItem  ::= "#addFuncAux" "(" K       ","  // func id
+                                        Id      ","
+                                        CParams ","
+                                        CType   ","
+                                        Bool    ","
+                                        Bool    ","
                                         Bool
-                                    ")" [strict(1)]
- // -----------------------------------------------
+                                    ")" [strict(1, 3, 4)]
+ // -----------------------------------------------------
     rule #addFuncs(.Defs) => .
 
     rule #addFuncs(%fdecl(DECS, FNAME, PARAMS, T, STMTS) DEFS)
@@ -277,15 +293,19 @@ module VIPER-LLL
     rule <k> #addFunc(FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL, PUBLIC)
             => #checkFuncParams(PARAMS, .Ids)
             ~> #checkInternalPublicMECE(INTERNAL, PUBLIC)
-            ~> #addFuncAux(#computeFuncId(FNAME, PARAMS), FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL)
+            ~> #addFuncAux(#computeFuncId(FNAME, PARAMS),
+                           FNAME,
+                           #parseTypeForParams(PARAMS, .Params),
+                           #parseType(T),
+                           CONSTANT, PAYABLE, INTERNAL)
          ... </k>
          <internalSig> SIGS </internalSig>
-      requires notBool FNAME in keys(SIGS)
+      requires notBool FNAME in_keys(SIGS)
 
     rule <k> #addFunc(FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL, PUBLIC)
             => #exception("Duplicate event or function name: " +String Id2String(FNAME)) ... </k>
          <internalSig> SIGS </internalSig>
-      requires FNAME in keys(SIGS)
+      requires FNAME in_keys(SIGS)
 
     rule <k> #addFuncAux(FID:Int, FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL) => . ... </k>
          <internalSig> SIGS
@@ -309,13 +329,13 @@ module VIPER-LLL
 
     rule <k> #checkNameDuplicateWithGlobals(NAME) => . ... </k>
          <global> GLOBALS </global>
-      requires notBool %svar(NAME) in keys(GLOBALS)
+      requires notBool %svar(NAME) in_keys(GLOBALS)
 
     rule <k> #checkNameDuplicateWithGlobals(NAME)
             => #exception("Variable name duplicated between function arguments and globals: +String Id2String(NAME)")
          ... </k>
          <global> GLOBALS </global>
-      requires %svar(NAME) in keys(GLOBALS)
+      requires %svar(NAME) in_keys(GLOBALS)
 
 
     syntax KItem  ::= "#checkInternalPublicMECE" "(" Bool /*internal?*/ "," Bool /*public?*/ ")"
@@ -446,7 +466,7 @@ module VIPER-LLL
                                                Bool     /*init?*/
                                            ")"                      [seqstrict]
  // ---------------------------------------------------------------------------
-    rule <k> #compileFunc(%fdecl(DECS, FNAME, PARAMS, T, STMTS))
+    rule <k> #compileFunc(%fdecl(_, FNAME, _, _, STMTS))
             => #compileFuncAux(#copyArg(PARAMS, #isInitFunc(FNAME)),
                                #addClampersForDecorators(PAYABLE, INTERNAL),
                                #fillParams(PARAMS, 0, #isInitFunc(FNAME), .LLLExps),
@@ -454,8 +474,8 @@ module VIPER-LLL
                                FUNCID,
                                #isInitFunc(FNAME))
            ~> #cleanConfig ... </k>
-         <internalSig> FNAME |-> @func(FUNCID, FNAME, _, T, CONSTANT, PAYABLE, INTERNAL) SIGS</internalSig>
-         <return> _ => T </return>
+         <internalSig> FNAME |-> @func(FUNCID, FNAME, PARAMS, RT, CONSTANT, PAYABLE, INTERNAL) SIGS</internalSig>
+         <return> _ => RT </return>
          <constant> _ => CONSTANT </constant>
          <payable> _ => PAYABLE </payable>
 
@@ -549,10 +569,10 @@ module VIPER-LLL
                                                    #mkDataDecl(DPOS, ISINIT),
                                                    $mload(@maxNumPos)),.LLLExps
 
-    rule #mkClamper(%unitT(%num, _, _), DPOS, MPOS, ISINIT) => $clamp(
-                                                                 $mload(@minNumPos),
-                                                                 #mkDataDecl(DPOS, ISINIT),
-                                                                 $mload(@maxNumPos)),.LLLExps
+    rule #mkClamper(%unitT(%num, _:Map, _), DPOS, MPOS, ISINIT) => $clamp(
+                                                                     $mload(@minNumPos),
+                                                                     #mkDataDecl(DPOS, ISINIT),
+                                                                     $mload(@maxNumPos)),.LLLExps
 
     rule #mkClamper(%bool, DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), 2),.LLLExps
 
@@ -577,7 +597,7 @@ module VIPER-LLL
 
     rule #mkClamper(%decimal, _, _, _) => $pass,.LLLExps
 
-    rule #mkClamper(%unitT(%decimal, _, _), _, _, _) => $pass,.LLLExps
+    rule #mkClamper(%unitT(%decimal, _:Map, _), _, _, _) => $pass,.LLLExps
 
     rule #mkClamper(%num256, _, _, _) => $pass,.LLLExps
 
@@ -636,7 +656,12 @@ module VIPER-LLL
 // ====================
 
 
-    rule #compileStmt(%vdecl(NAME, T)) => #newVar(NAME, T) ~> $pass,.LLLExps
+    rule #compileStmt(%vdecl(NAME, T)) => #annassign(NAME, #parseType(T))
+
+
+    syntax CLLLExps  ::= "#annassign" "(" Id "," CType ")"    [strict(2)]
+ // ---------------------------------------------------------------------
+    rule #annassign(NAME, T) => #newVar(NAME, T) ~> $pass,.LLLExps
 
     rule (@tlll(T, LOC, LOCATTR) => .) ~> $pass,.LLLExps
 
@@ -1021,22 +1046,6 @@ module VIPER-LLL
     rule #compileStmt(%throw) => $assert(0),.LLLExps
 
 
-// Send
-// ====
-
-    rule <k> #compileStmt(%send(TO, VALUE))
-                 => #ifThenElse(CONSTANT ==K false,
-                                #send(#compileValueExpr(TO), #compileValueExpr(VALUE)),
-                                #exception("Cannot send ether inside a constant function")) ... </k>
-         <constant> CONSTANT </constant>
-
-
-    syntax CLLLExps  ::= "#send" "(" CTypedLLLExp /*to*/ "," CTypedLLLExp /*value*/ ")"  [seqstrict]
- // ------------------------------------------------------------------------------------------------
-    rule #send(@tlll(%address, TOCODE, _), @tlll(%unitT(%num, %wei, _), VALUECODE, _))
-             => $assert($call(0, TOCODE, VALUECODE, 0, 0, 0, 0)),.LLLExps
-
-
 // Log
 // ====
 
@@ -1047,7 +1056,7 @@ module VIPER-LLL
     rule <k> #compileStmt(%log(NAME, _))
             => #exception("Event not declared yet: " +String Id2String(NAME)) ... </k>
          <internalSig> SIGS </internalSig>
-      requires notBool NAME in keys(SIGS)
+      requires notBool NAME in_keys(SIGS)
 
 
     syntax CLLLExps  ::= "#log"    "(" Exprs "," EventRecord ")"
@@ -1199,6 +1208,27 @@ module VIPER-LLL
       requires isBaseType(T)
 
 
+// Send
+// ====
+
+    rule <k> #compileStmt(%send(TO, VALUE))
+            => #ifThenElse(CONSTANT ==K true,
+                           #exception("Cannot send ether inside a constant function"),
+                           #send(#compileValueExpr(TO), #compileValueExpr(VALUE))) ... </k>
+         <constant> CONSTANT </constant>
+
+
+    syntax CLLLExps  ::= "#send"    "(" CTypedLLLExp /*to*/ "," CTypedLLLExp /*value*/ ")"  [seqstrict]
+    syntax CLLLExps  ::= "#sendAux" "(" TypedLLLExp "," TypedLLLExp ")"
+ // ---------------------------------------------------------------------------------------------------
+    rule #send(TTOCODE, @tlll(T, VALUECODE, EXPRATTR))
+        => #sendAux(TTOCODE,
+                    @tlll(#convertToUnitIfPure(T, @unittuple((%wei |-> 1), false)), VALUECODE, EXPRATTR))
+
+    rule #sendAux(@tlll(%address, TOCODE, _), @tlll(%unitT(%num, %wei |-> 1, false), VALUECODE, _))
+        => $assert($call(0, TOCODE, VALUECODE, 0, 0, 0, 0)),.LLLExps
+
+
 ///////////////////////////////////////////////////////////////////////////////
 // Expressions
 ///////////////////////////////////////////////////////////////////////////////
@@ -1213,12 +1243,10 @@ module VIPER-LLL
     rule #compileValueExprAux(TCODE) => #unwrapLoc(TCODE)
 
 
-
-
     // Compile an expression that represents an address in memory or storage
     syntax CTypedLLLExp  ::= "#compileLocExpr"    "(" Expr ")"
     syntax CTypedLLLExp  ::= "#compileLocExprAux" "(" CTypedLLLExp ")"  [strict]
- // ---------------------------------------------------------------------------
+ // ----------------------------------------------------------------------------
     rule #compileLocExpr(EXPR) => #compileLocExprAux(#compileExpr(EXPR))
 
     rule #compileLocExprAux(@tlll(T, CODE, EXPRATTR))
@@ -1332,20 +1360,129 @@ module VIPER-LLL
 
     syntax CTypedLLLExp  ::= "#binOp" "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
  // ---------------------------------------------------------------------------------------------------
-    // TODO: support unit type
-
     rule #binOp(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
-             => #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
-                        #exception("Unsupported types for arithmetic op"))
-             ~> #ifThenElse(isPureNumType(LT) andBool isPureNumType(RT),
-                            #binOpPure(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR)),
-                            #exception("Do not support unit type yet."))
-             ~> #clampArithResult
+        => #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
+                   #exception("Unsupported types for arithmetic op"))
+        ~> #ifThenElse(isPureNumType(LT) andBool isPureNumType(RT),
+                       #binOpPure(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR)),
+                       #binOpMix(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR)))
 
 
-    syntax CTypedLLLExp  ::= "#binOpPure" "(" BinOp "," TypedLLLExp  "," TypedLLLExp  ")"
- // -------------------------------------------------------------------------------------
-    rule #binOpPure(+, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+    syntax CTypedLLLExp  ::= "#binOpMix" "(" BinOp "," TypedLLLExp "," TypedLLLExp ")"
+    syntax CTypedLLLExp  ::= "#binOpMixAux" "(" K "," CTypedLLLExp ")"    [seqstrict]
+ // ----------------------------------------------------------------------------------
+    rule #binOpMix(BOP, @tlll(LT:NumericType, LCODE, LEXPRATTR), @tlll(RT:NumericType, RCODE, REXPRATTR))
+        => #binOpMixAux(#newUnitTuple(BOP, LT, RT, RCODE),
+                        #binOpPure(BOP,
+                                   @tlll(#dropUnit(LT), LCODE, LEXPRATTR),
+                                   @tlll(#dropUnit(RT), RCODE, REXPRATTR)))
+
+    rule #binOpMixAux(@unittuple(UNITMAP, POSITIONAL), @tlll(T, TCODE, EXPRATTR))
+        => @tlll(%unitT(T, UNITMAP, POSITIONAL), TCODE, EXPRATTR)
+
+
+    syntax UnitTuple  ::= "@unittuple" "(" Map "," Bool ")"
+    syntax KItem      ::= "#newUnitTuple" "(" BinOp "," Type "," Type "," LLLExp ")"
+ // --------------------------------------------------------------------------------
+   // add
+   rule #newUnitTuple(+, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
+        => #ifThen(LM =/=K RM,
+                   #exception("Unit mismatch."))
+        ~> #ifThen(LPOS ==K true andBool RPOS ==K true,
+                   #exception("Cannot add two positional units!"))
+        ~> @unittuple(LM, LPOS xorBool RPOS)
+
+    rule #newUnitTuple(+, %unitT(LT, LM:Map, LPOS), RT:PureNumType, _)
+        => @unittuple(LM, LPOS)
+
+    rule #newUnitTuple(+, LT:PureNumType, %unitT(RT, RM:Map, RPOS), _)
+        => @unittuple(RM, RPOS)
+
+    // subtract
+    rule #newUnitTuple(-, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
+        => #ifThen(LM =/=K RM,
+                   #exception("Unit mismatch."))
+        ~> @unittuple(LM, LPOS xorBool RPOS)
+
+    rule #newUnitTuple(-, %unitT(LT, LM:Map, LPOS), RT:PureNumType, _)
+        => @unittuple(LM, LPOS)
+
+    rule #newUnitTuple(-, LT:PureNumType, %unitT(RT, RM:Map, RPOS), _)
+        => @unittuple(RM, RPOS)
+
+    // multiply
+    rule #newUnitTuple(*, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
+        => #ifThen(LPOS ==K true orBool RPOS ==K true,
+                   #exception("Cannot multiply positional values!"))
+        ~> @unittuple(#combineUnits(LM, RM, false), false)
+
+    rule #newUnitTuple(*, %unitT(LT, LM:Map, LPOS), RT:PureNumType, _)
+        => #ifThen(LPOS ==K true,
+                   #exception("Cannot multiply positional values!"))
+        ~> @unittuple(LM, false)
+
+    rule #newUnitTuple(*, LT:PureNumType, %unitT(RT, RM:Map, RPOS), _)
+        => #ifThen(RPOS ==K true,
+                   #exception("Cannot multiply positional values!"))
+        ~> @unittuple(RM, false)
+
+    // divide
+    rule #newUnitTuple(/, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
+        => #ifThen(LPOS ==K true orBool RPOS ==K true,
+                   #exception("Cannot divide positional values!"))
+        ~> @unittuple(#combineUnits(LM, RM, true), false)
+
+    rule #newUnitTuple(/, %unitT(LT, LM:Map, LPOS), RT:PureNumType, _)
+        => #ifThen(LPOS ==K true,
+                   #exception("Cannot divide positional values!"))
+        ~> @unittuple(LM, false)
+
+    rule #newUnitTuple(/, LT:PureNumType, %unitT(RT, RM:Map, RPOS), _)
+        => #ifThen(RPOS ==K true,
+                   #exception("Cannot divide positional values!"))
+        ~> @unittuple(#combineUnits(.Map, RM, true), false)
+
+    // mod
+    rule #newUnitTuple(%, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
+        => #ifThen(LPOS ==K true orBool RPOS ==K true,
+                   #exception("Cannot use positional values as modulus arguments!"))
+        ~> #ifThen(LM =/=K RM,
+                   #exception("Modulus arguments must have same unit."))
+        ~> @unittuple(LM, false)
+
+    rule #newUnitTuple(%, %unitT(LT, LM:Map, LPOS), RT:PureNumType, _)
+        => #ifThen(LPOS ==K true,
+                   #exception("Cannot use positional values as modulus arguments!"))
+        ~> @unittuple(LM, false)
+
+    rule #newUnitTuple(%, LT:PureNumType, %unitT(RT, RM:Map, RPOS), _)
+        => #ifThen(RPOS ==K true,
+                   #exception("Cannot use positional values as modulus arguments!"))
+        ~> @unittuple(RM, false)
+
+    // exp
+    rule #newUnitTuple(%, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
+        => #exception("Cannot use unit values as exponential arguments!")
+
+    rule #newUnitTuple(%, %unitT(LT, LM:Map, LPOS), RT:PureNumType, POW:Int)
+        ~> @unittuple(#computeUnitPow(LM, POW), false)
+
+    rule #newUnitTuple(%, %unitT(LT, LM:Map, LPOS), RT:PureNumType, CODE)
+        ~> #exception("The exponent of a unit value must be integer.")
+      requires notBool isInt(CODE)
+
+    rule #newUnitTuple(%, LT:PureNumType, %unitT(RT, RM:Map, RPOS), _)
+        => #exception("Cannot use unit values as exponential arguments!")
+
+
+    syntax CTypedLLLExp  ::= "#binOpPure"    "(" BinOp "," TypedLLLExp "," TypedLLLExp ")"
+    syntax CTypedLLLExp  ::= "#binOpPureAux" "(" BinOp "," TypedLLLExp "," TypedLLLExp ")"
+ // --------------------------------------------------------------------------------------
+    rule #binOpPure(BOP, LTCODE, RTCODE)
+        => #binOpPureAux(BOP, LTCODE, RTCODE)
+        ~> #clampArithResult
+
+    rule #binOpPureAux(+, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
         => #ifThenElse(LT ==K RT,
                        @tlll(LT, $add(LCODE, RCODE), @none),
              #ifThenElse(LT ==K %num andBool RT ==K %decimal,
@@ -1354,7 +1491,7 @@ module VIPER-LLL
                            @tlll(%decimal, $add(LCODE, $mul(RCODE, @decimalDivisor)), @none),
                            #exception("How did I get here?"))))
 
-    rule #binOpPure(-, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+    rule #binOpPureAux(-, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
         => #ifThenElse(LT ==K RT,
                        @tlll(LT, $sub(LCODE, RCODE), @none),
              #ifThenElse(LT ==K %num andBool RT ==K %decimal,
@@ -1363,7 +1500,7 @@ module VIPER-LLL
                            @tlll(%decimal, $sub(LCODE, $mul(RCODE, @decimalDivisor)), @none),
                            #exception("How did I get here?"))))
 
-    rule #binOpPure(*, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+    rule #binOpPureAux(*, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
         => #ifThenElse(LT ==K RT andBool LT ==K %num,
                        @tlll(%num, $mul(LCODE, RCODE), @none),
              #ifThenElse(LT ==K RT andBool LT ==K %decimal,
@@ -1381,7 +1518,7 @@ module VIPER-LLL
                                                $assert($or($eq($sdiv($_ans, $_l), $_r), $not($_l))),
                                                $_ans,.LLLExps)))), @none))))
 
-    rule #binOpPure(/, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+    rule #binOpPureAux(/, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
         => #ifThenElse(RT ==K %num,
                        @tlll(LT, $sdiv(LCODE, $clamp_nonzero(RCODE)), @none),
              #ifThenElse(LT ==K RT andBool LT ==K %decimal,
@@ -1392,7 +1529,7 @@ module VIPER-LLL
                        @tlll(%decimal,
                              $sdiv($mul(LCODE, @decimalDivisor ^Int 2), $clamp_nonzero(RCODE)), @none))))
 
-    rule #binOpPure(%, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+    rule #binOpPureAux(%, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
         => #ifThenElse(LT ==K RT,
                        @tlll(LT, $smod(LCODE, $clamp_nonzero(RCODE)), @none),
              #ifThenElse(LT ==K %decimal andBool RT ==K %num,
@@ -1400,7 +1537,7 @@ module VIPER-LLL
                #ifThen(LT ==K %num andBool RT ==K %decimal,
                        @tlll(%decimal, $smod($mul(LCODE, @decimalDivisor), $clamp_nonzero(RCODE)), @none))))
 
-    rule #binOpPure(**, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+    rule #binOpPureAux(**, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
         => #ifThenElse(LT ==K RT andBool LT ==K %num,
                        @tlll(%num, $exp(LCODE, RCODE), @none),
                        #exception("Only whole number exponents are supported"))
@@ -1429,10 +1566,14 @@ module VIPER-LLL
     //TODO: support `in` operator
 
     rule #compareOp(COP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
-        => #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
+        => #ifThen(notBool(areUnitsCompatible(LT, RT)) andBool notBool(areUnitsCompatible(RT, LT)),
+                   #exception("Can't compare values with different units!"))
+        ~> #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
              #ifThen(COP =/=K %eq andBool COP =/=K %ne,
                      #exception("Invalid type for comparison op")))
-           ~> #compareOpAux(COP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
+        ~> #compareOpAux(COP, @tlll(#dropUnit(LT), LCODE, LEXPRATTR), @tlll(#dropUnit(RT), RCODE, REXPRATTR))
+      requires COP =/=K %in
+
 
     rule #compareOpAux(%gt, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
         => #ifThenElse(LT ==K RT,
@@ -1545,7 +1686,7 @@ module VIPER-LLL
     // TODO: Is it necessary to enforce that functions cannot call functions defined later than themselves?
     rule <k> #compileExpr(%icall(FNAME, _)) => #exception("Function not declared yet: " +String Id2String(FNAME)) ... </k>
          <internalSig> SIGS </internalSig>
-      requires notBool FNAME in keys(SIGS)
+      requires notBool FNAME in_keys(SIGS)
 
     // EVM: CALL GASCAP ACCTTO VALUE ARGSTART ARGWIDTH RETSTART RETWIDTH
     rule <k> #icall(ARGS, @func(FUNCID, FNAME, PARAMS, T, _, _, _))
@@ -1561,8 +1702,7 @@ module VIPER-LLL
     rule #icallAux(@argdata(CODE, ARGSWIDTH), @tlll(RETT, LOC, _), RETWIDTH)
         => @tlll(RETT, $%seq(
                          $assert($call($gas, $address, 0, CODE, ARGSWIDTH, LOC, RETWIDTH)),
-                         LOC,.LLLExps
-                       ), @locattr(@memory, true))
+                         LOC,.LLLExps), @locattr(@memory, true))
       requires isBaseType(RETT)
 
 
@@ -1605,16 +1745,40 @@ module VIPER-LLL
         => #mkSetter(@tlll(PARAMT, LOC, LOCATTR), TCODE)
 
 
-    // Reserved Expr
+// Reserved Expr
+// =============
+
+
+    rule #compileExpr(%balance(EXPR))    => #balance(#compileValueExpr(EXPR))
+
+    syntax CTypedLLLExp  ::= "#balance" "(" CTypedLLLExp ")"  [strict]
+ // ------------------------------------------------------------------
+    rule #balance(@tlll(%address, ADDR, @none)) => @tlll(%unitT(%num, %wei |-> 1, false), $balance(ADDR), @none)
+
+
+    rule #compileExpr(%codesize(EXPR))   => #codesize(#compileValueExpr(EXPR))
+
+    syntax CTypedLLLExp  ::= "#codesize" "(" CTypedLLLExp ")"   [strict]
+ // --------------------------------------------------------------------
+    rule #codesize(@tlll(%address, ADDR, @none)) => @tlll(%num, $extcodesize(ADDR), @none)
+
+
+    rule #compileExpr(%is_contract(EXPR)) => #is_contract(#compileValueExpr(EXPR))
+
+    syntax CTypedLLLExp  ::= "#is_contract" "(" CTypedLLLExp ")"  [strict]
+ // ----------------------------------------------------------------------
+    rule #is_contract(@tlll(%address, ADDR, @none)) => @tlll(%bool, $extcodesize(ADDR), @none)
+
+
     rule #compileExpr(%msg.sender)       => @tlll(%address, $caller, @none)
 
-    rule #compileExpr(%msg.value)        => @tlll(%unitT(%num, %wei, false), $callvalue, @none)
+    rule #compileExpr(%msg.value)        => @tlll(%unitT(%num, %wei |-> 1, false), $callvalue, @none)
 
     rule #compileExpr(%msg.gas)          => @tlll(%num, $gas, @none)
 
     rule #compileExpr(%block.difficulty) => @tlll(%num, $difficulty, @none)
 
-    rule #compileExpr(%block.timestamp)  => @tlll(%unitT(%num, %sec, true), $timestamp, @none)
+    rule #compileExpr(%block.timestamp)  => @tlll(%unitT(%num, %sec |-> 1, true), $timestamp, @none)
 
     rule #compileExpr(%block.coinbase)   => @tlll(%address, $coinbase, @none)
 
@@ -1685,10 +1849,10 @@ module VIPER-LLL
                             #asWeiValueForLLLExp(@tlll(T, CODE, EXPRATTR), DENOMINATION))
 
     rule #asWeiValueForLLLExp(@tlll(%num, CODE, EXPRATTR), DENOMINATION)
-        => @tlll(%unitT(%num, %wei, false), $mul(CODE, DENOMINATION), @none)
+        => @tlll(%unitT(%num, %wei |-> 1, false), $mul(CODE, DENOMINATION), @none)
 
     rule #asWeiValueForLLLExp(@tlll(%decimal, CODE, EXPRATTR), DENOMINATION)
-             => @tlll(%unitT(%num, %wei, false), $div($mul(CODE, DENOMINATION), @decimalDivisor), @none)
+             => @tlll(%unitT(%num, %wei |-> 1, false), $div($mul(CODE, DENOMINATION), @decimalDivisor), @none)
 
 
     syntax CTypedLLLExp ::= "#num256Add"    "(" CTypedLLLExp "," CTypedLLLExp ")"        [seqstrict]
@@ -1740,9 +1904,9 @@ module VIPER-LLL
 
     syntax Bool  ::= "#isUnitTypeOf" "(" UnitType "," Type ")"    [function]
  // ------------------------------------------------------------------------
-    rule #isUnitTypeOf(%unitT(T, _, _), T) => true
+    rule #isUnitTypeOf(%unitT(T, _:Map, _), T) => true
 
-    rule #isUnitTypeOf(%unitT(T, _, _), TARGET) => false
+    rule #isUnitTypeOf(%unitT(T, _:Map, _), TARGET) => false
       requires T =/=K TARGET
 
 
@@ -1924,7 +2088,11 @@ module VIPER-LLL
 
     rule #canonicalizeType(%num, _) => "int128"
 
+    rule #canonicalizeType(%unitT(%num, _:Unit, _), _) => "int128"
+
     rule #canonicalizeType(%decimal, _) => "decimal10"
+
+    rule #canonicalizeType(%unitT(%decimal, _:Unit, _), _) => "decimal10"
 
     rule #canonicalizeType(%num256, _) => "uint256"
    
@@ -1949,10 +2117,19 @@ module VIPER-LLL
     // Convert from one base type to another. Need to call `#unwrapLoc` first.
     syntax CTypedLLLExp  ::= "#baseTypeConvert"    "(" TypedLLLExp "," Type /*to*/ ")"
     syntax CTypedLLLExp  ::= "#baseTypeConvertAux" "(" TypedLLLExp "," Type        ")"
+    syntax CTypedLLLExp  ::= "#baseTypeConvertNoUnit" "(" LLLExp ","  // code
+                                                          Type   ","  // from
+                                                          Type   ")"  // to
  // ----------------------------------------------------------------------------------
-    rule #baseTypeConvert(TCODE, TOT) => #baseTypeConvertAux(#unwrapLoc(TCODE), TOT)
+    rule #baseTypeConvert(@tlll(FROMT, CODE, EXPRATTR), TOT)
+        => #baseTypeConvertAux(#unwrapLoc(@tlll(FROMT, CODE, EXPRATTR)), TOT)
 
     rule #baseTypeConvertAux(@tlll(FROMT, CODE, _), TOT)
+        => #ifThenElse(#areUnitsCompatible(FROMT, TOT),
+                       #baseTypeConvertNoUnit(CODE, #dropUnit(FROMT), #dropUnit(TOT)),
+                       #exception("Typecasting unavailable due to incompatible units"))
+
+    rule #baseTypeConvertNoUnit(CODE, FROMT, TOT)
         => #ifThenElse(notBool(isBaseType(FROMT)) orBool notBool(isBaseType(TOT)),
                        #exception("Base type conversion from or to non-base type."),
              #ifThenElse(FROMT ==K TOT,
@@ -1962,6 +2139,180 @@ module VIPER-LLL
                  #ifThenElse(FROMT ==K %num256 andBool TOT ==K %num,
                              @tlll(TOT, $uclample(CODE, $mload(@maxNumPos)), @none),
                              #exception("Typecasting unavailable.")))))
+
+
+    syntax CParams  ::= "#parseTypeForParams" "(" Params "," Params ")"
+    syntax KItem    ::= "#parseTypeForParam"  "(" Id "," CType  ")"  [strict(2)]
+ // ----------------------------------------------------------------------------
+    rule #parseTypeForParams(.Params, RESULT) => RESULT
+
+    rule #parseTypeForParams(%param(NAME, T) PARAMS, RESULT)
+        => #parseTypeForParam(NAME, #parseType(T))
+        ~> #parseTypeForParams(PARAMS, RESULT)
+
+    rule #parseTypeForParam(NAME, T:Type) => %param(NAME, T)
+
+    rule PARAM:Param ~> #parseTypeForParams(PARAMS, RESULT)
+        => #parseTypeForParams(PARAMS, RESULT ++Param (PARAM .Params))
+
+
+    syntax CEventParams  ::= "#parseTypeForEventParams" "(" EventParams "," EventParams")"
+    syntax KItem         ::= "#parseTypeForEventParam"  "(" Id "," CType "," Bool ")"  [strict(2)]
+ // ----------------------------------------------------------------------------------------------
+    rule #parseTypeForEventParams(.EventParams, RESULT) => RESULT
+
+    rule #parseTypeForEventParams(%eparam(NAME, T, TOPIC) EPARAMS, RESULT)
+        => #parseTypeForEventParam(NAME, #parseType(T), TOPIC)
+        ~> #parseTypeForEventParams(EPARAMS, RESULT)
+
+    rule #parseTypeForEventParam(NAME, T:Type, TOPIC) => %eparam(NAME, T, TOPIC)
+
+    rule EPARAM:EventParam ~> #parseTypeForEventParams(EPARAMS, RESULT)
+        => #parseTypeForEventParams(EPARAMS, RESULT ++Eparam (EPARAM .EventParams))
+
+
+    syntax CType  ::= "#parseType" "(" Type ")"
+ // ------------------------------------------
+    rule #parseType(T) => T
+      requires notBool isUnitType(T)
+
+    rule #parseType(%unitT(T, UNIT:Map, POSITIONAL)) => %unitT(T, UNIT, POSITIONAL)
+
+    rule #parseType(%unitT(T, UNIT:Unit, POSITIONAL))
+        => #parseUnitType(%unitT(T, UNIT, POSITIONAL))
+
+    rule #parseType(%listT(T, N)) => #parseListType(#parseType(T), N)
+
+    rule #parseType(%mapT(VT, KT))
+        => #ifThenElse(isBaseType(KT) orBool isByteArrayType(KT),
+                       #parseMapType(#parseType(VT), #parseType(KT)),
+                       #exception("Mapping keys must be base or bytes types"))
+
+    // TODO: support StructType
+
+
+    syntax CType  ::= "#parseListType" "(" CType "," Int ")"    [strict(1)]
+ // --------------------------------------------------------------------
+    rule #parseListType(T, N) => %listT(T, N)
+
+
+    syntax CType  ::= "#parseMapType" "(" CType "," CType ")"    [seqstrict]
+ // ------------------------------------------------------------------------
+    rule #parseMapType(VT, KT) => %mapT(VT, KT)
+
+
+// Units
+// =====
+
+
+    syntax UnitType  ::= "%unitT" "(" PureNumType "," Map "," Bool /*positional*/ ")"
+    syntax CType     ::= "#parseUnitType" "(" UnitType ")"    [function]
+ // ---------------------------------------------------------------------------------
+     rule #parseUnitType(%unitT(T, UNIT, POSITIONAL))
+         => %unitT(T, #parseUnit(UNIT), POSITIONAL)
+
+
+    syntax Map  ::= "#parseUnit" "(" Unit ")"    [function]
+ // -------------------------------------------------------
+     rule #parseUnit(U1) => (U1 |-> 1)
+       requires isBaseUnit(U1)
+
+     rule #parseUnit(%umul(U1, U2))
+         => #combineUnits(#parseUnit(U1), #parseUnit(U2), false)
+
+     rule #parseUnit(%udiv(U1, U2))
+         => #combineUnits(#parseUnit(U1), #parseUnit(U2), true)
+
+     rule #parseUnit(%upow(U1, EXP))
+         => (U1 |-> EXP)
+
+
+    syntax Map  ::= "#combineUnits"    "(" Map "," Map "," Bool /*div?*/")"  [function]
+    syntax Map  ::= "#combineUnitsAux" "(" Map "," Map "," Bool ","
+                                           Set ","  // union of the keys of two maps
+                                           Map      // merged result
+                                        ")"                                  [function]
+ // -----------------------------------------------------------------------------------
+    rule #combineUnits(M1, M2, DIV)
+        => #combineUnitsAux(M1, M2, DIV, keys(M1) keys(M2), .Map)
+
+    rule #combineUnitsAux(_, _, _, .Set, UNITMAP) => #removeZeros(UNITMAP)
+
+    rule #combineUnitsAux(M1, M2, true, SetItem(KEY:BaseUnit) KEYS, UNITMAP)
+        => #combineUnitsAux(M1, M2, true, KEYS,
+                            UNITMAP[KEY <- #lookupUnitMap(M1, KEY, 0) -Int #lookupUnitMap(M2, KEY, 0)])
+
+    rule #combineUnitsAux(M1, M2, false, SetItem(KEY:BaseUnit) KEYS, UNITMAP)
+        => #combineUnitsAux(M1, M2, false, KEYS,
+                            UNITMAP[KEY <- #lookupUnitMap(M1, KEY, 0) +Int #lookupUnitMap(M2, KEY, 0)])
+
+
+    syntax Map  ::= "#removeZeros" "(" Map ")"  [function]
+ // ------------------------------------------------------
+    rule #removeZeros(.Map) => .Map
+
+    rule #removeZeros( KEY |-> 0     REST ) => #removeZeros(REST)
+
+    rule #removeZeros( KEY |-> VALUE REST ) => KEY |-> VALUE #removeZeros(REST)
+      requires VALUE =/=K 0
+
+
+    syntax Int  ::= "#lookupUnitMap" "(" Map      ","
+                                         BaseUnit ","
+                                         Int           // default value
+                                      ")"   [function]
+ // -------------------------------------------------------------------
+    rule #lookupUnitMap((KEY |-> VALUE) REST, KEY, DEFAULT) => VALUE
+
+    rule #lookupUnitMap(M, KEY, DEFAULT) => DEFAULT
+      requires notBool KEY in_keys(M)
+
+
+    syntax Map  ::= "#computeUnitPow" "(" Map "," Int ")"  [function]
+ // -----------------------------------------------------------------
+    rule #computeUnitPow(.Map, POW) => .Map
+
+    rule #computeUnitPow((KEY |-> VALUE:Int) REST, POW)
+        => (KEY |-> VALUE *Int POW) #computeUnitPow(REST, POW)
+
+
+    syntax Type  ::= "#dropUnit" "(" Type ")"    [function]
+ // -------------------------------------------------------
+    rule #dropUnit(T) => T
+      requires notBool isUnitType(T)
+
+    rule #dropUnit(%unitT(%num, _:Map, _)) => %num
+
+    rule #dropUnit(%unitT(%decimal, _:Map, _)) => %decimal
+
+
+    syntax UnitType  ::= "#convertToUnitIfPure" "(" NumericType "," UnitTuple ")"    [function]
+ // -------------------------------------------------------------------------------------------
+    rule #convertToUnitIfPure(T, _) => T
+      requires isUnitType(T)
+
+    rule #convertToUnitIfPure(%num, @unittuple(UNITMAP, POSITIONAL))
+        => %unitT(%num, UNITMAP, POSITIONAL)
+
+    rule #convertToUnitIfPure(%decimal, @unittuple(UNITMAP, POSITIONAL))
+        => %unitT(%decimal, UNITMAP, POSITIONAL)
+
+
+    syntax Bool  ::= "#areUnitsCompatible" "(" Type "," Type ")"  [function]
+ // -----------------------------------------------------------------------
+    rule #areUnitsCompatible(FROM, TO) => true
+      requires notBool isUnitType(FROM)
+
+    rule #areUnitsCompatible(FROM:UnitType, TO) => false
+      requires notBool isUnitType(TO)
+
+    rule #areUnitsCompatible(%unitT(_, FROMMAP:Map, FROMPOSITIONAL), %unitT(_, TOMAP:Map, TOPOSITIONAL))
+        => true
+      requires FROMMAP ==K TOMAP andBool FROMPOSITIONAL ==K TOPOSITIONAL
+
+    rule #areUnitsCompatible(%unitT(_, FROMMAP:Map, FROMPOSITIONAL), %unitT(_, TOMAP:Map, TOPOSITIONAL))
+        => false
+      requires FROMMAP =/=K TOMAP orBool FROMPOSITIONAL =/=K TOPOSITIONAL
 
 
 // Compute signatures
@@ -2033,7 +2384,7 @@ module VIPER-LLL
     rule <k> #lookupVar(%var(NAME))
             => #exception("Undeclared Variable: " +String Id2String(NAME)) ... </k>
          <env> ENV </env>
-      requires notBool %var(NAME) in keys(ENV)
+      requires notBool %var(NAME) in_keys(ENV)
 
     rule <k> #lookupVar(%svar(NAME)) => @tlll(T, LOC, LOCATTR) ... </k>
          <global> %svar(NAME) |-> @taddr(T, LOC, LOCATTR) GLOBAL </global>
@@ -2041,7 +2392,7 @@ module VIPER-LLL
     rule <k> #lookupVar(%svar(NAME))
             => #exception("Persistent variable undeclared: " +String Id2String(NAME)) ... </k>
          <global> GLOBAL </global>
-      requires notBool %svar(NAME) in keys(GLOBAL)
+      requires notBool %svar(NAME) in_keys(GLOBAL)
 
     rule #lookupVar(%listelem(V, EXPR))
         => #lookupListVar(#lookupVar(V), #compileValueExpr(EXPR))
@@ -2114,12 +2465,12 @@ module VIPER-LLL
     rule <k> #newVar(NAME, T) => @tlll(T, LOC, @locattr(@memory, true)) ...</k>
          <env> ENV => #updateEnv(ENV, %var(NAME), T, LOC, true) </env>
          <nextMem> LOC => LOC +Int #sizeOfType(T) </nextMem>
-      requires notBool %var(NAME) in keys(ENV)
+      requires notBool %var(NAME) in_keys(ENV)
 
     rule <k> #new(NAME, T)
            => #exception("Duplicate variable name: " +String Id2String(NAME)) ...</k>
          <env> ENV </env>
-      requires %var(NAME) in keys(ENV)
+      requires %var(NAME) in_keys(ENV)
 
 
     syntax CTypedLLLExp  ::= "#lookupOrNewVar" "(" Var "," Type ")"
@@ -2129,7 +2480,7 @@ module VIPER-LLL
 
     rule <k> #lookupOrNewVar(%var(NAME), T) => #newVar(NAME, T) ... </k>
          <env> ENV </env>
-      requires notBool %var(NAME) in keys(ENV)
+      requires notBool %var(NAME) in_keys(ENV)
 
     rule #lookupOrNewVar(%svar(NAME), _) => #lookupVar(%svar(NAME))
 

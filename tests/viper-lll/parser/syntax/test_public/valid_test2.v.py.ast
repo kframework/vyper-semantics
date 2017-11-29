@@ -1,0 +1,7 @@
+%pgm(,
+  %svdecl(x, %unitT(%num, %udiv(%wei, %sec), false), %public)
+  %svdecl(y, %unitT(%num, %udiv(%wei, %upow(%sec, 2)), false), %public)
+  %svdecl(z, %unitT(%num, %upow(%sec, -1), false), %public),
+  %fdecl(%@public, foo, , %unitT(%num, %upow(%sec, 2), false),
+    %return(%binop(/, %binop(/, %svar(x), %svar(y)), %svar(z))))
+)

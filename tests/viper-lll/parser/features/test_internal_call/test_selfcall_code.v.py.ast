@@ -1,0 +1,6 @@
+%pgm( , ,
+  %fdecl(%@public, foo, , %num,
+    %return(3))
+  %fdecl(%@public, foo, , %num,
+    %return(%icall(foo, )))
+)
