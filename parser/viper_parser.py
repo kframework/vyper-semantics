@@ -3,6 +3,8 @@
 import sys
 import ast
 
+from typing import List
+
 
 class ParserException(Exception):
     pass
@@ -132,8 +134,24 @@ def parseDecorators(decorator_list):
     return rez
 
 
-def parseParams():
-    return ""  # todo
+# syntax Param    ::= "%param" "(" Id "," Type ")"
+#
+# example: %param(_value, %num256)
+def parseParam(arg: ast.arg):
+    return "%param({}, {})".format(arg.arg, parseType(arg.annotation))
+
+
+# syntax Params   ::= List{Param, ""}
+def parseParams(args: List[ast.arg]):
+    rez = ""
+    first = True
+    for arg in args:
+        if first:
+            first = False
+        else:
+            rez += " "
+        rez += parseParam(arg)
+    return rez
 
 
 #    syntax Var      ::= "%var"      "(" Id ")"
@@ -159,6 +177,23 @@ def parseVar(var):
         raise ParserException("Unsupported Var format: " + str(var))
 
 
+# syntax Const    ::= Int
+#                   | "%hex"     "(" String ")"
+#                   | "%fixed10" "(" Int "," Int ")"  // decimal fixed point value with a precision of 10 decimal places
+#                                                     // %fixed10(A, B) = A/B and B is a power of 10.
+#                   | String
+#                   | Bool
+#
+# note: hex is not possible because Python converts it to regular int.
+def parseConst(node):
+    if type(node) == ast.Num:
+        return str(node.n)
+    elif type(node) == ast.Name and node.id in ["true", "false"]:
+        return node.id
+    else:
+        raise ParserException("Unsupported Const format: " + str(node))
+
+
 # Only ReservedFunc at the moment
 #    syntax ReservedFunc  ::= "%as_num128"    "(" Expr ")"
 #                           | "%as_num256"    "(" Expr ")"
@@ -172,15 +207,13 @@ def parseVar(var):
 #   num256_add(self.balances[_sender], _value)
 #   =>
 #   %num256_add(%mapelem(%svar(balances), %var(_sender)), %var(_value))
+#
+#   %as_wei_value(%as_num128(%var(_value)), wei)
 def parseCallExpr(expr):
-    if expr.func.id == "as_num128" or expr.func.id == "as_num256":
-        return "%" + expr.func.id + "(" + parseExpr(expr.args[0]) + ")"
-    elif expr.func.id == "as_wei_value":
-        raise ParserException("todo unsupported")
-    elif expr.func.id == "num256_add" or expr.func.id == "num256_sub":
-        return "%" + expr.func.id + "(" + parseExpr(expr.args[0]) + ", " + parseExpr(expr.args[1]) + ")"
+    if expr.func.id == "as_wei_value":
+        return "%as_wei_value({}, {})".format(parseExpr(expr.args[0]), expr.args[1].id)
     else:
-        raise ParserException("Unsupported Call expression format: " + str(expr))
+        return "%{}({})".format(expr.func.id, parseExprs(expr.args, ", "))
 
 
 # syntax ReservedExpr  ::= "%msg.sender" | "%msg.value" | "%msg.gas"
@@ -209,7 +242,9 @@ def parseReservedExpr(expr):
 #   %msg.value
 #   %mapelem(%svar(balances), %var(_sender))
 def parseExpr(expr):
-    if type(expr) == ast.Name or type(expr) == ast.Index or type(expr) == ast.Subscript \
+    if type(expr) == ast.Num or (type(expr) == ast.Name and expr.id in ["true", "false"]):
+        return parseConst(expr)
+    elif type(expr) == ast.Name or type(expr) == ast.Index or type(expr) == ast.Subscript \
             or (type(expr) == ast.Attribute and expr.value.id == "self"):
         return parseVar(expr)
     elif type(expr) == ast.Attribute:
@@ -220,23 +255,36 @@ def parseExpr(expr):
         raise ParserException("Unsupported Expr format: " + str(expr))
 
 
+# syntax Exprs    ::= List{Expr, ""}
+def parseExprs(exprs, separator=" "):
+    rez = ""
+    first = True
+    for expr in exprs:
+        if first:
+            first = False
+        else:
+            rez += separator
+        rez += parseExpr(expr)
+    return rez
+
+
 # syntax Stmt     ::= VarDecl  // annotated assign
-#                      | "%assign"    "(" Var "," Expr ")"
-#                      | "%augassign" "(" AugAssignOp "," Var "," Expr ")"
-#                      | "%if"        "(" Expr "," Stmts "," Stmts ")"
-#                      | "%if"        "(" Expr "," Stmts ")"
-#                      | "%for"       "(" Id "," Int "," Stmts ")"
-#                      | "%for"       "(" Id "," Expr "," Expr "," Stmts ")"
-#                      | "%break"
-#                      | "%pass"
-#                      | "%return"
-#                      | "%return"    "(" Expr ")"
-#                      | "%assert"    "(" Expr ")"
-#                      | "%throw"
-#                      | "%log"       "(" Id "," Exprs ")"
-#                      // stmt dispatch table
-#                      | "%send"      "(" Expr  "," Expr ")"
-#                      | "%selfdestruct" "(" Expr ")"
+#                  | "%assign"    "(" Var "," Expr ")"
+#                  | "%augassign" "(" AugAssignOp "," Var "," Expr ")"
+#                  | "%if"        "(" Expr "," Stmts "," Stmts ")"
+#                  | "%if"        "(" Expr "," Stmts ")"
+#                  | "%for"       "(" Id "," Int "," Stmts ")"
+#                  | "%for"       "(" Id "," Expr "," Expr "," Stmts ")"
+#                  | "%break"
+#                  | "%pass"
+#                  | "%return"
+#                  | "%return"    "(" Expr ")"
+#                  | "%assert"    "(" Expr ")"
+#                  | "%throw"
+#                  | "%log"       "(" Id "," Exprs ")"
+#                  // stmt dispatch table
+#                  | "%send"      "(" Expr  "," Expr ")"
+#                  | "%selfdestruct" "(" Expr ")"
 #
 # examples:
 #   _value = as_num256(msg.value)
@@ -246,9 +294,25 @@ def parseExpr(expr):
 #   log.Transfer(0x0000000000000000000000000000000000000000, _sender, _value)
 #   =>
 #   %log(Transfer, %hex("0000000000000000000000000000000000000000"), %var(_sender), %var(_value)))
+#
+#   send(_sender, as_wei_value(as_num128(_value), wei))
+#   =>
+#   %send(%var(_sender), %as_wei_value(%as_num128(%var(_value)), wei))
 def parseStmt(stmt):
     if type(stmt) == ast.Assign:
-        return "\n    %assign(" + parseVar(stmt.targets[0]) + ", " + parseExpr(stmt.value) + ")"
+        return "\n    %assign({}, {})".format(parseVar(stmt.targets[0]), parseExpr(stmt.value))
+    elif type(stmt) == ast.Expr and type(stmt.value) == ast.Call:
+        if type(stmt.value.func) == ast.Attribute and stmt.value.func.value.id == "log":
+            return "\n    %log({}, {})".format(stmt.value.func.attr, parseExprs(stmt.value.args))
+        elif type(stmt.value.func) == ast.Name and stmt.value.func.id == "send":
+            return "\n    %send({})".format(parseExprs(stmt.value.args, ", "))
+        else:
+            return "\n    "  # todo temp to see results
+    elif type(stmt) == ast.Return:
+        if stmt.value is None:
+            return "\n    %return"
+        else:
+            return "\n    %return({})".format(parseExpr(stmt.value))
     else:
         return "\n    "  # todo temp to see results
         # raise ParserException("Unsupported Stmt format: " + str(stmt))
@@ -268,13 +332,15 @@ def parseStmts(body):
 # ex:
 #  %fdecl(%@public %@payable, deposit, ,%void,
 #    %assign(%var(_value), %as_num256(%msg.value))
-#    %assign(%var(_sender), %msg.sender)
-#    %assign(%mapelem(%svar(balances), %var(_sender)), %num256_add(%mapelem(%svar(balances), %var(_sender)), %var(_value)))
-#    %assign(%svar(num_issued), %num256_add(%svar(num_issued), %var(_value)))
-#    %log(Transfer, %hex("0000000000000000000000000000000000000000"), %var(_sender), %var(_value)))
+#    ...)
 def parseDef(node):
-    return "  %fdecl(" + parseDecorators(node.decorator_list) + ", " + node.name + ", " + parseParams() + ", " \
-           + parseType(node.returns) + "," + parseStmts(node.body) + ")"
+    return "  %fdecl({}, {}, {}, {},{})".format(
+        parseDecorators(node.decorator_list),
+        node.name,
+        parseParams(node.args.args),
+        parseType(node.returns),
+        parseStmts(node.body)
+    )
 
 
 # Pgm ::= "%pgm" "(" Events "," Globals "," Defs ")"
