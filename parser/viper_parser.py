@@ -235,6 +235,8 @@ def parseReservedExpr(expr):
 def parseExpr(expr):
     if type(expr) == ast.Num or (type(expr) == ast.Name and expr.id in ["true", "false"]):
         return parseConst(expr)
+    elif type(expr) == ast.Name and expr.id == "self":
+        return "%self"
     elif type(expr) == ast.Name or type(expr) == ast.Index or type(expr) == ast.Subscript \
             or (type(expr) == ast.Attribute and expr.value.id == "self"):
         return parseVar(expr)
