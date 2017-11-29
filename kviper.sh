@@ -12,4 +12,5 @@ lll="$pgm".lll
 
 python3 "$dir"/parser/viper_parser.py "$pgm" >"$ast"
 krun -d "$dir"/viper-lll "$ast" | sed 's/.*<lll> \(.*\) <\/lll>.*/\1/' >"$lll"
-krun -d "$dir"/lll-evm   "$lll" | sed 's/.*<evm> ListItem ( \(.*\) ) <\/evm>.*/\1/' | sed 's/ ) ListItem ( / /g' | python3 "$dir"/lll-evm/opcodes2bytecodes.py
+krun -d "$dir"/lll-evm   "$lll" | sed 's/.*<evm> ListItem ( \(.*\) ) <\/evm>.*/\1/' | sed 's/ ) ListItem ( / /g' | \
+python3 "$dir"/misc/op2byte.py

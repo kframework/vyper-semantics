@@ -18,7 +18,7 @@ opcodes = {
     'EQ'            : 0x14,
     'ISZERO'        : 0x15,
     'AND'           : 0x16,
-    'EVMOR'         : 0x17, # OR
+    'OR'            : 0x17, 'EVMOR' : 0x17,
     'XOR'           : 0x18,
     'NOT'           : 0x19,
     'BYTE'          : 0x1a,
@@ -129,6 +129,8 @@ opcodes = {
     'RETURN'        : 0xf3,
     'DELEGATECALL'  : 0xf4,
     'CALLBLACKBOX'  : 0xf5,
+    'STATICCALL'    : 0xfa,
+    'REVERT'        : 0xfd,
     'INVALID'       : 0xfe,
     'SUICIDE'       : 0xff,
     'SELFDESTRUCT'  : 0xff,
