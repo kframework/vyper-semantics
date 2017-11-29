@@ -318,32 +318,49 @@ def parseAugAssignOp(op: ast.operator):
 #   %send(%var(_sender), %as_wei_value(%as_num128(%var(_value)), wei))
 #
 # %augassign(+=, %var(z), %var(y))
+#
+#  %if(%var(i),
+#    %return(5),
+#    %return(7))
 def parseStmt(stmt):
     if type(stmt) == ast.Assign:
-        return "\n    %assign({}, {})".format(parseVar(stmt.targets[0]), parseExpr(stmt.value))
+        return "%assign({}, {})".format(parseVar(stmt.targets[0]), parseExpr(stmt.value))
     elif type(stmt) == ast.AugAssign:
-        return "\n    %augassign({}, {}, {})".format(parseAugAssignOp(stmt.op), parseVar(stmt.target),
-                                                     parseExpr(stmt.value))
+        return "%augassign({}, {}, {})".format(parseAugAssignOp(stmt.op), parseVar(stmt.target),
+                                               parseExpr(stmt.value))
     elif type(stmt) == ast.Expr and type(stmt.value) == ast.Call:
         if type(stmt.value.func) == ast.Attribute and stmt.value.func.value.id == "log":
-            return "\n    %log({}, {})".format(stmt.value.func.attr, parseExprs(stmt.value.args))
+            return "%log({}, {})".format(stmt.value.func.attr, parseExprs(stmt.value.args))
         elif type(stmt.value.func) == ast.Name and stmt.value.func.id == "send":
-            return "\n    %send({})".format(parseExprs(stmt.value.args, ", "))
+            return "%send({})".format(parseExprs(stmt.value.args, ", "))
         else:
-            return "\n    "  # todo temp to see results
+            return ""  # todo temp to see results
+    elif type(stmt) == ast.If:
+        if stmt.orelse is None:
+            return "%if({},{})".format(parseExpr(stmt.test), parseStmts(stmt.body))
+        else:
+            return "%if({},{},{})".format(parseExpr(stmt.test), parseStmts(stmt.body), parseStmts(stmt.orelse))
     elif type(stmt) == ast.Return:
         if stmt.value is None:
-            return "\n    %return"
+            return "%return"
         else:
-            return "\n    %return({})".format(parseExpr(stmt.value))
+            return "%return({})".format(parseExpr(stmt.value))
     else:
-        return "\n    "  # todo temp to see results
+        return ""  # todo temp to see results
         # raise ParserException("Unsupported Stmt format: " + str(stmt))
+
+
+stmtsIndent = "  "
 
 
 # syntax Stmts    ::= List{Stmt, ""}
 def parseStmts(body):
-    return parseList(body, parseStmt, "")
+    global stmtsIndent
+    oldStmtsIndent = stmtsIndent
+    stmtsIndent += "  "
+    rez = parseList(body, parseStmt, "\n" + stmtsIndent, "\n" + stmtsIndent)
+    stmtsIndent = oldStmtsIndent
+    return rez
 
 
 #    syntax Def      ::= "%fdecl" "(" Decorators "," Id "," Params "," Type "," Stmts ")"
