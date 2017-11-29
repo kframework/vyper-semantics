@@ -29,16 +29,17 @@ def parse(code):
     return o.body
 
 
-def parseList(nodeList, parseElement: types.FunctionType, separator):
+def parseList(nodeList, parseElement: types.FunctionType, separator, initSeparator="", emptyCase=""):
     rez = ""
     first = True
     for node in nodeList:
         if first:
             first = False
+            rez += initSeparator
         else:
             rez += separator
         rez += parseElement(node)
-    return rez
+    return rez if rez != "" else emptyCase
 
 
 #    syntax BaseType      ::= "%bool"
@@ -250,6 +251,41 @@ def parseExprs(exprs, separator=" "):
     return parseList(exprs, parseExpr, separator)
 
 
+# syntax AugAssignOp ::= "+=" | "-=" | "*=" | "/=" | "%="
+#
+# we'll support all operators from Python.
+def parseAugAssignOp(op: ast.operator):
+    opType = type(op)
+    if opType == ast.Add:
+        return "+="
+    elif opType == ast.BitAnd:
+        return "&="
+    elif opType == ast.BitOr:
+        return "|="
+    elif opType == ast.BitXor:
+        return "^="
+    elif opType == ast.Div:
+        return "/="
+    elif opType == ast.FloorDiv:
+        return "//="
+    elif opType == ast.LShift:
+        return "<<="
+    elif opType == ast.MatMult:
+        return "@="
+    elif opType == ast.Mod:
+        return "%="
+    elif opType == ast.Mult:
+        return "*="
+    elif opType == ast.Pow:
+        return "**="
+    elif opType == ast.RShift:
+        return ">>="
+    elif opType == ast.Sub:
+        return "-="
+    else:
+        raise ParserException("Unsupported AugAssign operator: " + str(op))
+
+
 # syntax Stmt     ::= VarDecl  // annotated assign
 #                  | "%assign"    "(" Var "," Expr ")"
 #                  | "%augassign" "(" AugAssignOp "," Var "," Expr ")"
@@ -280,9 +316,14 @@ def parseExprs(exprs, separator=" "):
 #   send(_sender, as_wei_value(as_num128(_value), wei))
 #   =>
 #   %send(%var(_sender), %as_wei_value(%as_num128(%var(_value)), wei))
+#
+# %augassign(+=, %var(z), %var(y))
 def parseStmt(stmt):
     if type(stmt) == ast.Assign:
         return "\n    %assign({}, {})".format(parseVar(stmt.targets[0]), parseExpr(stmt.value))
+    elif type(stmt) == ast.AugAssign:
+        return "\n    %augassign({}, {}, {})".format(parseAugAssignOp(stmt.op), parseVar(stmt.target),
+                                                     parseExpr(stmt.value))
     elif type(stmt) == ast.Expr and type(stmt.value) == ast.Call:
         if type(stmt.value.func) == ast.Attribute and stmt.value.func.value.id == "log":
             return "\n    %log({}, {})".format(stmt.value.func.attr, parseExprs(stmt.value.args))
@@ -324,29 +365,22 @@ def parseDef(node):
 
 # Pgm ::= "%pgm" "(" Events "," Globals "," Defs ")"
 def parseProgram(nodeList):
-    rez = "%pgm("
     events = []
     globals = []
     defs = []
     for node in nodeList:
         if type(node) == ast.AnnAssign and type(node.annotation) == ast.Call:
-            events.append(parseEvent(node))
+            events.append(node)
         elif type(node) == ast.AnnAssign:
-            globals.append(parseGlobal(node))
+            globals.append(node)
         elif type(node) == ast.FunctionDef:
-            defs.append(parseDef(node))
+            defs.append(node)
         else:
             raise ParserException("Unsupported top level node: " + str(node))
-    for event in events:
-        rez += "\n" + event
-    rez += ","
-    for globalN in globals:
-        rez += "\n" + globalN
-    rez += ","
-    for defN in defs:
-        rez += "\n" + defN
-    rez += "\n)"
-    return rez
+    return "%pgm({},{},{}\n)".format(
+        parseList(events, parseEvent, "\n", "\n"),
+        parseList(globals, parseGlobal, "\n", "\n", " "),
+        parseList(defs, parseDef, "\n", "\n", " "))
 
 
 inputLines: List[str]
