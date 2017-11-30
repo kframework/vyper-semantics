@@ -5,7 +5,7 @@ For more details, refer to [wiki](https://github.com/kframework/viper-semantics/
 
 ## Running KViper
 
-KViper can be used to compile Viper programs to EVM bytecodes.
+KViper can be used to compile Viper programs to EVM bytecodes, being comparable to the production Viper compiler.
 
 First, build KViper:
 ```
