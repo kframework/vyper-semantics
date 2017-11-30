@@ -101,6 +101,13 @@ def parseUnitType(node: ast.Call):
     return "%unitT({}, {}, false)".format(parseType(node.func), parseUnit(node.args[0]))
 
 
+# syntax StructType    ::= "%structT" "(" VarDecls ")"
+#
+# Example: {f1:num, f2:num}
+def parseStructType(node: ast.Dict):
+    return "%structT({})".format(parseVarDecls(node))
+
+
 # syntax Type          ::= "%void"
 #                           | BaseType
 #                           | ByteArrayType
@@ -126,6 +133,8 @@ def parseType(param):
             return "%mapT({}, {})".format(parseType(param.value), parseType(param.slice.value))
     elif type(param) == ast.Call:
         return parseUnitType(param)
+    elif type(param) == ast.Dict:
+        return parseStructType(param)
     else:
         raise ParserException("Type parsing not yet implemented for: " + str(param))
 
@@ -146,11 +155,11 @@ def parseEventParam(key, value):  # value is Call
     return rez
 
 
-def parseEventParams(params):  # arg is ast.Dict
+def parseEventParams(node: ast.Dict):
     rez = ""
-    for i in range(0, len(params.keys)):
-        key = params.keys[i]
-        value = params.values[i]
+    for i in range(0, len(node.keys)):
+        key = node.keys[i]
+        value = node.values[i]
         if rez != "":
             rez += " "
         rez += parseEventParam(key, value)
@@ -388,7 +397,23 @@ def parseAugAssignOp(op: ast.operator):
 #
 # ex: %vdecl(a, %listT(%num, 5))
 def parseVarDecl(stmt: ast.AnnAssign):
-    return "%vdecl({}, {})".format(stmt.target.id, parseType(stmt.annotation))
+    return parseVarDecl2(stmt.target, stmt.annotation)
+
+
+def parseVarDecl2(key, value):
+    return "%vdecl({}, {})".format(key.id, parseType(value))
+
+
+# syntax VarDecls ::= List{VarDecl, ""}
+def parseVarDecls(dict: ast.Dict):
+    rez = ""
+    for i in range(0, len(dict.keys)):
+        key = dict.keys[i]
+        value = dict.values[i]
+        if rez != "":
+            rez += " "
+        rez += parseVarDecl2(key, value)
+    return rez
 
 
 # syntax Stmt     ::= VarDecl                                              // annotated assign
@@ -444,7 +469,7 @@ def parseStmt(stmt):
         elif type(stmt.value.func) == ast.Name and stmt.value.func.id == "send":
             return "%send({})".format(parseExprs(stmt.value.args, ", "))
         else:
-            return ""  # todo temp to see results
+            raise ParserException("Unsupported Stmt format: " + str(stmt))
     elif type(stmt) == ast.If:
         if stmt.orelse is None:
             return "%if({},{})".format(parseExpr(stmt.test), parseStmts(stmt.body))
@@ -464,8 +489,7 @@ def parseStmt(stmt):
         else:
             return "%return({})".format(parseExpr(stmt.value))
     else:
-        return ""  # todo temp to see results
-        # raise ParserException("Unsupported Stmt format: " + str(stmt))
+        raise ParserException("Unsupported Stmt format: " + str(stmt))
 
 
 stmtsIndent = "  "
