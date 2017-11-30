@@ -921,7 +921,7 @@ module VIPER-LLL
 
     rule #if(@tlll(_, CODE, _), THEN:LLLExps, ELSE:LLLExps) => $if(CODE, $%seq(THEN), $%seq(ELSE)),.LLLExps
 
-    rule #if(@tlll(_, CODE, _), THEN:LLLExp) => $if(CODE, $%seq(THEN)),.LLLExps
+    rule #if(@tlll(_, CODE, _), THEN:LLLExps) => $if(CODE, $%seq(THEN)),.LLLExps
 
 
 // For Loop
