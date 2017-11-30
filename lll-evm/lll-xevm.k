@@ -46,7 +46,7 @@ module LLL-XEVM
     rule $byte          ( A , B )                      => do( B   A )                     ~> BYTE
     rule $sha3          ( A , B )                      => do( B   A )                     ~> SHA3
     rule $address                                      =>                                    ADDRESS
-    rule $balance                                      =>                                    BALANCE
+    rule $balance       ( A )                          => do( A )                         ~> BALANCE
     rule $origin                                       =>                                    ORIGIN
     rule $caller                                       =>                                    CALLER
     rule $callvalue                                    =>                                    CALLVALUE
@@ -344,7 +344,7 @@ module LLL-XEVM
     rule valency($byte          ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
     rule valency($sha3          ( A , B )                      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1
     rule valency($address                                      )  =>   1
-    rule valency($balance                                      )  =>   1
+    rule valency($balance       ( A )                          )  =>   1   when valency(A) ==K 1
     rule valency($origin                                       )  =>   1
     rule valency($caller                                       )  =>   1
     rule valency($callvalue                                    )  =>   1
