@@ -197,7 +197,7 @@ module VIPER-LLL
     rule #checkEventParams(%eparam(NAME, T, true) EPARAMS, TOPICNUM, NAMES)
         => #checkEventParamType(T)
         ~> #checkNameDuplicateWithParams(NAME, NAMES)
-        ~> #checkEventParams(EPARAMS, TOPICNUM +Int 1, NAMES ++Id NAME)
+        ~> #checkEventParams(EPARAMS, TOPICNUM +Int 1, NAMES ++Id (NAME .Ids))
       requires TOPICNUM <Int 3
 
     rule #checkEventParams(%eparam(NAME, T, true) EPARAMS, TOPICNUM, NAMES)
@@ -207,7 +207,7 @@ module VIPER-LLL
     rule #checkEventParams(%eparam(NAME, T, false) EPARAMS, TOPICNUM, NAMES)
         => #checkEventParamType(T)
         ~> #checkNameDuplicateWithParams(NAME, NAMES)
-        ~> #checkEventParams(EPARAMS, TOPICNUM, NAMES ++Id NAME)
+        ~> #checkEventParams(EPARAMS, TOPICNUM, NAMES ++Id (NAME .Ids))
 
     rule #checkEventParamType(%bytesT(L)) => .
       requires L <=Int 32
@@ -242,7 +242,7 @@ module VIPER-LLL
     rule #addGlobals(G GS) => #addGlobal(G) ~> #addGlobals(GS)
 
     rule <k> #addGlobal(%svdecl(NAME, T, _))
-            => #addGlobalAux(NAME, #parseType(T)) ... </k>
+            => #addGlobalAux(NAME, #parseType(T, false)) ... </k>
          <global> GLOBALS </global>
       requires notBool %svar(NAME) in_keys(GLOBALS)
 
@@ -296,7 +296,7 @@ module VIPER-LLL
             ~> #addFuncAux(#computeFuncId(FNAME, PARAMS),
                            FNAME,
                            #parseTypeForParams(PARAMS, .Params),
-                           #parseType(T),
+                           #parseType(T, true),
                            CONSTANT, PAYABLE, INTERNAL)
          ... </k>
          <internalSig> SIGS </internalSig>
@@ -656,7 +656,7 @@ module VIPER-LLL
 // ====================
 
 
-    rule #compileStmt(%vdecl(NAME, T)) => #annassign(NAME, #parseType(T))
+    rule #compileStmt(%vdecl(NAME, T)) => #annassign(NAME, #parseType(T, true))
 
 
     syntax CLLLExps  ::= "#annassign" "(" Id "," CType ")"    [strict(2)]
@@ -1990,15 +1990,17 @@ module VIPER-LLL
 
     syntax Ids   ::= List{Id, ""}
     syntax Ids   ::= Ids "++Id" Ids    [right, function]
-    syntax Ids   ::= Ids "++Id" Id     [right, function]
  // ----------------------------------------------------
     rule .Ids ++Id IDS:Ids   => IDS
 
     rule (ID IDS1) ++Id IDS2 => ID (IDS1 ++Id IDS2)
 
-    rule .Ids ++Id ID        => ID .Ids
 
-    rule (ID1 IDS) ++Id ID   => (ID1 IDS) ++Id (ID .Ids)
+    syntax VarDecls  ::= VarDecls "++Vdecl" VarDecls  [right, function]
+ // -------------------------------------------------------------------
+    rule .VarDecls ++Vdecl VDECLS:VarDecls => VDECLS
+
+    rule (VDECL VDECLS1) ++Vdecl VDECLS2 => VDECL (VDECLS1 ++Vdecl VDECLS2)
 
 
 // In List
@@ -2153,7 +2155,7 @@ module VIPER-LLL
     rule #parseTypeForParams(.Params, RESULT) => RESULT
 
     rule #parseTypeForParams(%param(NAME, T) PARAMS, RESULT)
-        => #parseTypeForParam(NAME, #parseType(T))
+        => #parseTypeForParam(NAME, #parseType(T, true))
         ~> #parseTypeForParams(PARAMS, RESULT)
 
     rule #parseTypeForParam(NAME, T:Type) => %param(NAME, T)
@@ -2168,7 +2170,7 @@ module VIPER-LLL
     rule #parseTypeForEventParams(.EventParams, RESULT) => RESULT
 
     rule #parseTypeForEventParams(%eparam(NAME, T, TOPIC) EPARAMS, RESULT)
-        => #parseTypeForEventParam(NAME, #parseType(T), TOPIC)
+        => #parseTypeForEventParam(NAME, #parseType(T, true), TOPIC)
         ~> #parseTypeForEventParams(EPARAMS, RESULT)
 
     rule #parseTypeForEventParam(NAME, T:Type, TOPIC) => %eparam(NAME, T, TOPIC)
@@ -2177,24 +2179,44 @@ module VIPER-LLL
         => #parseTypeForEventParams(EPARAMS, RESULT ++Eparam (EPARAM .EventParams))
 
 
-    syntax CType  ::= "#parseType" "(" Type ")"
- // ------------------------------------------
-    rule #parseType(T) => T
-      requires notBool isUnitType(T)
+    syntax CType  ::= "#parseType" "(" Type "," Bool /*in memory?*/ ")"
+ // -------------------------------------------------------------------
+    rule #parseType(%void, _) => %void
 
-    rule #parseType(%unitT(T, UNIT:Map, POSITIONAL)) => %unitT(T, UNIT, POSITIONAL)
+    rule #parseType(%bool, _) => %bool
 
-    rule #parseType(%unitT(T, UNIT:Unit, POSITIONAL))
+    rule #parseType(%num, _) => %num
+
+    rule #parseType(%decimal, _) => %decimal
+
+    rule #parseType(%unitT(T, UNIT:Map, POSITIONAL), _) => %unitT(T, UNIT, POSITIONAL)
+
+    rule #parseType(%unitT(T, UNIT:Unit, POSITIONAL), _)
         => #parseUnitType(%unitT(T, UNIT, POSITIONAL))
 
-    rule #parseType(%listT(T, N)) => #parseListType(#parseType(T), N)
+    rule #parseType(%num256, _) => %num256
 
-    rule #parseType(%mapT(VT, KT))
+    rule #parseType(%signed256, _) => %signed256
+
+    rule #parseType(%bytes32, _) => %bytes32
+
+    rule #parseType(%address, _) => %address
+
+    rule #parseType(%bytesT(L), _) => %bytesT(L)
+
+    rule #parseType(%listT(T, N), INMEM) => #parseListType(#parseType(T, INMEM), N)
+
+    rule #parseType(%mapT(VT, KT), true)
+        => #exception("No mappings allowed for in-memory types, only fixed-size arrays")
+
+    rule #parseType(%mapT(VT, KT), false)
         => #ifThenElse(isBaseType(KT) orBool isByteArrayType(KT),
-                       #parseMapType(#parseType(VT), #parseType(KT)),
+                       #parseMapType(#parseType(VT, false), #parseType(KT, false)),
                        #exception("Mapping keys must be base or bytes types"))
 
-    // TODO: support StructType
+    rule #parseType(%structT(VDECLS), INMEM) => #parseStructType(VDECLS, INMEM, .VarDecls)
+
+    // TODO: support Tuple
 
 
     syntax CType  ::= "#parseListType" "(" CType "," Int ")"    [strict(1)]
@@ -2207,6 +2229,18 @@ module VIPER-LLL
     rule #parseMapType(VT, KT) => %mapT(VT, KT)
 
 
+    syntax CType  ::= "#parseStructType" "(" VarDecls "," Bool "," VarDecls ")"
+    syntax KItem  ::= "#nameWithType" "(" Id "," CType ")"    [strict(2)]
+ // ---------------------------------------------------------------------------
+    rule #parseStructType(%vdecl(NAME, T) VDECLS, INMEM, RESULT)
+        => #ifThenElse(#isVarNameValid(NAME),
+                       #nameWithType(NAME, #parseType(T, INMEM)),
+                       #exception("Invalid member variable for struct."))
+        ~> #parseStructType(VDECLS, INMEM, RESULT)
+
+    rule #nameWithType(NAME, T:Type) ~> #parseStructType(VDECLS, INMEM, RESULT)
+        => #parseStructType(VDECLS, INMEM, RESULT ++Vdecl (%vdecl(NAME, T) .VarDecls))
+
 // Units
 // =====
 
@@ -2214,7 +2248,7 @@ module VIPER-LLL
     syntax UnitType  ::= "%unitT" "(" PureNumType "," Map "," Bool /*positional*/ ")"
     syntax CType     ::= "#parseUnitType" "(" UnitType ")"    [function]
  // ---------------------------------------------------------------------------------
-     rule #parseUnitType(%unitT(T, UNIT, POSITIONAL))
+     rule #parseUnitType(%unitT(T, UNIT:Unit, POSITIONAL))
          => %unitT(T, #parseUnit(UNIT), POSITIONAL)
 
 
@@ -2581,5 +2615,13 @@ module VIPER-LLL
  // ---------------------------------------------------------------
     rule #getFirstStoreLoc($mstore(L:Int, _), CODE) => L
 
+
+    syntax Bool  ::= "#isVarNameValid" "(" Id ")"  [function]
+ // ---------------------------------------------------------
+    rule #isVarNameValid(NAME) => true
+      requires notBool isReservedWord(NAME)
+
+    rule #isVarNameValid(NAME) => false
+      requires isReservedWord(NAME)
 
 endmodule
