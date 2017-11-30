@@ -23,11 +23,21 @@ def get_original_if_0x_prefixed(expr):
     return context_slice[:t + 2]
 
 
+def resolve_negative_literals(_ast):
+    class RewriteUnaryOp(ast.NodeTransformer):
+        def visit_UnaryOp(self, node):
+            if isinstance(node.op, ast.USub) and isinstance(node.operand, ast.Num):
+                node.operand.n = 0 - node.operand.n
+                return node.operand
+            else:
+                return node
+
+    return RewriteUnaryOp().visit(_ast)
+
+
 def parse(code):
     o = ast.parse(code)
-    # todo fix those
-    # decorate_ast_with_source(o, code)
-    # o = resolve_negative_literals(o)
+    o = resolve_negative_literals(o)
     return o.body
 
 
@@ -44,16 +54,51 @@ def parseList(nodeList, parseElement: types.FunctionType, separator, initSeparat
     return rez if rez != "" else emptyCase
 
 
-#    syntax BaseType      ::= "%bool"
-#                           | NumericType | "%num256"  | "%signed256"
-#                           | "%bytes32" | "%address"
-#
+# syntax BaseType      ::= "%bool"
+#                         | NumericType | "%num256"  | "%signed256"
+#                         | "%bytes32" | "%address"
+# syntax NumericType   ::= PureNumType
+#                        | UnitType
 # syntax PureNumType   ::= "%num" | "%decimal"
 def parseBaseType(name):  # value is Str. NumericType not yet supported
     if type(name) == ast.Name:
         return "%" + name.id
     else:
         raise ParserException("BaseType parsing not yet implemented for: " + str(id))
+
+
+# syntax Unit          ::= BaseUnit
+#                        | "%umul" "(" Unit "," Unit ")"
+#                        | "%udiv" "(" Unit "," Unit ")"
+#                        | "%upow" "(" BaseUnit "," Int ")"
+#
+# syntax BaseUnit      ::= "%wei" | "%currency" | "%currency1" | "%currency2"
+#                        | "%sec" | "%m"        | "%kg"
+#
+# wei / sec =>
+#   %udiv(%wei, %sec)
+def parseUnit(node):
+    unitOpMap = {
+        ast.Mult: "%umul",
+        ast.Div: "%udiv",
+        ast.Pow: "%upow"
+    }
+    if type(node) == ast.Name:  # base unit
+        return "%{}".format(node.id)
+    elif type(node) == ast.Num:  # to support 2nd argument of %upow
+        return node.n
+    elif type(node) == ast.BinOp:
+        return "{}({}, {})".format(unitOpMap[type(node.op)], parseUnit(node.left), parseUnit(node.right))
+    else:
+        raise ParserException("Unsupported Unit format: " + str(node))
+
+
+# syntax UnitType      ::= "%unitT" "(" PureNumType "," Unit "," Bool /*positional*/ ")"
+#
+# num(wei / sec)
+#   => %unitT(%num, %udiv(%wei, %sec), false)
+def parseUnitType(node: ast.Call):
+    return "%unitT({}, {}, false)".format(parseType(node.func), parseUnit(node.args[0]))
 
 
 # syntax Type          ::= "%void"
@@ -79,6 +124,8 @@ def parseType(param):
             return "%listT({}, {})".format(parseType(param.value), parseConst(param.slice.value))
         else:
             return "%mapT({}, {})".format(parseType(param.value), parseType(param.slice.value))
+    elif type(param) == ast.Call:
+        return parseUnitType(param)
     else:
         raise ParserException("Type parsing not yet implemented for: " + str(param))
 
@@ -121,8 +168,15 @@ def parseEvent(node):  # node.annotation is ast.Call
 #
 # example:
 #   %svdecl(balances, %mapT(%num256, %address), %private)
+#
+# x: public(num(wei / sec))
+#   => %svdecl(x, %unitT(%num, %udiv(%wei, %sec), false), %public)
 def parseGlobal(node):
-    return "  %svdecl(" + node.target.id + ", " + parseType(node.annotation) + ", %private)"
+    if type(node.annotation) == ast.Call:
+        return "  %svdecl({}, {}, %{})" \
+            .format(node.target.id, parseType(node.annotation.args[0]), node.annotation.func.id)
+    else:
+        return "  %svdecl({}, {}, %private)".format(node.target.id, parseType(node.annotation))
 
 
 #    syntax Decorator  ::= "%@constant" | "%@payable" | "%@internal" | "%@public"
