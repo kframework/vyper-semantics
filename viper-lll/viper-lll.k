@@ -1001,12 +1001,18 @@ module VIPER-LLL
       requires isListType(T)
 
 
-    syntax CLLLExps  ::= "#returnBase" "(" TypedLLLExp "," Type ")"
- // ---------------------------------------------------------------
-    rule #returnBase(@tlll(T, CODE, _), RETURNTYPE)
-             => #ifThenElse((T ==K RETURNTYPE) orBool (T ==K %num andBool RETURNTYPE ==K %signed256),
-                            $%seq($mstore(0, CODE), $return(0, 32),.LLLExps),.LLLExps,
-                            #exception("Unsupported type conversion."))
+    syntax CLLLExps  ::= "#returnBase"    "(" TypedLLLExp "," Type ")"
+    syntax CLLLExps  ::= "#returnBaseAux" "(" TypedLLLExp "," Type ")"
+ // ------------------------------------------------------------------
+    rule #returnBase(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
+        => #ifThenElse(#areUnitsCompatible(T, RETURNTYPE),
+                       #returnBaseAux(@tlll(#dropUnit(T), CODE, EXPRATTR), #dropUnit(RETURNTYPE)),
+                       #exception("Return type units mismatch"))
+
+    rule #returnBaseAux(@tlll(T, CODE, _), RETURNTYPE)
+        => #ifThenElse((T ==K RETURNTYPE) orBool (T ==K %num andBool RETURNTYPE ==K %signed256),
+                        $%seq($mstore(0, CODE), $return(0, 32),.LLLExps),.LLLExps,
+                        #exception("Unsupported type conversion."))
 
 
     syntax CLLLExps  ::= "#returnListT"    "(" CTypedLLLExp ","  // place holder
