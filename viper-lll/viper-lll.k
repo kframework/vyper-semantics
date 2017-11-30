@@ -404,21 +404,21 @@ module VIPER-LLL
         => #mkPublicGetter(NAME,
                            PARAMS ++Param (%param(String2Id("arg" +String Int2String(DEPTH)), %num) .Params),
                            T,
-                           %listelem(VAR, %var(String2Id("arg" +String Int2String(DEPTH)))),
+                           %subscript(VAR, %var(String2Id("arg" +String Int2String(DEPTH)))),
                            DEPTH +Int 1)
 
     rule #mkPublicGetterMapT(NAME, PARAMS, %mapT(VT, KT), VAR, DEPTH)
         => #mkPublicGetter(NAME,
                            PARAMS ++Param (%param(String2Id("arg" +String Int2String(DEPTH)), KT) .Params),
                            VT,
-                           %mapelem(VAR, %var(String2Id("arg" +String Int2String(DEPTH)))),
+                           %subscript(VAR, %var(String2Id("arg" +String Int2String(DEPTH)))),
                            DEPTH +Int 1)
 
     rule #mkPublicGetterStructT(NAME, PARAMS, %structT(%vdecl(VNAME, T) VS), VAR, DEPTH)
         => #mkPublicGetter(NAME +String "___" +String Id2String(VNAME),
                            PARAMS,
                            T,
-                           %mem(VAR, VNAME),
+                           %field(VAR, VNAME),
                            DEPTH)
            ++Def #mkPublicGetterStructT(NAME, PARAMS, %structT(VS), VAR, DEPTH)
 
@@ -702,18 +702,16 @@ module VIPER-LLL
 
     rule #getTarget(%svar(NAME), TCODE) => #getTargetAux(TCODE)
 
-    rule #getTarget(%mem(V, FIELD), TCODE) => #getTargetAux(TCODE)
+    rule #getTarget(%field(V, FIELD), TCODE) => #getTargetAux(TCODE)
 
-    rule <k> #getTarget(%listelem(V, INDEX), TCODE)
+    rule <k> #getTarget(%subscript(V, INDEX), TCODE)
             => #exception("Altering list while being iterated!") ... </k>
          <inLoop> INLOOP </inLoop>
       requires V in INLOOP
 
-    rule <k> #getTarget(%listelem(V, INDEX), TCODE) => #getTargetAux(TCODE) ... </k>
+    rule <k> #getTarget(%subscript(V, INDEX), TCODE) => #getTargetAux(TCODE) ... </k>
          <inLoop> INLOOP </inLoop>
       requires notBool V in INLOOP
-
-    rule #getTarget(%mapelem(V, INDEX), TCODE) => #getTargetAux(TCODE)
 
     rule <k> #getTargetAux(@tlll(T, LOC, @locattr(TARGET, MUTABLE)))
             => #ifThen(TARGET ==K @storage andBool CONSTANT ==K true,
@@ -2434,27 +2432,16 @@ module VIPER-LLL
          <global> GLOBAL </global>
       requires notBool %svar(NAME) in_keys(GLOBAL)
 
-    rule #lookupVar(%listelem(V, EXPR))
-        => #lookupListVar(#lookupVar(V), #compileValueExpr(EXPR))
-
-    rule #lookupVar(%mapelem(V, EXPR))
-        => #lookupMapVar(#lookupVar(V), #compileValueExpr(EXPR))
+    rule #lookupVar(%subscript(V, EXPR))
+        => #lookupSubscriptVar(#lookupVar(V), #compileValueExpr(EXPR))
 
 
-    syntax CTypedLLLExp  ::= "#lookupListVar" "(" CTypedLLLExp ","
-                                                  CTypedLLLExp
-                                              ")"      [seqstrict]
- // --------------------------------------------------------------
-    rule #lookupListVar(SUBEXPR, INDEXEXPR)
+    syntax CTypedLLLExp  ::= "#lookupSubscriptVar" "(" CTypedLLLExp ","
+                                                       CTypedLLLExp
+                                                   ")"      [seqstrict]
+ // -------------------------------------------------------------------
+    rule #lookupSubscriptVar(SUBEXPR, INDEXEXPR)
         => #addVarOffset(SUBEXPR, INDEXEXPR)
-
-
-    syntax CTypedLLLExp  ::= "#lookupMapVar" "(" CTypedLLLExp ","
-                                                 CTypedLLLExp
-                                             ")"      [seqstrict]
- // -------------------------------------------------------------
-    rule #lookupMapVar(BASEEXPR, INDEXEXPR)
-        => #addVarOffset(BASEEXPR, INDEXEXPR)
 
 
     syntax CTypedLLLExp  ::= "#addVarOffset" "(" TypedLLLExp /*parent*/ ","
@@ -2524,9 +2511,7 @@ module VIPER-LLL
 
     rule #lookupOrNewVar(%svar(NAME), _) => #lookupVar(%svar(NAME))
 
-    rule #lookupOrNewVar(%listelem(V, EXPR), _) => #lookupVar(%listelem(V, EXPR))
-
-    rule #lookupOrNewVar(%mapelem(V, EXPR), _) => #lookupVar(%mapelem(V, EXPR))
+    rule #lookupOrNewVar(%subscript(V, EXPR), _) => #lookupVar(%subscript(V, EXPR))
 
 
     syntax CTypedLLLExp  ::= "#newLoopVar" "(" Id ")"
@@ -2558,7 +2543,7 @@ module VIPER-LLL
     rule #flattenStruct(M, V, .VarDecls, LOC, MUTABLE) => M
 
     rule #flattenStruct(M, V, %vdecl(NAME, T) VS, LOC, MUTABLE)
-        => #flattenStruct(#updateEnv(M, %mem(V, NAME), T, LOC, MUTABLE),
+        => #flattenStruct(#updateEnv(M, %field(V, NAME), T, LOC, MUTABLE),
                           V, VS, LOC +Int #sizeOfType(T), MUTABLE)
 
 

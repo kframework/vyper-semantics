@@ -48,7 +48,7 @@ TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_public
 run_tests $TESTS_DIR
 
 #examples
-TESTS_DIR=${SCRIPT_DIR}/examples/token
+TESTS_DIR=${SCRIPT_DIR}/../examples/token
 run_tests $TESTS_DIR
 
 echo "total tests: ${test_count}"
