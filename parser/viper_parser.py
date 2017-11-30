@@ -157,6 +157,7 @@ def parseParams(args: List[ast.arg]):
 #   %var(_value)
 #   %svar(balances)
 #   self.balances[_sender]  =>  %mapelem(%svar(balances), %var(_sender))
+#   %listelem(%var(x), 0)
 def parseVar(var):
     if type(var) == ast.Name:
         return "%var(" + var.id + ")"
@@ -165,7 +166,10 @@ def parseVar(var):
     elif type(var) == ast.Attribute and var.value.id == "self":
         return "%svar(" + var.attr + ")"
     elif type(var) == ast.Subscript:
-        return "%mapelem(" + parseVar(var.value) + ", " + parseExpr(var.slice) + ")"
+        if type(var.slice.value) == ast.Num:
+            return "%listelem({}, {})".format(parseVar(var.value), parseExpr(var.slice))
+        else:
+            return "%mapelem({}, {})".format(parseVar(var.value), parseExpr(var.slice))
     else:
         raise ParserException("Unsupported Var format: " + str(var))
 
@@ -175,7 +179,8 @@ DECIMAL_DIVISOR = 10000000000
 
 
 def parseFixed10Const(node):
-    num = Decimal(node.n)
+    # num = Decimal(node.n) - leads to weird digits many places after "." in simple numbers like 2.1
+    num = node.n
     divisor = 1
     while num % 1 != 0 and divisor < DECIMAL_DIVISOR:
         num *= 10
@@ -257,13 +262,15 @@ def parseReservedExpr(expr):
 #   %mapelem(%svar(balances), %var(_sender))
 #   %binop(+, %var(x), 10)
 def parseExpr(expr):
-    if type(expr) == ast.Num or (type(expr) == ast.Name and expr.id in ["true", "false"]):
+    if type(expr) == ast.Index:
+        return parseExpr(expr.value)
+    elif type(expr) == ast.Num or (type(expr) == ast.Name and expr.id in ["true", "false"]):
         return parseConst(expr)
     elif type(expr) == ast.Name and expr.id == "self":
         return "%self"
     elif type(expr) == ast.BinOp:
         return "%binop({}, {}, {})".format(parseBinOp(expr.op), parseExpr(expr.left), parseExpr(expr.right))
-    elif type(expr) == ast.Name or type(expr) == ast.Index or type(expr) == ast.Subscript \
+    elif type(expr) == ast.Name or type(expr) == ast.Subscript \
             or (type(expr) == ast.Attribute and expr.value.id == "self"):
         return parseVar(expr)
     elif type(expr) == ast.List:
@@ -321,6 +328,13 @@ def parseAugAssignOp(op: ast.operator):
     return "{}=".format(parseBinOp(op))
 
 
+# syntax VarDecl  ::= "%vdecl" "(" Id "," Type ")"
+#
+# ex: %vdecl(a, %listT(%num, 5))
+def parseVarDecl(stmt: ast.AnnAssign):
+    return "%vdecl({}, {})".format(stmt.target.id, parseType(stmt.annotation))
+
+
 # syntax Stmt     ::= VarDecl                                              // annotated assign
 #                   | "%assign"    "(" Var "," Expr ")"
 #                   | "%augassign" "(" AugAssignOp "," Var "," Expr ")"
@@ -361,7 +375,9 @@ def parseAugAssignOp(op: ast.operator):
 #
 # %forrange(i, 10, %pass)
 def parseStmt(stmt):
-    if type(stmt) == ast.Assign:
+    if type(stmt) == ast.AnnAssign:
+        return parseVarDecl(stmt)
+    elif type(stmt) == ast.Assign:
         return "%assign({}, {})".format(parseVar(stmt.targets[0]), parseExpr(stmt.value))
     elif type(stmt) == ast.AugAssign:
         return "%augassign({}, {}, {})".format(parseAugAssignOp(stmt.op), parseVar(stmt.target),
@@ -432,7 +448,7 @@ def parseProgram(nodeList):
     globals = []
     defs = []
     for node in nodeList:
-        if type(node) == ast.AnnAssign and type(node.annotation) == ast.Call:
+        if type(node) == ast.AnnAssign and type(node.annotation) == ast.Call and node.annotation.func.id == "__log__":
             events.append(node)
         elif type(node) == ast.AnnAssign:
             globals.append(node)
