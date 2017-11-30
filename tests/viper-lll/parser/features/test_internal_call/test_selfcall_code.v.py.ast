@@ -1,6 +1,6 @@
-%pgm( , ,
+%pgm(, ,
   %fdecl(%@public, foo, , %num,
     %return(3))
-  %fdecl(%@public, foo, , %num,
+  %fdecl(%@public, bar, , %num,
     %return(%icall(foo, )))
 )

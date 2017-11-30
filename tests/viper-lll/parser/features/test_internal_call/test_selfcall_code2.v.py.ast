@@ -1,8 +1,10 @@
-%pgm( , ,
+%pgm(, ,
   %fdecl(%@public, double, %param(x, %num), %num,
-    %return(%binop(*, %var(x), 2))
-  )
+    %return(%binop(*, %var(x), 2)))
   %fdecl(%@public, returnten, , %num,
-    %return(%icall(double, 5))
-  )
+    %return(%icall(double, 5)))
+  %fdecl(%@public, _hashy, %param(x, %bytes32), %bytes32,
+    %return(%sha3(%var(x))))
+  %fdecl(%@public, return_hash_of_rzpadded_cow, , %bytes32,
+    %return(%icall(_hashy, %hex("636f770000000000000000000000000000000000000000000000000000000000"))))
 )

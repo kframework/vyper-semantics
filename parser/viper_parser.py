@@ -279,7 +279,7 @@ def parseConst(node):
 #   %num256_add(%mapelem(%svar(balances), %var(_sender)), %var(_value))
 #
 #   %as_wei_value(%as_num128(%var(_value)), wei)
-def parseCallExpr(expr):
+def parseCallExpr(expr: ast.Call):
     if expr.func.id == "as_wei_value":
         return "%as_wei_value({}, {})".format(parseExpr(expr.args[0]), expr.args[1].id)
     else:
@@ -331,8 +331,10 @@ def parseExpr(expr):
         return "%list({})".format(parseExprs(expr.elts))
     elif type(expr) == ast.Attribute:
         return parseReservedExpr(expr)
-    elif type(expr) == ast.Call:
+    elif type(expr) == ast.Call and type(expr.func) == ast.Name:
         return parseCallExpr(expr)
+    elif type(expr) == ast.Call and type(expr.func) == ast.Attribute and expr.func.value.id == "self":
+        return "%icall({}, {})".format(expr.func.attr, parseExprs(expr.args))
     else:
         raise ParserException("Unsupported Expr format: " + str(expr))
 
