@@ -14,10 +14,10 @@ $ ./build.sh
 
 Then, run KViper:
 ```
-$ ./kviper.sh <pgm>.v.py
+$ ./bin/kviper.sh <pgm>.v.py
 ```
 
 For example,
 ```
-$ ./kviper.sh tests/examples/token/ERC20.v.py
+$ ./bin/kviper.sh tests/examples/token/ERC20.v.py
 ```
