@@ -6,8 +6,6 @@ import types
 
 from typing import List
 
-from decimal import Decimal
-
 
 class ParserException(Exception):
     pass
@@ -210,29 +208,32 @@ def parseParams(args: List[ast.arg]):
     return parseList(args, parseParam, " ")
 
 
-#    syntax Var      ::= "%var"      "(" Id ")"
-#                      | "%svar"     "(" Id ")"
-#                      | "%mem"      "(" Var "," Id   ")"  // struct field access
-#                      | "%listelem" "(" Var "," Expr ")"  // list element
-#                      | "%mapelem"  "(" Var "," Expr ")"  // map element
+# syntax Var      ::= "%var"  "(" Id ")"
+#                   | "%svar" "(" Id ")"
+#                   | StructFieldVar
+#                   | SubscriptVar
+#
+# syntax StructFieldVar  ::= "%field"     "(" Var "," Id   ")"  // struct field access
+#
+# syntax SubscriptVar    ::= "%subscript" "(" Var "," Expr ")"  // list or map element
 #
 # examples:
 #   %var(_value)
 #   %svar(balances)
-#   self.balances[_sender]  =>  %mapelem(%svar(balances), %var(_sender))
-#   %listelem(%var(x), 0)
+#   self.balances[_sender]  =>  %subscript(%svar(balances), %var(_sender))
+#   %subscript(%var(x), 0)
 def parseVar(var):
     if type(var) == ast.Name:
         return "%var(" + var.id + ")"
     elif type(var) == ast.Index:  # same as ast.Name
         return parseVar(var.value)
-    elif type(var) == ast.Attribute and var.value.id == "self":
-        return "%svar(" + var.attr + ")"
-    elif type(var) == ast.Subscript:
-        if type(var.slice.value) == ast.Num:
-            return "%listelem({}, {})".format(parseVar(var.value), parseExpr(var.slice))
+    elif type(var) == ast.Attribute:
+        if type(var.value) == ast.Name and var.value.id == "self":
+            return "%svar({})".format(var.attr)
         else:
-            return "%mapelem({}, {})".format(parseVar(var.value), parseExpr(var.slice))
+            return "%field({}, {})".format(parseVar(var.value), var.attr)
+    elif type(var) == ast.Subscript:
+        return "%subscript({}, {})".format(parseVar(var.value), parseExpr(var.slice))
     else:
         raise ParserException("Unsupported Var format: " + str(var))
 
@@ -267,6 +268,8 @@ def parseConst(node):
             return "%hex(\"{}\")".format(hexFormat[2:])
     elif type(node) == ast.Num and type(node.n == float):
         return parseFixed10Const(node)
+    elif type(node) == ast.Str:
+        return "\"{}\"".format(node.s)
     elif type(node) == ast.Name and node.id in ["true", "false"]:
         return node.id
     else:
@@ -285,10 +288,12 @@ def parseConst(node):
 #
 #   num256_add(self.balances[_sender], _value)
 #   =>
-#   %num256_add(%mapelem(%svar(balances), %var(_sender)), %var(_value))
+#   %num256_add(%subscript(%svar(balances), %var(_sender)), %var(_value))
 #
 #   %as_wei_value(%as_num128(%var(_value)), wei)
 def parseCallExpr(expr: ast.Call):
+    if len(expr.keywords) != 0:
+        raise ParserException("Calls with named parameters not yet supported: " + str(expr.keywords))
     if expr.func.id == "as_wei_value":
         return "%as_wei_value({}, {})".format(parseExpr(expr.args[0]), expr.args[1].id)
     else:
@@ -299,8 +304,16 @@ def parseCallExpr(expr: ast.Call):
 #                        | "%block.difficulty" | "%block.timestamp" | "%block.coinbase" | "%block.number"
 #                        | "%block.prevhash"
 #                        | "%tx.origin"
-def parseReservedExpr(expr):
-    return "%" + expr.value.id + "." + expr.attr
+#
+# If no reserved expression found, returns None.
+def tryParseReservedExpr(expr):
+    optionsMap = {"msg": ["sender", "value", "gas"],
+                  "block": ["difficulty", "timestamp", "coinbase", "number", "prevhash"],
+                  "tx": ["origin"]}
+    values = optionsMap.get(expr.value.id)
+    if values is not None and expr.attr in values:
+        return "%" + expr.value.id + "." + expr.attr
+    return None
 
 
 # syntax Expr     ::= Const
@@ -322,24 +335,27 @@ def parseReservedExpr(expr):
 #   %var(_sender)
 #   %as_num256(%msg.value)
 #   %msg.value
-#   %mapelem(%svar(balances), %var(_sender))
+#   %subscript(%svar(balances), %var(_sender))
 #   %binop(+, %var(x), 10)
 def parseExpr(expr):
     if type(expr) == ast.Index:
         return parseExpr(expr.value)
-    elif type(expr) == ast.Num or (type(expr) == ast.Name and expr.id in ["true", "false"]):
+    elif type(expr) == ast.Num or type(expr) == ast.Str or (type(expr) == ast.Name and expr.id in ["true", "false"]):
         return parseConst(expr)
     elif type(expr) == ast.Name and expr.id == "self":
         return "%self"
     elif type(expr) == ast.BinOp:
         return "%binop({}, {}, {})".format(parseBinOp(expr.op), parseExpr(expr.left), parseExpr(expr.right))
-    elif type(expr) == ast.Name or type(expr) == ast.Subscript \
-            or (type(expr) == ast.Attribute and expr.value.id == "self"):
+    elif type(expr) == ast.Attribute and type(expr.value) == ast.Name:
+        rez = tryParseReservedExpr(expr)
+        if rez is not None:
+            return rez
+        else:
+            return parseVar(expr)
+    elif type(expr) == ast.Name or type(expr) == ast.Subscript or type(expr) == ast.Attribute:
         return parseVar(expr)
     elif type(expr) == ast.List:
         return "%list({})".format(parseExprs(expr.elts))
-    elif type(expr) == ast.Attribute:
-        return parseReservedExpr(expr)
     elif type(expr) == ast.Call and type(expr.func) == ast.Name:
         return parseCallExpr(expr)
     elif type(expr) == ast.Call and type(expr.func) == ast.Attribute and expr.func.value.id == "self":
@@ -468,8 +484,10 @@ def parseStmt(stmt):
             return "%log({}, {})".format(stmt.value.func.attr, parseExprs(stmt.value.args))
         elif type(stmt.value.func) == ast.Name and stmt.value.func.id == "send":
             return "%send({})".format(parseExprs(stmt.value.args, ", "))
+        elif type(stmt.value.func) == ast.Name and stmt.value.func.id == "selfdestruct":
+            return "%selfdestruct({})".format(parseExprs(stmt.value.args, ", "))
         else:
-            raise ParserException("Unsupported Stmt format: " + str(stmt))
+            raise ParserException("Unsupported Expr Stmt format: " + str(stmt))
     elif type(stmt) == ast.If:
         if stmt.orelse is None:
             return "%if({},{})".format(parseExpr(stmt.test), parseStmts(stmt.body))
