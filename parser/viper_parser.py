@@ -489,7 +489,7 @@ def parseStmt(stmt):
         else:
             raise ParserException("Unsupported Expr Stmt format: " + str(stmt))
     elif type(stmt) == ast.If:
-        if stmt.orelse is None:
+        if len(stmt.orelse) == 0:
             return "%if({},{})".format(parseExpr(stmt.test), parseStmts(stmt.body))
         else:
             return "%if({},{},{})".format(parseExpr(stmt.test), parseStmts(stmt.body), parseStmts(stmt.orelse))
