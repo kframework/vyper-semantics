@@ -260,6 +260,7 @@ def parseFixed10Const(node):
 #                   | Bool
 #
 def parseConst(node):
+    boolMap = {True: "true", False: "false"}
     if type(node) == ast.Num and type(node.n) == int:
         hexFormat = get_original_if_0x_prefixed(node)
         if hexFormat is None:
@@ -270,6 +271,8 @@ def parseConst(node):
         return parseFixed10Const(node)
     elif type(node) == ast.Str:
         return "\"{}\"".format(node.s)
+    elif type(node) == ast.NameConstant:
+        return boolMap[node.value]
     elif type(node) == ast.Name and node.id in ["true", "false"]:
         return node.id
     else:
@@ -316,6 +319,25 @@ def tryParseReservedExpr(expr):
     return None
 
 
+# syntax CompareOp     ::= "%lt" | "%le" | "%gt" | "%ge" | "%eq" | "%ne" | "%in"
+def parseCompareOp(op: ast.cmpop):
+    map = {ast.Eq: "%eq",
+           ast.Gt: "%gt",
+           ast.GtE: "%ge",
+           ast.In: "%in",
+           ast.Is: None,
+           ast.IsNot: None,
+           ast.Lt: "%lt",
+           ast.LtE: "%le",
+           ast.NotEq: "%ne",
+           ast.NotIn: None
+           }
+    if map[type(op)] is not None:
+        return map[type(op)]
+    else:
+        raise ParserException("Unsupported CompareOp: " + str(op) + " in " + inputLines[op.lineno][op.col_offset:])
+
+
 # syntax Expr     ::= Const
 #                   | Var
 #                   | ListExpr
@@ -340,12 +362,18 @@ def tryParseReservedExpr(expr):
 def parseExpr(expr):
     if type(expr) == ast.Index:
         return parseExpr(expr.value)
-    elif type(expr) == ast.Num or type(expr) == ast.Str or (type(expr) == ast.Name and expr.id in ["true", "false"]):
+    elif type(expr) == ast.Num or type(expr) == ast.Str or type(expr) == ast.NameConstant \
+            or (type(expr) == ast.Name and expr.id in ["true", "false"]):
         return parseConst(expr)
     elif type(expr) == ast.Name and expr.id == "self":
         return "%self"
     elif type(expr) == ast.BinOp:
         return "%binop({}, {}, {})".format(parseBinOp(expr.op), parseExpr(expr.left), parseExpr(expr.right))
+    elif type(expr) == ast.Compare:
+        if len(expr.ops) > 1 or len(expr.comparators) > 1:
+            raise ParserException("Unsupported complex comparator format: " + inputLines[expr.lineno][expr.col_offset:])
+        return "%compareop({}, {}, {})" \
+            .format(parseCompareOp(expr.ops[0]), parseExpr(expr.left), parseExpr(expr.comparators[0]))
     elif type(expr) == ast.Attribute and type(expr.value) == ast.Name:
         rez = tryParseReservedExpr(expr)
         if rez is not None:
@@ -506,6 +534,8 @@ def parseStmt(stmt):
             return "%return"
         else:
             return "%return({})".format(parseExpr(stmt.value))
+    elif type(stmt) == ast.Assert:
+        return "%assert({})".format(parseExpr(stmt.test))
     else:
         raise ParserException("Unsupported Stmt format: " + str(stmt))
 
