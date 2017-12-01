@@ -7,12 +7,17 @@ For more details, refer to [wiki](https://github.com/kframework/viper-semantics/
 
 KViper can be used to compile Viper programs to EVM bytecodes, being comparable to the production Viper compiler.
 
-First, build KViper:
+First, setup K:
+```
+$ source scripts/setup_k
+```
+
+Then, build KViper:
 ```
 $ ./build.sh
 ```
 
-Then, run KViper:
+Now you can run KViper:
 ```
 $ ./bin/kviper.sh <pgm>.v.py
 ```
