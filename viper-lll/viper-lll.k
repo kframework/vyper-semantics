@@ -89,27 +89,27 @@ module VIPER-LLL
     //             requires for evaluation (i.e. not KResult).
     syntax CType               ::= Type
     syntax CParams             ::= Params
-    syntax CEventParams        ::= EventParams
     syntax CLLLExp             ::= LLLExp
     syntax CLLLExps            ::= LLLExps
     syntax CTypedLLLExp        ::= TypedLLLExp
-    syntax CPackedLoggingData  ::= PackedLoggingData
+    syntax CEventParams        ::= EventParams
     syntax CPackedArgBy32      ::= PackedArgBy32
     syntax CPackedArgData      ::= PackedArgData
+    syntax CPackedLoggingData  ::= PackedLoggingData
 
-    syntax KResult  ::= Type
+    syntax KResult  ::= Int
+                      | Bool
+                      | Type
+                      | String
                       | Params
-                      | EventParams
                       | LLLExp
                       | LLLExps
+                      | UnitTuple
                       | TypedLLLExp
-                      | PackedLoggingData
+                      | EventParams
                       | PackedArgBy32
                       | PackedArgData
-                      | UnitTuple
-                      | Bool
-                      | Int
-                      | String
+                      | PackedLoggingData
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -902,24 +902,25 @@ module VIPER-LLL
 // ==================
 
 
-    syntax CLLLExps  ::= "#if" "(" CTypedLLLExp /*TEST*/ ","
-                                   CLLLExps     /*Then*/ ","
-                                   CLLLExps     /*Else*/
-                               ")"               [seqstrict]
+    syntax CLLLExps  ::= "#ifstmt" "(" CTypedLLLExp /*TEST*/ ","
+                                       CLLLExps     /*Then*/ ","
+                                       CLLLExps     /*Else*/
+                                   ")"               [seqstrict]
 
-    syntax CLLLExps  ::= "#if" "(" CTypedLLLExp /*TEST*/ ","
-                                   CLLLExps     /*Then*/
-                               ")"               [seqstrict]
- // --------------------------------------------------------
-    rule #compileStmt(%if(TEST, THENSTMTS, ELSESTMTS)) => #if(#compileValueExpr(TEST),
-                                                              #compileStmts(THENSTMTS, .LLLExps),
-                                                              #compileStmts(ELSESTMTS, .LLLExps))
+    syntax CLLLExps  ::= "#ifstmt" "(" CTypedLLLExp /*TEST*/ ","
+                                       CLLLExps     /*Then*/
+                                   ")"               [seqstrict]
+ // ------------------------------------------------------------
+    rule #compileStmt(%if(TEST, THENSTMTS, ELSESTMTS))
+        => #ifstmt(#compileValueExpr(TEST),
+                   #compileStmts(THENSTMTS, .LLLExps),
+                   #compileStmts(ELSESTMTS, .LLLExps))
 
-    rule #compileStmt(%if(TEST, THENSTMTS)) => #if(#compileValueExpr(TEST), #compileStmts(THENSTMTS, .LLLExps))
+    rule #compileStmt(%if(TEST, THENSTMTS)) => #ifstmt(#compileValueExpr(TEST), #compileStmts(THENSTMTS, .LLLExps))
 
-    rule #if(@tlll(_, CODE, _), THEN:LLLExps, ELSE:LLLExps) => $if(CODE, $%seq(THEN), $%seq(ELSE)),.LLLExps
+    rule #ifstmt(@tlll(_, CODE, _), THEN:LLLExps, ELSE:LLLExps) => $if(CODE, $%seq(THEN), $%seq(ELSE)),.LLLExps
 
-    rule #if(@tlll(_, CODE, _), THEN:LLLExps) => $if(CODE, $%seq(THEN)),.LLLExps
+    rule #ifstmt(@tlll(_, CODE, _), THEN:LLLExps) => $if(CODE, $%seq(THEN)),.LLLExps
 
 
 // For Loop
@@ -1013,7 +1014,7 @@ module VIPER-LLL
                         #exception("Unsupported type conversion."))
 
 
-    syntax CLLLExps  ::= "#returnListT"    "(" CTypedLLLExp ","  // place holder
+    syntax CLLLExps  ::= "#returnListT"    "(" CTypedLLLExp ","  // placeholder
                                                TypedLLLExp  ","
                                                Type
                                            ")"      [strict(1)]
@@ -2545,7 +2546,6 @@ module VIPER-LLL
     rule #flattenStruct(M, V, %vdecl(NAME, T) VS, LOC, MUTABLE)
         => #flattenStruct(#updateEnv(M, %field(V, NAME), T, LOC, MUTABLE),
                           V, VS, LOC +Int #sizeOfType(T), MUTABLE)
-
 
 
 // Others
