@@ -264,8 +264,6 @@ def parseConst(node):
         return "\"{}\"".format(node.s)
     elif type(node) == ast.NameConstant:
         return boolMap[node.value]
-    elif type(node) == ast.Name and node.id in ["true", "false"]:
-        return node.id
     else:
         raise ParserException("Unsupported Const format: " + str(node))
 

@@ -36,7 +36,7 @@ def withdraw(_value : num256) -> bool:
     send(_sender, as_wei_value(as_num128(_value), wei))
     # Fire withdraw event as transfer to 0x0
     log.Transfer(_sender, 0x0000000000000000000000000000000000000000, _value)
-    return true
+    return True
 
 @public
 @constant
@@ -56,7 +56,7 @@ def transfer(_to : address, _value : num256) -> bool:
     self.balances[_to] = num256_add(self.balances[_to], _value)
     # Fire transfer event
     log.Transfer(_sender, _to, _value)
-    return true
+    return True
 
 @public
 def transferFrom(_from : address, _to : address, _value : num256) -> bool:
@@ -68,7 +68,7 @@ def transferFrom(_from : address, _to : address, _value : num256) -> bool:
     self.allowances[_from][_sender] = num256_sub(allowance, _value)
     # Fire transfer event
     log.Transfer(_from, _to, _value)
-    return true
+    return True
 
 @public
 def approve(_spender : address, _value : num256) -> bool:
@@ -76,7 +76,7 @@ def approve(_spender : address, _value : num256) -> bool:
     self.allowances[_sender][_spender] = _value
     # Fire approval event
     log.Approval(_sender, _spender, _value)
-    return true
+    return True
 
 @public
 @constant
