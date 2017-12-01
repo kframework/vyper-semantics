@@ -91,21 +91,6 @@ def parseUnit(node):
         raise ParserException("Unsupported Unit format: " + str(node))
 
 
-# syntax UnitType      ::= "%unitT" "(" PureNumType "," Unit "," Bool /*positional*/ ")"
-#
-# num(wei / sec)
-#   => %unitT(%num, %udiv(%wei, %sec), false)
-def parseUnitType(node: ast.Call):
-    return "%unitT({}, {}, false)".format(parseType(node.func), parseUnit(node.args[0]))
-
-
-# syntax StructType    ::= "%structT" "(" VarDecls ")"
-#
-# Example: {f1:num, f2:num}
-def parseStructType(node: ast.Dict):
-    return "%structT({})".format(parseVarDecls(node))
-
-
 # syntax Type          ::= "%void"
 #                           | BaseType
 #                           | ByteArrayType
@@ -114,27 +99,33 @@ def parseStructType(node: ast.Dict):
 #                           | StructType
 #
 # syntax ListType      ::= "%listT"   "(" Type "," Int ")"
-#
 # syntax MappingType   ::= "%mapT"    "(" Type "," BaseType ")"
+# syntax ByteArrayType ::= "%bytesT"  "(" Int ")"
+# syntax UnitType      ::= "%unitT" "(" PureNumType "," Unit "," Bool /*positional*/ ")"
+# syntax StructType    ::= "%structT" "(" VarDecls ")"
 #
 # example:
 #   %mapT(%num256, %address)
-def parseType(param):
-    if param is None:
+# struct:
+#   {f1:num, f2:num}
+def parseType(node):
+    if node is None:
         return "%void"
-    elif type(param) == ast.Name:
-        return parseBaseType(param)
-    elif type(param) == ast.Subscript:
-        if type(param.slice.value) == ast.Num:
-            return "%listT({}, {})".format(parseType(param.value), parseConst(param.slice.value))
+    elif type(node) == ast.Name:
+        return parseBaseType(node)
+    elif type(node) == ast.Compare and type(node.left) == ast.Name and node.left.id == "bytes":
+        return "%bytesT({})".format(node.comparators[0].n)
+    elif type(node) == ast.Subscript:
+        if type(node.slice.value) == ast.Num:
+            return "%listT({}, {})".format(parseType(node.value), parseConst(node.slice.value))
         else:
-            return "%mapT({}, {})".format(parseType(param.value), parseType(param.slice.value))
-    elif type(param) == ast.Call:
-        return parseUnitType(param)
-    elif type(param) == ast.Dict:
-        return parseStructType(param)
+            return "%mapT({}, {})".format(parseType(node.value), parseType(node.slice.value))
+    elif type(node) == ast.Dict:
+        return "%structT({})".format(parseVarDecls(node))
+    elif type(node) == ast.Call:  # part of BaseType
+        return "%unitT({}, {}, false)".format(parseType(node.func), parseUnit(node.args[0]))
     else:
-        raise ParserException("Type parsing not yet implemented for: " + str(param))
+        raise ParserException("Type parsing not yet implemented for: " + str(node))
 
 
 # EventParam ::= "%eparam" "(" Id "," Type "," Bool /*indexed?*/ ")"
@@ -298,7 +289,8 @@ def parseCallExpr(expr: ast.Call):
     if len(expr.keywords) != 0:
         raise ParserException("Calls with named parameters not yet supported: " + str(expr.keywords))
     if expr.func.id == "as_wei_value":
-        return "%as_wei_value({}, {})".format(parseExpr(expr.args[0]), expr.args[1].id)
+        return "%as_wei_value({}, {})".format(parseExpr(expr.args[0]),
+                                              expr.args[1].s if type(expr.args[1]) == ast.Str else expr.args[1].id)
     else:
         return "%{}({})".format(expr.func.id, parseExprs(expr.args, ", "))
 
@@ -319,6 +311,30 @@ def tryParseReservedExpr(expr):
     return None
 
 
+# syntax BinOp         ::= "+" | "-" | "*" | "/" | "%" | "**"
+#
+# we'll support all operators from Python.
+def parseBinOp(op: ast.operator):
+    map = {ast.Add: "+",
+           ast.BitAnd: "&",
+           ast.BitOr: "|",
+           ast.BitXor: "^",
+           ast.Div: "/",
+           ast.FloorDiv: "//",
+           ast.LShift: "<<",
+           ast.MatMult: "@",
+           ast.Mod: "%",
+           ast.Mult: "*",
+           ast.Pow: "**",
+           ast.RShift: ">>",
+           ast.Sub: "-"
+           }
+    if map[type(op)] is not None:
+        return map[type(op)]
+    else:
+        raise ParserException("Unsupported BinOp: " + str(op) + " in " + inputLines[op.lineno][op.col_offset:])
+
+
 # syntax CompareOp     ::= "%lt" | "%le" | "%gt" | "%ge" | "%eq" | "%ne" | "%in"
 def parseCompareOp(op: ast.cmpop):
     map = {ast.Eq: "%eq",
@@ -336,6 +352,30 @@ def parseCompareOp(op: ast.cmpop):
         return map[type(op)]
     else:
         raise ParserException("Unsupported CompareOp: " + str(op) + " in " + inputLines[op.lineno][op.col_offset:])
+
+
+# syntax BoolOp        ::= "%and" | "%or"
+def parseBoolOp(op: ast.boolop):
+    map = {ast.And: "%and",
+           ast.Or: "%or",
+           }
+    if map[type(op)] is not None:
+        return map[type(op)]
+    else:
+        raise ParserException("Unsupported BoolOp: " + str(op) + " in " + inputLines[op.lineno][op.col_offset:])
+
+
+# syntax UnaryOp       ::= "%not" | "%neg"
+def parseUnaryOp(op: ast.unaryop):
+    map = {ast.Invert: None,
+           ast.Not: "%not",
+           ast.UAdd: None,
+           ast.USub: "%neg",
+           }
+    if map[type(op)] is not None:
+        return map[type(op)]
+    else:
+        raise ParserException("Unsupported UnaryOp: " + str(op) + " in " + inputLines[op.lineno][op.col_offset:])
 
 
 # syntax Expr     ::= Const
@@ -374,6 +414,10 @@ def parseExpr(node):
             raise ParserException("Unsupported complex comparator format: " + inputLines[node.lineno][node.col_offset:])
         return "%compareop({}, {}, {})" \
             .format(parseCompareOp(node.ops[0]), parseExpr(node.left), parseExpr(node.comparators[0]))
+    elif type(node) == ast.BoolOp:
+        return "%boolop({}, {}, {})".format(parseBoolOp(node.op), parseExpr(node.values[0]), parseExpr(node.values[1]))
+    elif type(node) == ast.UnaryOp:
+        return "%unaryop({}, {})".format(parseUnaryOp(node.op), parseExpr(node.operand))
     elif type(node) == ast.Attribute and type(node.value) == ast.Name:
         rez = tryParseReservedExpr(node)
         if rez is not None:
@@ -396,41 +440,6 @@ def parseExpr(node):
 # syntax Exprs    ::= List{Expr, ""}
 def parseExprs(exprs, separator=" "):
     return parseList(exprs, parseExpr, separator)
-
-
-# syntax BinOp         ::= "+" | "-" | "*" | "/" | "%" | "**"
-#
-# we'll support all operators from Python.
-def parseBinOp(op: ast.operator):
-    opType = type(op)
-    if opType == ast.Add:
-        return "+"
-    elif opType == ast.BitAnd:
-        return "&"
-    elif opType == ast.BitOr:
-        return "|"
-    elif opType == ast.BitXor:
-        return "^"
-    elif opType == ast.Div:
-        return "/"
-    elif opType == ast.FloorDiv:
-        return "//"
-    elif opType == ast.LShift:
-        return "<<"
-    elif opType == ast.MatMult:
-        return "@"
-    elif opType == ast.Mod:
-        return "%"
-    elif opType == ast.Mult:
-        return "*"
-    elif opType == ast.Pow:
-        return "**"
-    elif opType == ast.RShift:
-        return ">>"
-    elif opType == ast.Sub:
-        return "-"
-    else:
-        raise ParserException("Unsupported AugAssign operator: " + str(op))
 
 
 # syntax AugAssignOp ::= "+=" | "-=" | "*=" | "/=" | "%="
