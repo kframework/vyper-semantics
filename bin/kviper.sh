@@ -5,8 +5,8 @@ set -u      # Using undefined variables is an error. Exit immediately
 die() { echo -e "FATAL:" "$@"; exit 1; }
 type krun >/dev/null || die 'krun not in $PATH'
 
-cmd="$(basename $0)"
-dir="$(dirname $0)"/..
+cmd="$(basename "$0")"
+dir="$(dirname "$0")"/..
 [[ "$#" == '0' ]] && die "usage: $cmd <pgm>.v.py"
 
 pgm="$1"

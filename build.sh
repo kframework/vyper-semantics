@@ -5,7 +5,7 @@ set -u      # Using undefined variables is an error. Exit immediately
 die() { echo -e "FATAL:" "$@"; exit 1; }
 type kompile >/dev/null || die 'kompile not in $PATH'
 
-dir="$(dirname $0)"
+dir="$(dirname "$0")"
 
 set -x
 kompile --syntax-module VIPER-ABSTRACT-SYNTAX "$dir"/viper-lll/viper-lll-post.k
