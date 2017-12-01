@@ -7,7 +7,7 @@ For more details, refer to [wiki](https://github.com/kframework/viper-semantics/
 
 KViper can be used to compile Viper programs to EVM bytecodes, being comparable to the production Viper compiler.
 
-First, setup K:
+First, setup K (ignore JavaCC warnings):
 ```
 $ source scripts/setup_k
 ```
