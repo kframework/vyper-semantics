@@ -359,37 +359,38 @@ def parseCompareOp(op: ast.cmpop):
 #   %msg.value
 #   %subscript(%svar(balances), %var(_sender))
 #   %binop(+, %var(x), 10)
-def parseExpr(expr):
-    if type(expr) == ast.Index:
-        return parseExpr(expr.value)
-    elif type(expr) == ast.Num or type(expr) == ast.Str or type(expr) == ast.NameConstant \
-            or (type(expr) == ast.Name and expr.id in ["true", "false"]):
-        return parseConst(expr)
-    elif type(expr) == ast.Name and expr.id == "self":
+def parseExpr(node):
+    if type(node) == ast.Index:
+        return parseExpr(node.value)
+    elif type(node) == ast.Num or type(node) == ast.Str or type(node) == ast.NameConstant \
+            or (type(node) == ast.Name and node.id in ["true", "false"]):
+        return parseConst(node)
+    elif type(node) == ast.Name and node.id == "self":
         return "%self"
-    elif type(expr) == ast.BinOp:
-        return "%binop({}, {}, {})".format(parseBinOp(expr.op), parseExpr(expr.left), parseExpr(expr.right))
-    elif type(expr) == ast.Compare:
-        if len(expr.ops) > 1 or len(expr.comparators) > 1:
-            raise ParserException("Unsupported complex comparator format: " + inputLines[expr.lineno][expr.col_offset:])
+    elif type(node) == ast.BinOp:
+        return "%binop({}, {}, {})".format(parseBinOp(node.op), parseExpr(node.left), parseExpr(node.right))
+    elif type(node) == ast.Compare:
+        if len(node.ops) > 1 or len(node.comparators) > 1:
+            raise ParserException("Unsupported complex comparator format: " + inputLines[node.lineno][node.col_offset:])
         return "%compareop({}, {}, {})" \
-            .format(parseCompareOp(expr.ops[0]), parseExpr(expr.left), parseExpr(expr.comparators[0]))
-    elif type(expr) == ast.Attribute and type(expr.value) == ast.Name:
-        rez = tryParseReservedExpr(expr)
+            .format(parseCompareOp(node.ops[0]), parseExpr(node.left), parseExpr(node.comparators[0]))
+    elif type(node) == ast.Attribute and type(node.value) == ast.Name:
+        rez = tryParseReservedExpr(node)
         if rez is not None:
             return rez
         else:
-            return parseVar(expr)
-    elif type(expr) == ast.Name or type(expr) == ast.Subscript or type(expr) == ast.Attribute:
-        return parseVar(expr)
-    elif type(expr) == ast.List:
-        return "%list({})".format(parseExprs(expr.elts))
-    elif type(expr) == ast.Call and type(expr.func) == ast.Name:
-        return parseCallExpr(expr)
-    elif type(expr) == ast.Call and type(expr.func) == ast.Attribute and expr.func.value.id == "self":
-        return "%icall({}, {})".format(expr.func.attr, parseExprs(expr.args))
+            return parseVar(node)
+    elif type(node) == ast.Name or type(node) == ast.Subscript or type(node) == ast.Attribute:
+        return parseVar(node)
+    elif type(node) == ast.List:
+        return "%list({})".format(parseExprs(node.elts))
+    elif type(node) == ast.Call and type(node.func) == ast.Name:
+        return parseCallExpr(node)
+    elif type(node) == ast.Call and type(node.func) == ast.Attribute and type(node.func.value) == ast.Name \
+            and node.func.value.id == "self":
+        return "%icall({}, {})".format(node.func.attr, parseExprs(node.args))
     else:
-        raise ParserException("Unsupported Expr format: " + str(expr))
+        raise ParserException("Unsupported Expr format: " + str(node))
 
 
 # syntax Exprs    ::= List{Expr, ""}
@@ -499,45 +500,53 @@ def parseVarDecls(dict: ast.Dict):
 #    %return(7))
 #
 # %forrange(i, 10, %pass)
-def parseStmt(stmt):
-    if type(stmt) == ast.AnnAssign:
-        return parseVarDecl(stmt)
-    elif type(stmt) == ast.Assign:
-        return "%assign({}, {})".format(parseVar(stmt.targets[0]), parseExpr(stmt.value))
-    elif type(stmt) == ast.AugAssign:
-        return "%augassign({}, {}, {})".format(parseAugAssignOp(stmt.op), parseVar(stmt.target),
-                                               parseExpr(stmt.value))
-    elif type(stmt) == ast.Expr and type(stmt.value) == ast.Call:
-        if type(stmt.value.func) == ast.Attribute and stmt.value.func.value.id == "log":
-            return "%log({}, {})".format(stmt.value.func.attr, parseExprs(stmt.value.args))
-        elif type(stmt.value.func) == ast.Name and stmt.value.func.id == "send":
-            return "%send({})".format(parseExprs(stmt.value.args, ", "))
-        elif type(stmt.value.func) == ast.Name and stmt.value.func.id == "selfdestruct":
-            return "%selfdestruct({})".format(parseExprs(stmt.value.args, ", "))
+def parseStmt(node):
+    if type(node) == ast.AnnAssign:
+        return parseVarDecl(node)
+    elif type(node) == ast.Assign:
+        return "%assign({}, {})".format(parseVar(node.targets[0]), parseExpr(node.value))
+    elif type(node) == ast.AugAssign:
+        return "%augassign({}, {}, {})".format(parseAugAssignOp(node.op), parseVar(node.target),
+                                               parseExpr(node.value))
+    elif type(node) == ast.If:
+        if len(node.orelse) == 0:
+            return "%if({},{})".format(parseExpr(node.test), parseStmts(node.body))
         else:
-            raise ParserException("Unsupported Expr Stmt format: " + str(stmt))
-    elif type(stmt) == ast.If:
-        if len(stmt.orelse) == 0:
-            return "%if({},{})".format(parseExpr(stmt.test), parseStmts(stmt.body))
-        else:
-            return "%if({},{},{})".format(parseExpr(stmt.test), parseStmts(stmt.body), parseStmts(stmt.orelse))
-    elif type(stmt) == ast.For and stmt.iter.func.id == "range":
-        if len(stmt.iter.args) == 1:
-            return "%forrange({}, {},{})".format(stmt.target.id, parseExpr(stmt.iter.args[0]), parseStmts(stmt.body))
-        else:
-            return "%forrange({}, {}, {},{})".format(stmt.target.id, parseExpr(stmt.iter.args[0]),
-                                                     parseExpr(stmt.iter.args[1]), parseStmts(stmt.body))
-    elif type(stmt) == ast.Pass:
+            return "%if({},{},{})".format(parseExpr(node.test), parseStmts(node.body), parseStmts(node.orelse))
+    elif type(node) == ast.For:
+        if type(node.iter) == ast.Call and type(node.iter.func) == ast.Name and node.iter.func.id == "range":
+            if len(node.iter.args) == 1:
+                return "%forrange({}, {},{})".format(node.target.id, parseExpr(node.iter.args[0]),
+                                                     parseStmts(node.body))
+            else:
+                return "%forrange({}, {}, {},{})".format(node.target.id, parseExpr(node.iter.args[0]),
+                                                         parseExpr(node.iter.args[1]), parseStmts(node.body))
+        else:  # every for that's not "for in range()" is parsed as %forlist
+            return "%forlist({}, {},{})".format(node.target.id, parseExpr(node.iter), parseStmts(node.body))
+    elif type(node) == ast.Break:
+        return "%break"
+    elif type(node) == ast.Pass:
         return "%pass"
-    elif type(stmt) == ast.Return:
-        if stmt.value is None:
+    elif type(node) == ast.Return:
+        if node.value is None:
             return "%return"
         else:
-            return "%return({})".format(parseExpr(stmt.value))
-    elif type(stmt) == ast.Assert:
-        return "%assert({})".format(parseExpr(stmt.test))
+            return "%return({})".format(parseExpr(node.value))
+    elif type(node) == ast.Assert:
+        return "%assert({})".format(parseExpr(node.test))
+    elif type(node) == ast.Expr and type(node.value) == ast.Name and node.value.id == "throw":
+        return "%throw"
+    elif type(node) == ast.Expr and type(node.value) == ast.Call:
+        if type(node.value.func) == ast.Attribute and node.value.func.value.id == "log":
+            return "%log({}, {})".format(node.value.func.attr, parseExprs(node.value.args))
+        elif type(node.value.func) == ast.Name and node.value.func.id == "send":
+            return "%send({})".format(parseExprs(node.value.args, ", "))
+        elif type(node.value.func) == ast.Name and node.value.func.id == "selfdestruct":
+            return "%selfdestruct({})".format(parseExprs(node.value.args, ", "))
+        else:
+            raise ParserException("Unsupported Expr Stmt format: " + str(node))
     else:
-        raise ParserException("Unsupported Stmt format: " + str(stmt))
+        raise ParserException("Unsupported Stmt format: " + str(node))
 
 
 stmtsIndent = "  "
