@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-set -e      # Exit immediately if any command fails
-set -u      # Using undefined variables is an error. Exit immediately
+trap 'exit' ERR     # Exit immediately if any command fails (better than 'set -e')
+set -u              # Using undefined variables is an error. Exit immediately
 
 die() { echo -e "FATAL:" "$@"; exit 1; }
 type krun >/dev/null || die 'krun not in $PATH'
