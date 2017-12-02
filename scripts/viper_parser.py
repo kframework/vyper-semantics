@@ -123,7 +123,11 @@ def parseType(node):
     elif type(node) == ast.Dict:
         return "%structT({})".format(parseVarDecls(node))
     elif type(node) == ast.Call:  # part of BaseType
-        return "%unitT({}, {}, false)".format(parseType(node.func), parseUnit(node.args[0]))
+        if isinstance(node.args[-1], ast.Name) and node.args[-1].id == "positional":
+            positional = "true"
+        else:
+            positional = "false"
+        return "%unitT({}, {}, {})".format(parseType(node.func), parseUnit(node.args[0]), positional)
     else:
         raise ParserException("Type parsing not yet implemented for: " + str(node))
 
