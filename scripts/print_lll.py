@@ -3,7 +3,7 @@ from viper.parser.parser import LLLnode
 lll_opcodes = ['if', 'repeat', 'break', 'with', 'set', 'seq', 'pass', 'assert',
                'ne', 'le', 'ge', 'sle', 'sge', 'uclamplt', 'uclample', 'uclampgt',
                'uclampge', 'clamplt', 'clample', 'clampgt', 'clampge', 'uclamp', 'clamp',
-               'clamp_nonzero', 'ceil_32', 'sha3_32', '~codelen', 'codeload', 'lll',
+               'clamp_nonzero', 'ceil32', 'sha3_32', '~codelen', 'codeload', 'lll',
                '_stloc', '_mloc', '_loc', 'l', 'r', 'ans', '_L', '_R',
                # EVM Opcodes
                'stop', 'add', 'mul', 'sub', 'div', 'sdiv', 'mod', 'smod', 'addmod', 'mulmod',

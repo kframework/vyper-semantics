@@ -88,6 +88,7 @@ module VIPER-LLL
     // Convention: C'Sort' is a one-one corresponding supersort of Sort. C'Sort'
     //             requires for evaluation (i.e. not KResult).
     syntax CType               ::= Type
+    syntax CBytes              ::= Bytes
     syntax CParams             ::= Params
     syntax CLLLExp             ::= LLLExp
     syntax CLLLExps            ::= LLLExps
@@ -100,6 +101,7 @@ module VIPER-LLL
     syntax KResult  ::= Int
                       | Bool
                       | Type
+                      | Bytes
                       | String
                       | Params
                       | LLLExp
@@ -989,7 +991,11 @@ module VIPER-LLL
         ~> #returnBase(#unwrapLoc(@tlll(T, CODE, EXPRATTR)), RETURNTYPE)
       requires isBaseType(T)
 
-    // TODO: support byte array
+    rule #return(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
+        => #ifThen(notBool(isByteArrayType(RETURNTYPE)),
+                   #exception("Trying to return byte array type but it not matching the expected return type."))
+        ~> #returnByteArray(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
+      requires isByteArrayType(T)
 
     rule #return(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
         => #ifThenElse(#isInMemory(EXPRATTR) andBool (notBool(isMultiLLLExp(CODE))),
@@ -1012,6 +1018,23 @@ module VIPER-LLL
         => #ifThenElse((T ==K RETURNTYPE) orBool (T ==K %num andBool RETURNTYPE ==K %signed256),
                         $%seq($mstore(0, CODE), $return(0, 32),.LLLExps),.LLLExps,
                         #exception("Unsupported type conversion."))
+
+
+    syntax CLLLExps  ::= "#returnByteArray"    "(" TypedLLLExp "," Type ")"
+    syntax CLLLExps  ::= "#returnByteArrayAux" "(" TypedLLLExp ")"
+ // -----------------------------------------------------------------------
+    rule #returnByteArray(@tlll(%bytesT(L1), CODE, LOCATTR), %bytesT(L2))
+        => #ifThen(L1 >Int L2,
+                   #exception("Cannot cast from greater max-length to shorter max-length."))
+        ~> #returnByteArrayAux(@tlll(%bytesT(L1), CODE, LOCATTR))
+
+    rule #returnByteArrayAux(@tlll(%bytesT(L), CODE, @locattr(@memory, _)))
+        => $with(
+             $_loc,
+             CODE,
+             $%seq(
+               $mstore($sub($_loc, 32), 32),
+               $return($sub($_loc, 32), $ceil32($add($mload($_loc), 64))),.LLLExps)),.LLLExps
 
 
     syntax CLLLExps  ::= "#returnListT"    "(" CTypedLLLExp ","  // placeholder
@@ -1285,6 +1308,57 @@ module VIPER-LLL
              #ifThenElse(lengthString(STR) ==Int 64,
                          @tlll(%bytes32, String2Base(STR, 16), @none),
                          #exception("Cannot read 0x value with length:" +String Int2String(lengthString(STR)))))
+
+
+// String Literals
+// ===============
+
+
+    rule #compileExpr(STR:String) => #string(#string2Bytes(STR))
+
+
+    syntax CTypedLLLExp  ::= "#string"    "(" CBytes ")"  [strict(1)]
+
+    syntax CTypedLLLExp  ::= "#stringAux" "(" CTypedLLLExp ","  // placeholder
+                                              Bytes        ","
+                                              Int               // bytes length
+                                          ")"             [strict(1)]
+ // -----------------------------------------------------------------
+    rule #string(BS)
+        => #stringAux(#newPlaceholder(%bytesT(#numOfBytes(BS))), BS, #numOfBytes(BS))
+
+    rule #stringAux(@tlll(T, LOC, LOCATTR), BS, LEN)
+        => #encodeBytes(@tlll(T, LOC, LOCATTR), BS, LEN, 32, $mstore(LOC, LEN),.LLLExps)
+
+
+    syntax CTypedLLLExp  ::= "#encodeBytes" "(" TypedLLLExp  ","  // placeholder
+                                                Bytes        ","
+                                                Int          ","  // bytes length
+                                                Int          ","  // offset
+                                                LLLExps      ")"
+ // ------------------------------------------------------------
+    rule #encodeBytes(@tlll(T, LOC, _), .Bytes, 0, _, RESULTCODE)
+        => @tlll(T, $%seq(RESULTCODE ++LLL (LOC,.LLLExps)), @locattr(@memory, true))
+
+    rule #encodeBytes(@tlll(T, LOC, LOCATTR), BS, LEN, OFFSET, RESULTCODE)
+        => #encodeBytes(@tlll(T, LOC, LOCATTR),
+                        .Bytes,
+                        0,
+                        OFFSET +Int 32,
+                        RESULTCODE ++LLL ($mstore(
+                                            $add(LOC, OFFSET),
+                                            #bytes2Int(BS, 32, 0)),.LLLExps))
+      requires LEN >Int 0 andBool LEN <=Int 32
+
+    rule #encodeBytes(@tlll(T, LOC,LOCATTR), BS, LEN, OFFSET, RESULTCODE)
+        => #encodeBytes(@tlll(T, LOC, LOCATTR),
+                        #drop(32, BS),
+                        LEN -Int 32,
+                        OFFSET +Int 32,
+                        RESULTCODE ++LLL ($mstore(
+                                            $add(LOC, OFFSET),
+                                            #bytes2Int(#take(32, BS), 32, 0)),.LLLExps))
+      requires LEN >Int 32
 
 
 // Bool
@@ -2002,6 +2076,13 @@ module VIPER-LLL
     rule (VDECL VDECLS1) ++Vdecl VDECLS2 => VDECL (VDECLS1 ++Vdecl VDECLS2)
 
 
+    syntax Bytes  ::= Bytes "++Byte" Bytes  [right, function]
+ // ---------------------------------------------------------
+    rule .Bytes ++Byte BS => BS
+
+    rule (B : BS1) ++Byte BS2 => B : (BS1 ++Byte BS2)
+
+
 // In List
 // =======
 
@@ -2047,6 +2128,16 @@ module VIPER-LLL
     rule #numOfEventParams(.EventParams) => 0
 
     rule #numOfEventParams(EPARAM EPARAMS) => 1 +Int #numOfEventParams(EPARAMS)
+
+
+    syntax Int  ::= "#numOfBytes"    "(" Bytes ")"          [function]
+    syntax Int  ::= "#numOfBytesAux" "(" Bytes "," Int ")"  [function]
+ // -------------------------------------------------------------------
+    rule #numOfBytes(BS) => #numOfBytesAux(BS, 0)
+
+    rule #numOfBytesAux(.Bytes, SIZE) => SIZE
+
+    rule #numOfBytesAux((B : BS), SIZE) => #numOfBytesAux(BS, SIZE +Int 1)
 
 
 // Type Related
@@ -2352,6 +2443,66 @@ module VIPER-LLL
     rule #areUnitsCompatible(%unitT(_, FROMMAP:Map, FROMPOSITIONAL), %unitT(_, TOMAP:Map, TOPOSITIONAL))
         => false
       requires FROMMAP =/=K TOMAP orBool FROMPOSITIONAL =/=K TOPOSITIONAL
+
+
+// Bytes
+// =====
+
+
+    syntax Bytes  ::= ".Bytes" | Int ":" Bytes
+
+
+    syntax CBytes  ::= "#string2Bytes"         "(" String ")"
+    syntax CBytes  ::= "#string2BytesAux"      "(" String "," Bytes ")"
+    syntax CBytes  ::= "#nonEmptyString2Bytes" "(" String "," Bytes ")"
+ // --------------------------------------------------------------------
+    rule #string2Bytes(STR) => #string2BytesAux(STR, .Bytes)
+
+    rule #string2BytesAux(STR, RESULT) => RESULT
+      requires lengthString(STR) ==Int 0
+
+    rule #string2BytesAux(STR, RESULT)
+        => #nonEmptystring2Bytes(STR, RESULT)
+      requires lengthString(STR) >Int 0
+
+    rule #nonEmptystring2Bytes(STR, RESULT)
+        => #string2BytesAux(substrString(STR, 1, lengthString(STR)),
+                            RESULT ++Byte (ordChar(substrString(STR, 0, 1)) : .Bytes))
+      requires ordChar(substrString(STR, 0, 1)) <Int 256
+
+    rule #nonEmptystring2Bytes(STR, RESULT)
+        => #exception("Cannot insert special character into byte array")
+      requires ordChar(substrString(STR, 0, 1)) >=Int 256
+
+
+    //if length(bytes) < width, pad zeros to the right
+    syntax Int  ::= "#bytes2Int" "(" Bytes "," Int /*width*/ "," Int /*result*/ ")"  [function]
+ // -------------------------------------------------------------------------------------------
+    rule #bytes2Int(BS, 0, RESULT) => RESULT
+
+    rule #bytes2Int(.Bytes, WIDTH, RESULT) => #bytes2Int(.Bytes, WIDTH -Int 1, RESULT *Int 256)
+      requires WIDTH >Int 0
+
+    rule #bytes2Int(B : BS, WIDTH, RESULT) => #bytes2Int(BS, WIDTH -Int 1, RESULT *Int 256 +Int B)
+      requires WIDTH >Int 0
+
+
+    syntax Bytes  ::= "#take" "(" Int "," Bytes ")"   [function]
+ // ------------------------------------------------------------
+    rule #take(0, BS)       => .Bytes
+
+    rule #take(N, .Bytes)   => 0 : #take(N -Int 1, .Bytes)    requires N >Int 0
+
+    rule #take(N, (B : BS)) => B : #take(N -Int 1, BS)        requires N >Int 0
+
+
+    syntax Bytes  ::= "#drop" "(" Int "," Bytes ")"  [function]
+ // -----------------------------------------------------------
+    rule #drop(0, BS)       => BS
+
+    rule #drop(N, .Bytes)   => .Bytes
+
+    rule #drop(N, (B : BS)) => #drop(N -Int 1, BS)    requires N >Int 0
 
 
 // Compute signatures

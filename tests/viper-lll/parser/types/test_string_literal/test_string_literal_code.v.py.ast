@@ -1,0 +1,4 @@
+%pgm(, ,
+  %fdecl(%@public, foo, , %bytesT(5),
+    %return("horse"))
+)
