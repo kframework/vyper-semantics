@@ -1,5 +1,10 @@
 k_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"/../k
 
-git submodule update --init "$k_dir"
-(cd "$k_dir"; mvn package -q -DskipTests) || { echo "FATAL: K build failed"; return 1; }
-export PATH="$k_dir/k-distribution/target/release/k/bin/:$PATH"
+( trap '{ echo "FATAL: K build failed"; exit 1; }' ERR
+  git submodule update --init "$k_dir"
+  cd "$k_dir"; mvn package -q -DskipTests
+)
+
+if [ $? -eq 0 ]; then
+  export PATH="$k_dir/k-distribution/target/release/k/bin:$PATH"
+fi
