@@ -2308,6 +2308,19 @@ module VIPER-LLL
 
     // TODO: support Tuple
 
+    // Special Types
+    rule #parseType(%timestamp, _)       => %unitT(%num, %sec |-> 1, true)
+
+    rule #parseType(%timedelta, _)       => %unitT(%num, %sec |-> 1, false)
+
+    rule #parseType(%currency_value, _)  => %unitT(%num, %currency |-> 1, false)
+
+    rule #parseType(%currency1_value, _) => %unitT(%num, %currency1 |-> 1, false)
+
+    rule #parseType(%currency2_value, _) => %unitT(%num, %currency2 |-> 1, false)
+
+    rule #parseType(%wei_value, _)       => %unitT(%num, %wei |-> 1, false)
+
 
     syntax CType  ::= "#parseListType" "(" CType "," Int ")"    [strict(1)]
  // --------------------------------------------------------------------

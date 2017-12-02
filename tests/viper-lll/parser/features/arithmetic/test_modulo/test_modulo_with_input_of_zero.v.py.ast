@@ -1,0 +1,4 @@
+%pgm(, ,
+  %fdecl(%@public, foo, %param(a, %num) %param(b, %decimal), %decimal,
+    %return(%binop(%, %var(a), %var(b))))
+)

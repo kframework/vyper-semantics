@@ -1,0 +1,4 @@
+%pgm(, ,
+  %fdecl(%@public, foo, %param(a, %unitT(%num, %sec, true)) %param(b, %num), %void,
+    %assign(%var(x), %binop(%, %var(a), %var(b))))
+)

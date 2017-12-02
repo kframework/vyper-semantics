@@ -1,0 +1,14 @@
+%pgm(, ,
+  %fdecl(%@public, _num, %param(x, %num), %num,
+    %return(%var(x)))
+  %fdecl(%@public, _num_add, %param(x, %num) %param(y, %num), %num,
+    %return(%binop(+, %var(x), %var(y))))
+  %fdecl(%@public, _num_sub, %param(x, %num) %param(y, %num), %num,
+    %return(%binop(-, %var(x), %var(y))))
+  %fdecl(%@public, _num_add3, %param(x, %num) %param(y, %num) %param(z, %num), %num,
+    %return(%binop(+, %binop(+, %var(x), %var(y)), %var(z))))
+  %fdecl(%@public, _num_max, , %num,
+    %return(170141183460469231731687303715884105727))
+  %fdecl(%@public, _num_min, , %num,
+    %return(-170141183460469231731687303715884105728))
+)

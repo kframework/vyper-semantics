@@ -1,0 +1,10 @@
+%pgm(, ,
+  %fdecl(%@public, num_modulo_num, , %num,
+    %return(%binop(%, 1, 2)))
+  %fdecl(%@public, decimal_modulo_decimal, , %decimal,
+    %return(%binop(%, %fixed10(15, 10), %fixed10(33, 100))))
+  %fdecl(%@public, decimal_modulo_num, , %decimal,
+    %return(%binop(%, %fixed10(5, 10), 1)))
+  %fdecl(%@public, num_modulo_decimal, , %decimal,
+    %return(%binop(%, %fixed10(15, 10), 1)))
+)

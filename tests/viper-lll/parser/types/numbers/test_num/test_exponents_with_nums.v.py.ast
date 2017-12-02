@@ -1,0 +1,4 @@
+%pgm(, ,
+  %fdecl(%@public, _num_exp, %param(x, %num) %param(y, %num), %num,
+    %return(%binop(**, %var(x), %var(y))))
+)

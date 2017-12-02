@@ -118,6 +118,8 @@ module VIPER-ABSTRACT-SYNTAX
     syntax PureNumType   ::= "%num" | "%decimal"
 
     syntax UnitType      ::= "%unitT" "(" PureNumType "," Unit "," Bool /*positional*/ ")"
+                           | "%timestamp"      | "%timedelta"
+                           | "%currency_value" | "%currency1_value" | "%currency2_value" | "%wei_value"
 
     syntax ByteArrayType ::= "%bytesT"  "(" Int ")"
 

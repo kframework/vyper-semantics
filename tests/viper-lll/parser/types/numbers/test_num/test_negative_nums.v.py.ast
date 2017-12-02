@@ -1,0 +1,6 @@
+%pgm(, ,
+  %fdecl(%@public, _negative_num, , %num,
+    %return(-1))
+  %fdecl(%@public, _negative_exp, , %num,
+    %return(%unaryop(%neg, %binop(+, 1, 2))))
+)

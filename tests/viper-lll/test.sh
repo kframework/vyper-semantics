@@ -24,6 +24,9 @@ echo "kompile ${SEMTANTICS_DIR}/viper-lll.k"
 kompile ${SEMTANTICS_DIR}/viper-lll.k --syntax-module VIPER-ABSTRACT-SYNTAX --debug -d ${SCRIPT_DIR}
 
 #parser/features
+TESTS_DIR=${SCRIPT_DIR}/parser/features/arithmetic/test_modulo
+run_tests $TESTS_DIR
+
 TESTS_DIR=${SCRIPT_DIR}/parser/features/test_assignment
 run_tests $TESTS_DIR
 
@@ -48,6 +51,9 @@ TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_public
 run_tests $TESTS_DIR
 
 #parser/types
+TESTS_DIR=${SCRIPT_DIR}/parser/types/numbers/test_num
+run_tests $TESTS_DIR
+
 TESTS_DIR=${SCRIPT_DIR}/parser/types/test_string_literal
 run_tests $TESTS_DIR
 
