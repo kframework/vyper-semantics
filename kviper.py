@@ -6,7 +6,7 @@ import subprocess
 import re
 
 from scripts.viper_parser import main as parse
-from scripts.op2byte import encode
+from scripts.op2byte import encode as op2byte
 
 path = os.path.dirname(os.path.realpath(__file__))
 
@@ -25,15 +25,15 @@ def viper2lll(ast):
 def lll2evm(lll):
     out = krun('lll-evm', lll)
     evm = re.compile(r' \) ListItem \( ').sub(' ', re.search(r'<evm> ListItem \( (.*) \) </evm>', out).group(1))
-    return evm
+    return evm.split(' ')
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("no input file")
         sys.exit(1)
     with open(sys.argv[1], "r") as fin:
-        input = fin.read()
-    ast = parse(input)
+        code = fin.read()
+    ast = parse(code)
     lll = viper2lll(ast)
-    evm = lll2evm(lll)
-    print('0x' + encode(evm.split(' ')).hex())
+    evm = lll2evm(lll) # list of opcodes
+    print('0x' + op2byte(evm).hex())
