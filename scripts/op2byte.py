@@ -148,4 +148,5 @@ def encode(ops):
             raise Exception("Invalid opcode: " + str(item))
     return o
 
-print('0x' + encode(input().split(' ')).hex())
+if __name__ == '__main__':
+    print('0x' + encode(input().split(' ')).hex())

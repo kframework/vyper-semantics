@@ -612,6 +612,12 @@ def parseProgram(nodeList):
 
 inputLines: List[str]
 
+def main(input):
+    global inputLines
+    inputLines = input.splitlines()
+    astList = parse(input)
+    return parseProgram(astList)
+
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print("One argument expected: the file name.")
@@ -619,6 +625,4 @@ if __name__ == '__main__':
     fileName = sys.argv[1]
     with open(fileName, "r") as fin:
         input = fin.read()
-    inputLines = input.splitlines()
-    astList = parse(input)
-    print(parseProgram(astList))
+    print(main(input))
