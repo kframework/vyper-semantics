@@ -27,13 +27,16 @@ def lll2evm(lll): # string -> string list
     evm = re.compile(r' \) ListItem \( ').sub(' ', re.search(r'<evm> ListItem \( (.*) \) </evm>', out).group(1))
     return evm.split(' ')
 
+def compile(code): # string -> bytes
+    ast = parse(code)
+    lll = viper2lll(ast)
+    evm = lll2evm(lll) # list of opcodes
+    return op2byte(evm)
+
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("no input file")
         sys.exit(1)
     with open(sys.argv[1], "r") as fin:
         code = fin.read()
-    ast = parse(code)
-    lll = viper2lll(ast)
-    evm = lll2evm(lll) # list of opcodes
-    print('0x' + op2byte(evm).hex())
+    print('0x' + compile(code).hex())
