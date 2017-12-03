@@ -27,6 +27,9 @@ kompile ${SEMTANTICS_DIR}/viper-lll.k --syntax-module VIPER-ABSTRACT-SYNTAX --de
 TESTS_DIR=${SCRIPT_DIR}/parser/features/arithmetic/test_modulo
 run_tests $TESTS_DIR
 
+TESTS_DIR=${SCRIPT_DIR}/parser/features/iteration/test_for_in_list
+run_tests $TESTS_DIR
+
 TESTS_DIR=${SCRIPT_DIR}/parser/features/test_assignment
 run_tests $TESTS_DIR
 

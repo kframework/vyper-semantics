@@ -1,0 +1,7 @@
+%pgm(, ,
+  %fdecl(%@public, data, , %num,
+    %forlist(i, %list(3 5 7 9),
+      %if(%compareop(%gt, %var(i), 5),
+        %return(%var(i))))
+    %return(-1))
+)

@@ -1,0 +1,10 @@
+%pgm(,
+  %svdecl(x, %listT(%num, 4), %private),
+  %fdecl(%@public, set, , %void,
+    %assign(%svar(x), %list(3 5 7 9)))
+  %fdecl(%@public, data, , %num,
+    %forlist(i, %svar(x),
+      %if(%compareop(%gt, %var(i), 5),
+        %return(%var(i))))
+    %return(-1))
+)

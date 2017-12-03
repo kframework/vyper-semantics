@@ -1,0 +1,6 @@
+%pgm(, ,
+  %fdecl(%@public, foo, %param(x, %num), %void,
+    %forrange(i, 4,
+      %forrange(i, 5,
+        %pass)))
+)

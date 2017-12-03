@@ -1,0 +1,5 @@
+%pgm(, ,
+  %fdecl(%@public, foo, %param(x, %num), %void,
+    %forlist(i, %list(1 2),
+      %assign(%var(i), 2)))
+)

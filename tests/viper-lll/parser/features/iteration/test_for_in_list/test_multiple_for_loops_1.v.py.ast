@@ -1,0 +1,8 @@
+%pgm(, ,
+  %fdecl(%@public, foo, %param(x, %num), %void,
+    %assign(%var(p), 0)
+    %forrange(i, 3,
+      %augassign(+=, %var(p), %var(i)))
+    %forrange(i, 4,
+      %augassign(+=, %var(p), %var(i))))
+)

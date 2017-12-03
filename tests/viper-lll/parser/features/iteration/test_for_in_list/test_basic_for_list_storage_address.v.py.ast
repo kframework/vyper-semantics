@@ -1,0 +1,13 @@
+%pgm(,
+  %svdecl(addresses, %listT(%address, 3), %private),
+  %fdecl(%@public, set, %param(i, %num) %param(val, %address), %void,
+    %assign(%subscript(%svar(addresses), %var(i)), %var(val)))
+  %fdecl(%@public, ret, %param(i, %num), %address,
+    %return(%subscript(%svar(addresses), %var(i))))
+  %fdecl(%@public, iterate_return_second, , %address,
+    %assign(%var(count), 0)
+    %forlist(i, %svar(addresses),
+      %augassign(+=, %var(count), 1)
+      %if(%compareop(%eq, %var(count), 2),
+        %return(%var(i)))))
+)

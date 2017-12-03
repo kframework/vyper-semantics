@@ -1,0 +1,8 @@
+%pgm(, ,
+  %fdecl(%@public, data, , %num,
+    %assign(%var(s), %list(1 2 3 4 5 6))
+    %forlist(i, %var(s),
+      %if(%compareop(%ge, %var(i), 3),
+        %return(%var(i))))
+    %return(-1))
+)

@@ -1,0 +1,13 @@
+%pgm(,
+  %svdecl(readings, %listT(%decimal, 3), %private),
+  %fdecl(%@public, set, %param(i, %num) %param(val, %decimal), %void,
+    %assign(%subscript(%svar(readings), %var(i)), %var(val)))
+  %fdecl(%@public, ret, %param(i, %num), %decimal,
+    %return(%subscript(%svar(readings), %var(i))))
+  %fdecl(%@public, i_return, %param(break_count, %num), %decimal,
+    %assign(%var(count), 0)
+    %forlist(i, %svar(readings),
+      %if(%compareop(%eq, %var(count), %var(break_count)),
+        %return(%var(i)))
+      %augassign(+=, %var(count), 1)))
+)

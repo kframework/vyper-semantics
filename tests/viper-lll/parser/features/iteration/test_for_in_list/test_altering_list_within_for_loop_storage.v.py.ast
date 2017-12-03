@@ -1,0 +1,13 @@
+%pgm(,
+  %svdecl(s, %listT(%num, 6), %private),
+  %fdecl(%@public, set, , %void,
+    %assign(%svar(s), %list(1 2 3 4 5 6)))
+  %fdecl(%@public, data, , %num,
+    %assign(%var(count), 0)
+    %forlist(i, %svar(s),
+      %assign(%subscript(%svar(s), %var(count)), 1)
+      %if(%compareop(%ge, %var(i), 3),
+        %return(%var(i)))
+      %augassign(+=, %var(count), 1))
+    %return(-1))
+)
