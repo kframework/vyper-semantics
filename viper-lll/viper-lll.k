@@ -733,32 +733,28 @@ module VIPER-LLL
                          #baseTypeConvert(RTCODE, LT))
       requires isBaseType(LT)
 
+    // Can't copy mappings
+    rule #mkSetter(@tlll(LT, LOC, LOCATTR), RTCODE)
+        => #exception("Cannot copy mappings; can only copy individual elements.")
+      requires isMappingType(LT)
+
     rule #mkSetter(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
-        => #ifThenElse(notBool(isListType(RT)),
-                       #exception("Setter type mismatch: left side is array but right side is not."),
-             #ifThenElse(#getListTCount(LT) =/=K #getListTCount(RT),
-                         #exception("Mismatched number of elements in left and right side arrays."),
-                         #mkSetterListT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))))
-       requires isListType(LT)
+        => #ifThen(notBool(isListType(RT)),
+                   #exception("Setter type mismatch: left side is array but right side is not."))
+        ~> #mkSetterListT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+      requires isListType(LT)
+
+    // TODO: support Struct Type
 
 
     // Basic Types
     syntax CLLLExps  ::= "#mkSetterBase"  "(" TypedLLLExp "," CTypedLLLExp ")"  [strict(2)]
  // ---------------------------------------------------------------------------------------
-
     rule #mkSetterBase(@tlll(_, LOC, @locattr(@storage, _)), @tlll(_, CODE, _))
         => $sstore(LOC, CODE),.LLLExps
 
     rule #mkSetterBase(@tlll(_, LOC, @locattr(@memory, _)), @tlll(_, CODE, _))
         => $mstore(LOC, CODE),.LLLExps
-
-    // TODO: figure out an efficient way to copy byte array
-
-
-    // Can't copy mappings
-    rule #mkSetter(@tlll(LT, LOC, LOCATTR), RTCODE)
-        => #exception("Cannot copy mappings; can only copy individual elements.")
-      requires isMappingType(LT)
 
 
     // List
@@ -767,24 +763,25 @@ module VIPER-LLL
     syntax CLLLExps  ::= "#mkSetterListTAux" "(" TypedLLLExp ","  // left
                                                  TypedLLLExp ","  // left token
                                                  TypedLLLExp ")"  // right
- // ----------------------------------------------------------------------------
-    rule #mkSetterListT(@tlll(LT, LCODE, @locattr(@storage, MUTABLE)), RTCODE)
-        => #mkSetterListTAux(@tlll(LT, $sha3_32(LCODE), @locattr(@storage, MUTABLE)),
-                             @tlll(LT, $_L, @locattr(@storage_prehashed, MUTABLE)),
-                             RTCODE)
+ // ------------------------------------------------------------
+    rule #mkSetterListT(@tlll(LT, LCODE, @locattr(LTARGET, LMUTABLE)),
+                        @tlll(RT, RCODE, REXPRATTR))
+        => #ifThen(#getListTCount(LT) =/=K #getListTCount(RT),
+                   #exception("Mismatched number of elements in left and right side arrays."))
+        ~> #ifThenElse(LTARGET ==K @storage,
+                       #mkSetterListTAux(@tlll(LT, $sha3_32(LCODE), @locattr(@storage_prehashed, LMUTABLE)),
+                                         @tlll(LT, $_L, @locattr(@storage_prehashed, LMUTABLE)),
+                                         @tlll(RT, RCODE, REXPRATTR)),
+                       #mkSetterListTAux(@tlll(LT, LCODE, @locattr(LTARGET, LMUTABLE)),
+                                         @tlll(LT, $_L, @locattr(LTARGET, LMUTABLE)),
+                                         @tlll(RT, RCODE, REXPRATTR)))
 
-    rule #mkSetterListT(@tlll(LT, LCODE, @locattr(TARGET, MUTABLE)), RTCODE)
-        => #mkSetterListTAux(@tlll(LT, LCODE, @locattr(TARGET, MUTABLE)),
-                             @tlll(LT, $_L, @locattr(TARGET, MUTABLE)),
-                             RTCODE)
-      requires TARGET =/=K @storage
-
-    rule #mkSetterListTAux(LCODE, LTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
-        => #mkSetterListTLiteral(LCODE, LTOKENCODE, 0, @tlll(RT, RCODE, RLOCATTR), .LLLExps)
+    rule #mkSetterListTAux(LTCODE, LTTOKENCODE, @tlll(RT, RCODE, REXPRATTR))
+        => #mkSetterListTLiteral(LTCODE, LTTOKENCODE, 0, @tlll(RT, RCODE, REXPRATTR), .LLLExps)
       requires isMultiLLLExp(RCODE)
 
-    rule #mkSetterListTAux(LCODE, LTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
-        => #mkSetterListTVar(LCODE, LTOKENCODE, 0,
+    rule #mkSetterListTAux(LTCODE, LTTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
+        => #mkSetterListTVar(LTCODE, LTTOKENCODE, 0,
                              @tlll(RT, RCODE, RLOCATTR),
                              @tlll(RT, $_R, RLOCATTR),
                              .LLLExps)
@@ -1123,7 +1120,7 @@ module VIPER-LLL
     rule #return(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
         => #ifThen(notBool(isByteArrayType(RETURNTYPE)),
                    #exception("Trying to return byte array type but it not matching the expected return type."))
-        ~> #returnByteArray(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
+        ~> #returnBytesT(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
       requires isByteArrayType(T)
 
     rule #return(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
@@ -1149,15 +1146,15 @@ module VIPER-LLL
                         #exception("Unsupported type conversion."))
 
 
-    syntax CLLLExps  ::= "#returnByteArray"    "(" TypedLLLExp "," Type ")"
-    syntax CLLLExps  ::= "#returnByteArrayAux" "(" TypedLLLExp ")"
+    syntax CLLLExps  ::= "#returnBytesT"    "(" TypedLLLExp "," Type ")"
+    syntax CLLLExps  ::= "#returnBytesTAux" "(" TypedLLLExp ")"
  // -----------------------------------------------------------------------
-    rule #returnByteArray(@tlll(%bytesT(L1), CODE, LOCATTR), %bytesT(L2))
+    rule #returnBytesT(@tlll(%bytesT(L1), CODE, LOCATTR), %bytesT(L2))
         => #ifThen(L1 >Int L2,
                    #exception("Cannot cast from greater max-length to shorter max-length."))
-        ~> #returnByteArrayAux(@tlll(%bytesT(L1), CODE, LOCATTR))
+        ~> #returnBytesTAux(@tlll(%bytesT(L1), CODE, LOCATTR))
 
-    rule #returnByteArrayAux(@tlll(%bytesT(L), CODE, @locattr(@memory, _)))
+    rule #returnBytesTAux(@tlll(%bytesT(L), CODE, @locattr(@memory, _)))
         => $with(
              $_loc,
              CODE,
@@ -2336,9 +2333,14 @@ module VIPER-LLL
         => T +String "[" +String Int2String(N) +String "]"
 
 
-    syntax Int  ::= "#getListTCount" "(" Type ")"    [function]
- // -----------------------------------------------------------
+    syntax Int  ::= "#getListTCount" "(" ListType ")"    [function]
+ // ---------------------------------------------------------------
     rule #getListTCount(%listT(T, N)) => N
+
+
+    syntax Int  ::= "#getBytesTLen" "(" ByteArrayType ")"  [function]
+ // -----------------------------------------------------------------
+    rule #getBytesTLen(%bytesT(L)) => L
 
 
     // Convert from one base type to another. Need to call `#unwrapLoc` first.
@@ -2901,5 +2903,6 @@ module VIPER-LLL
 
     rule #isVarNameValid(NAME) => false
       requires isReservedWord(NAME)
+
 
 endmodule

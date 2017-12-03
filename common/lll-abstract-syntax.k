@@ -107,8 +107,9 @@ module LLL-ABSTRACT-SYNTAX
                     | "$suicide"       "(" LLLExp ")"
                     | "$selfdestruct"  "(" LLLExp ")"
 
-    syntax Id     ::= "$_stloc" [token] | "$_mloc" [token] | "$_loc" [token]
-                    | "$_l"     [token] | "$_r"    [token] | "$_ans" [token]
-                    | "$_L"     [token] | "$_R"    [token]
+    syntax Id     ::= "$_stloc"  [token] | "$_mloc" [token] | "$_loc" [token]
+                    | "$_l"      [token] | "$_r"    [token] | "$_ans" [token]
+                    | "$_L"      [token] | "$_R"    [token]
+                    | "$_source" [token] | "$_sz"   [token] | "$_pos" [token]
 
 endmodule
