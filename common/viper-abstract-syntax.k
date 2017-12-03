@@ -17,7 +17,7 @@ module VIPER-ABSTRACT-SYNTAX
     syntax Def      ::= "%fdecl" "(" Decorators "," Id "," Params "," Type "," Stmts ")"
     syntax Defs     ::= List{Def, ""}
 
-    syntax Decorator  ::= "%@constant" | "%@payable" | "%@internal" | "%@public"
+    syntax Decorator  ::= "%@constant" | "%@payable" | "%@private" | "%@public"
     syntax Decorators ::= List{Decorator, ""}
 
     syntax Param    ::= "%param" "(" Id "," Type ")"

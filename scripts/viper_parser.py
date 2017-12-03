@@ -181,7 +181,7 @@ def parseGlobal(node):
         return "  %svdecl({}, {}, %private)".format(node.target.id, parseType(node.annotation))
 
 
-#    syntax Decorator  ::= "%@constant" | "%@payable" | "%@internal" | "%@public"
+#    syntax Decorator  ::= "%@constant" | "%@payable" | "%@private" | "%@public"
 #    syntax Decorators ::= List{Decorator, ""}
 def parseDecorator(name):
     return "%@" + name.id

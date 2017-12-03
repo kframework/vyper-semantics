@@ -73,7 +73,7 @@ module VIPER-LLL
                                        Type               ","
                                        Bool /*constant?*/ ","
                                        Bool /*payable?*/  ","
-                                       Bool /*internal?*/ ")"
+                                       Bool /*private?*/  ")"
 
     syntax PackedLoggingData  ::= "@loggingdata" "(" LLLExp ","  // code
                                                      Int    ","  // start loc
@@ -270,7 +270,7 @@ module VIPER-LLL
                                         Type   ","
                                         Bool   ","  // constant?
                                         Bool   ","  // payable?
-                                        Bool   ","  // internal?
+                                        Bool   ","  // private?
                                         Bool   ")"  // public?
 
     syntax KItem  ::= "#addFuncAux" "(" K       ","  // func id
@@ -288,28 +288,28 @@ module VIPER-LLL
         => #addFunc(FNAME, PARAMS, T,
                     #inDecorators(%@constant, DECS),
                     #inDecorators(%@payable, DECS),
-                    #inDecorators(%@internal, DECS),
+                    #inDecorators(%@private, DECS),
                     #inDecorators(%@public, DECS))
         ~> #addFuncs(DEFS)
 
-    rule <k> #addFunc(FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL, PUBLIC)
+    rule <k> #addFunc(FNAME, PARAMS, T, CONSTANT, PAYABLE, PRIVATE, PUBLIC)
             => #checkFuncParams(PARAMS, .Ids)
-            ~> #checkInternalPublicMECE(INTERNAL, PUBLIC)
+            ~> #checkPrivatePublicMECE(PRIVATE, PUBLIC)
             ~> #addFuncAux(#computeFuncId(FNAME, PARAMS),
                            FNAME,
                            #parseTypeForParams(PARAMS, .Params),
                            #parseType(T, true),
-                           CONSTANT, PAYABLE, INTERNAL)
+                           CONSTANT, PAYABLE, PRIVATE)
          ... </k>
          <internalSig> SIGS </internalSig>
       requires notBool FNAME in_keys(SIGS)
 
-    rule <k> #addFunc(FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL, PUBLIC)
+    rule <k> #addFunc(FNAME, PARAMS, T, CONSTANT, PAYABLE, PRIVATE, PUBLIC)
             => #exception("Duplicate event or function name: " +String Id2String(FNAME)) ... </k>
          <internalSig> SIGS </internalSig>
       requires FNAME in_keys(SIGS)
 
-    rule <k> #addFuncAux(FID:Int, FNAME, PARAMS, T, CONSTANT, PAYABLE, INTERNAL) => . ... </k>
+    rule <k> #addFuncAux(FID:Int, FNAME, PARAMS, T, CONSTANT, PAYABLE, PRIVATE) => . ... </k>
          <internalSig> SIGS
                       => SIGS[FNAME <- @func(FID,
                                              FNAME,
@@ -317,7 +317,7 @@ module VIPER-LLL
                                              T,
                                              CONSTANT,
                                              PAYABLE,
-                                             INTERNAL)] </internalSig>
+                                             PRIVATE)] </internalSig>
 
 
     syntax KItem  ::= "#checkFuncParams"       "(" Params "," Ids ")"
@@ -340,12 +340,12 @@ module VIPER-LLL
       requires %svar(NAME) in_keys(GLOBALS)
 
 
-    syntax KItem  ::= "#checkInternalPublicMECE" "(" Bool /*internal?*/ "," Bool /*public?*/ ")"
+    syntax KItem  ::= "#checkPrivatePublicMECE" "(" Bool /*private?*/ "," Bool /*public?*/ ")"
  // --------------------------------------------------------------------------------------------
-    rule #checkInternalPublicMECE(INTERNAL, PUBLIC)
-        => #ifThen(INTERNAL ==K true andBool PUBLIC ==K true,
-                   #exception("Cannot use public and internal decorators on the same function."))
-        ~> #ifThen(INTERNAL ==K false andBool PUBLIC ==K false,
+    rule #checkPrivatePublicMECE(PRIVATE, PUBLIC)
+        => #ifThen(PRIVATE ==K true andBool PUBLIC ==K true,
+                   #exception("Cannot use public and private decorators on the same function."))
+        ~> #ifThen(PRIVATE ==K false andBool PUBLIC ==K false,
                    #exception("Function visibility must be declared."))
 
 
@@ -470,13 +470,13 @@ module VIPER-LLL
  // ---------------------------------------------------------------------------
     rule <k> #compileFunc(%fdecl(_, FNAME, _, _, STMTS))
             => #compileFuncAux(#copyArg(PARAMS, #isInitFunc(FNAME)),
-                               #addClampersForDecorators(PAYABLE, INTERNAL),
+                               #addClampersForDecorators(PAYABLE, PRIVATE),
                                #fillParams(PARAMS, 0, #isInitFunc(FNAME), .LLLExps),
                                #compileStmts(STMTS, .LLLExps),
                                FUNCID,
                                #isInitFunc(FNAME))
            ~> #clearConfig ... </k>
-         <internalSig> FNAME |-> @func(FUNCID, FNAME, PARAMS, RT, CONSTANT, PAYABLE, INTERNAL) SIGS</internalSig>
+         <internalSig> FNAME |-> @func(FUNCID, FNAME, PARAMS, RT, CONSTANT, PAYABLE, PRIVATE) SIGS</internalSig>
          <return> _ => RT </return>
          <constant> _ => CONSTANT </constant>
          <payable> _ => PAYABLE </payable>
@@ -518,17 +518,17 @@ module VIPER-LLL
 
     syntax CLLLExps  ::= "#addClampersForDecorators" "(" Bool "," Bool ")"
     syntax LLLExps   ::= "#checkPayable"    "(" Bool ")"        [function]
-    syntax LLLExps   ::= "#checkInternal"   "(" Bool ")"        [function]
+    syntax LLLExps   ::= "#checkPrivate"   "(" Bool ")"        [function]
  // ----------------------------------------------------------------------
-    rule #addClampersForDecorators(PAYABLE, INTERNAL) => #checkPayable(PAYABLE) ++LLL #checkInternal(INTERNAL)
+    rule #addClampersForDecorators(PAYABLE, PRIVATE) => #checkPayable(PAYABLE) ++LLL #checkPrivate(PRIVATE)
 
     rule #checkPayable(true) => .LLLExps
 
     rule #checkPayable(false) => $assert($iszero($callvalue)),.LLLExps
 
-    rule #checkInternal(true) => $assert($eq($caller, $address)),.LLLExps
+    rule #checkPrivate(true) => $assert($eq($caller, $address)),.LLLExps
 
-    rule #checkInternal(false) => .LLLExps
+    rule #checkPrivate(false) => .LLLExps
 
 
 // Fill Parameters
