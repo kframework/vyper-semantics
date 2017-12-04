@@ -52,6 +52,7 @@ module VIPER-ABSTRACT-SYNTAX
     syntax Expr     ::= Const
                       | Var
                       | ListExpr
+                      | StructExpr
                       | "%self"
                       | "%binop"     "(" BinOp     "," Expr "," Expr ")"
                       | "%compareop" "(" CompareOp "," Expr "," Expr ")"
@@ -73,14 +74,20 @@ module VIPER-ABSTRACT-SYNTAX
 
     syntax Var      ::= "%var"  "(" Id ")"
                       | "%svar" "(" Id ")"
-                      | StructFieldVar
                       | SubscriptVar
+                      | AttributeVar
 
-    syntax StructFieldVar  ::= "%attribute" "(" Var "," Id   ")"  // struct field access
+    syntax SubscriptVar  ::= "%subscript" "(" Var "," Expr ")"  // list or map element
 
-    syntax SubscriptVar    ::= "%subscript" "(" Var "," Expr ")"  // list or map element
+    syntax AttributeVar  ::= "%attribute" "(" Var "," Id   ")"  // struct field access
 
     syntax ListExpr      ::= "%list" "(" Exprs ")"
+
+    syntax StructExpr    ::= "%struct" "(" StructItems ")"
+
+    syntax StructItem    ::= "%item" "(" Id "," Expr ")"
+
+    syntax StructItems   ::= List{StructItem, ""}
 
     syntax ReservedExpr  ::= "%balance" "(" Expr ")" | "%codesize" "(" Expr ")" | "%is_contract" "(" Expr ")"
                            | "%msg.sender" | "%msg.value" | "%msg.gas"

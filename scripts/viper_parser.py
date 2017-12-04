@@ -463,9 +463,9 @@ def parseAnnVarAux(key, value):
 # syntax AnnVars ::= List{AnnVar, ""}
 def parseAnnVars(annVars: ast.Dict):
     rez = ""
-    for i in range(0, len(annVars.keys)):
-        key = annVars.keys[i]
-        value = annVars.values[i]
+    annVars_zipped = zip(annVars.keys, annVars.values)
+    annVars_sorted = sorted(annVars_zipped, key=lambda entry: entry[0].id)
+    for key, value in annVars_sorted:
         if rez != "":
             rez += " "
         rez += parseAnnVarAux(key, value)
