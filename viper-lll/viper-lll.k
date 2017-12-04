@@ -733,6 +733,12 @@ module VIPER-LLL
                          #baseTypeConvert(RTCODE, LT))
       requires isBaseType(LT)
 
+    rule #mkSetter(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+        => #ifThen(notBool(isByteArrayType(RT)),
+                   #exception("Can only set a byte array to another byte array."))
+        ~> #mkSetterBytesT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+      requires isByteArrayType(LT)
+
     // Can't copy mappings
     rule #mkSetter(@tlll(LT, LOC, LOCATTR), RTCODE)
         => #exception("Cannot copy mappings; can only copy individual elements.")
@@ -755,6 +761,12 @@ module VIPER-LLL
 
     rule #mkSetterBase(@tlll(_, LOC, @locattr(@memory, _)), @tlll(_, CODE, _))
         => $mstore(LOC, CODE),.LLLExps
+
+
+    // Byte arrays
+    syntax CLLLExps  ::= "#mkSetterBytesT" "(" TypedLLLExp "," TypedLLLExp ")"
+ // --------------------------------------------------------------------------
+    rule #mkSetterBytesT(LTCODE, RTCODE) => #mkByteArrayCopier(LTCODE, RTCODE)
 
 
     // List
@@ -1161,6 +1173,24 @@ module VIPER-LLL
              $%seq(
                $mstore($sub($_loc, 32), 32),
                $return($sub($_loc, 32), $ceil32($add($mload($_loc), 64))),.LLLExps)),.LLLExps
+
+    rule <k> #returnBytesTAux(@tlll(%bytesT(L), CODE, @locattr(@storage, MUTABLE)))
+            => #returnBytesTFromStorage(
+                   #mkByteArrayCopier(@tlll(%bytesT(L), LOC +Int 32, @locattr(@memory, true)),
+                                      @tlll(%bytesT(L), CODE       , @locattr(@storage, MUTABLE))))
+         ... </k>
+         <nextMem> LOC </nextMem>
+
+
+    syntax CLLLExps  ::= "#returnBytesTFromStorage" "(" CLLLExps ")"  [strict]
+ // --------------------------------------------------------------------------
+    rule <k> #returnBytesTFromStorage(CODE)
+            => $%seq(
+                 CODE ++LLL
+                 ($mstore(LOC, 32),
+                  $return(LOC, $add($ceil32($mload(LOC +Int 32)), 64)),.LLLExps)),.LLLExps
+         ... </k>
+         <nextMem> LOC </nextMem>
 
 
     syntax CLLLExps  ::= "#returnListT"    "(" CTypedLLLExp ","  // placeholder
@@ -2903,6 +2933,123 @@ module VIPER-LLL
 
     rule #isVarNameValid(NAME) => false
       requires isReservedWord(NAME)
+
+
+    syntax CLLLExps  ::= "#mkByteArrayCopier" "(" TypedLLLExp "," TypedLLLExp ")"
+    syntax CLLLExps  ::= "#mkByteArrayCopierAux" "(" TypedLLLExp "," TypedLLLExp ")"
+ // --------------------------------------------------------------------------------
+    rule #mkByteArrayCopier(@tlll(DESTT, DESTCODE, DATTR),
+                            @tlll(SOURCET, SOURCECODE, SATTR))
+        => #ifThenElse(#getBytesTLen(SOURCET) >Int #getBytesTLen(DESTT),
+                       #exception("Cannot cast from greater max-length to shorter max-length."),
+                       #mkByteArrayCopierAux(@tlll(DESTT, DESTCODE, DATTR),
+                                             @tlll(SOURCET, SOURCECODE, SATTR)))
+
+    // memory to memory
+    rule #mkByteArrayCopierAux(@tlll(DESTT, DESTCODE, @locattr(@memory, _)),
+                               @tlll(SOURCET, SOURCECODE, @locattr(@memory, _)))
+        => $with($_source, SOURCECODE,
+             $with($_sz, $add(32, $mload($_source)),
+               $assert($call($add(18, $div($_sz, 10)), 4, 0, $_source, $_sz, DESTCODE, $_sz)))),.LLLExps
+
+    // storage to memory
+    rule #mkByteArrayCopierAux(@tlll(DESTT, DESTCODE, @locattr(@memory, DESTMUTABLE)),
+                               @tlll(%bytesT(SLEN), SOURCECODE, @locattr(@storage, SOURCEMUTABLE)))
+        => #copyByteArrayBySlice(SOURCECODE,
+                                 #mkByteSliceCopier(@tlll(DESTT, DESTCODE, @locattr(@memory, DESTMUTABLE)),
+                                                    @tlll(%bytesT(SLEN), $sha3_32($_pos), @locattr(@storage, SOURCEMUTABLE)),
+                                                    $add($sload($_pos), 32),
+                                                    SLEN +Int 32))
+
+    // memory to storage
+    rule #mkByteArrayCopierAux(@tlll(DESTT, DESTCODE, @locattr(@storage, DESTMUTABLE)),
+                               @tlll(%bytesT(SLEN), SOURCECODE, @locattr(@memory, SOURCEMUTABLE)))
+        => #copyByteArrayBySlice(SOURCECODE,
+                                 #mkByteSliceCopier(@tlll(DESTT, $sha3_32(DESTCODE), @locattr(@storage, DESTMUTABLE)),
+                                                    @tlll(%bytesT(SLEN), $_pos, @locattr(@memory, SOURCEMUTABLE)),
+                                                    $add($mload($_pos), 32),
+                                                    SLEN +Int 32))
+
+    // storage to storage
+    rule #mkByteArrayCopierAux(@tlll(DESTT, DESTCODE, @locattr(@storage, DESTMUTABLE)),
+                               @tlll(%bytesT(SLEN), SOURCECODE, @locattr(@storage, SOURCEMUTABLE)))
+        => #copyByteArrayBySlice(SOURCECODE,
+                                 #mkByteSliceCopier(@tlll(DESTT, $sha3_32(DESTCODE), @locattr(@storage, DESTMUTABLE)),
+                                                    @tlll(%bytesT(SLEN), $sha3_32($_pos), @locattr(@storage, SOURCEMUTABLE)),
+                                                    $add($sload($_pos), 32),
+                                                    SLEN +Int 32))
+
+
+    syntax CLLLExps  ::= "#copyByteArrayBySlice" "(" LLLExp ","  // source Loc
+                                                     CLLLExp     // copy code
+                                                 ")"     [strict(2)]
+ // ---------------------------------------------------------------------------
+    rule #copyByteArrayBySlice(SOURCECODE, SLICECOPIERCODE)
+        => $with($_pos, SOURCECODE, SLICECOPIERCODE),.LLLExps
+
+
+    syntax CLLLExp  ::= "#mkByteSliceCopier" "(" TypedLLLExp ","  // destination
+                                                 TypedLLLExp ","  // source
+                                                 LLLExp      ","  // length
+                                                 Int         ")"  // max length
+
+    syntax CLLLExp  ::= "#mkByteSliceCopierAux" "(" LLLExp      ","  // destination code
+                                                    LLLExp      ","  // source code
+                                                    LLLExp      ","  // length
+                                                    Int         ","  // max length
+                                                    LLLExp      ","  // setter
+                                                    LLLExp      ")"  // checker
+ // ---------------------------------------------------------------
+    // memory to memory
+    rule #mkByteSliceCopier(@tlll(DESTT, DESTCODE, @locattr(@memory, _)),
+                            @tlll(SOURCET, SOURCECODE, @locattr(@memory, _)),
+                            LEN,
+                            MAXLEN)
+        => $with($_l, MAXLEN,
+             $pop($call(18 +Int (MAXLEN /Int 10), 4, 0, SOURCECODE, $_l, DESTCODE, $_l)))
+
+    // storage to memory
+    rule #mkByteSliceCopier(@tlll(DESTT, DESTCODE, @locattr(@memory, _)),
+                            @tlll(SOURCET, SOURCECODE, @locattr(@storage, _)),
+                            LEN,
+                            MAXLEN)
+        => #mkByteSliceCopierAux(DESTCODE, SOURCECODE, LEN, MAXLEN,
+                                 $mstore($add($_opos, $mul(32, $mload(@freeLoopIndexPos))),
+                                         $sload($add($_pos, $mload(@freeLoopIndexPos)))),
+                                 #byteSliceCopyChecker)
+
+    // memory to storage
+    rule #mkByteSliceCopier(@tlll(DESTT, DESTCODE, @locattr(@storage, _)),
+                            @tlll(SOURCET, SOURCECODE, @locattr(@memory, _)),
+                            LEN,
+                            MAXLEN)
+        => #mkByteSliceCopierAux(DESTCODE, SOURCECODE, LEN, MAXLEN,
+                                 $sstore($add($_opos, $mload(@freeLoopIndexPos)),
+                                         $mload($add($_pos, $mul(32, $mload(@freeLoopIndexPos))))),
+                                 #byteSliceCopyChecker)
+
+    // storage to storage
+    rule #mkByteSliceCopier(@tlll(DESTT, DESTCODE, @locattr(@storage, _)),
+                            @tlll(SOURCET, SOURCECODE, @locattr(@storage, _)),
+                            LEN,
+                            MAXLEN)
+        => #mkByteSliceCopierAux(DESTCODE, SOURCECODE, LEN, MAXLEN,
+                                 $sstore($add($_opos, $mload(@freeLoopIndexPos)),
+                                         $sload($add($_pos, $mload(@freeLoopIndexPos)))),
+                                 #byteSliceCopyChecker)
+
+    rule #mkByteSliceCopierAux(DESTCODE, SOURCECODE, LEN, MAXLEN, SETTER, CHECKER)
+        => $with($_pos, SOURCECODE,
+             $with($_opos, DESTCODE,
+               $with($_actual_len, LEN,
+                 $repeat(@freeLoopIndexPos, 0, (MAXLEN +Int 31) /Int 32,
+                         $%seq((CHECKER,.LLLExps) ++LLL (SETTER,.LLLExps))))))
+
+
+    syntax LLLExp  ::= "#byteSliceCopyChecker"    [function]
+ // --------------------------------------------------------
+    rule #byteSliceCopyChecker => $if($gt($mul(32, $mload(@freeLoopIndexPos)), $_actual_len),
+                                      $break)
 
 
 endmodule

@@ -1,0 +1,22 @@
+%pgm(,
+  %svdecl(x, %num, %private)
+  %svdecl(maa, %bytesT(60), %private)
+  %svdecl(y, %num, %private)
+  %svdecl(mbb, %bytesT(60), %private),
+  %fdecl(%@public, __init__, , %void,
+    %assign(%svar(x), 27)
+    %assign(%svar(y), 37)),
+  %fdecl(%@public, set_maa, %param(inp, %bytesT(60)), %void,
+    %assign(%svar(maa), %var(inp)))
+  %fdecl(%@public, set_maa2, %param(inp, %bytesT(60)), %void,
+    %assign(%var(ay), %var(inp))
+    %assign(%svar(maa), %var(ay))
+    %assign(%svar(mbb), %svar(maa)))
+  %fdecl(%@public, get_maa, , %bytesT(60),
+    %return(%svar(maa)))
+  %fdecl(%@public, get_maa2, , %bytesT(60),
+    %assign(%var(ay), %svar(maa))
+    %return(%var(ay)))
+  %fdecl(%@public, get_xy, , %num,
+    %return(%binop(*, %svar(x), %svar(y))))
+)

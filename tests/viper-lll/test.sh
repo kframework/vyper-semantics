@@ -57,6 +57,9 @@ run_tests $TESTS_DIR
 TESTS_DIR=${SCRIPT_DIR}/parser/types/numbers/test_num
 run_tests $TESTS_DIR
 
+TESTS_DIR=${SCRIPT_DIR}/parser/types/test_bytes
+run_tests $TESTS_DIR
+
 TESTS_DIR=${SCRIPT_DIR}/parser/types/test_string_literal
 run_tests $TESTS_DIR
 

@@ -1,0 +1,5 @@
+%pgm(, ,
+  %fdecl(%@public, foo, %param(x, %bytesT(100)), %bytesT(100),
+    %assign(%var(y), %var(x))
+    %return(%var(y)))
+)

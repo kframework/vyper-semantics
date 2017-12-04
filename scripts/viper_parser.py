@@ -594,6 +594,7 @@ def parseDef(node):
 def parseProgram(nodeList):
     events = []
     globals = []
+    init = []
     defs = []
     for node in nodeList:
         if type(node) == ast.AnnAssign and type(node.annotation) == ast.Call and node.annotation.func.id == "__log__":
@@ -601,13 +602,24 @@ def parseProgram(nodeList):
         elif type(node) == ast.AnnAssign:
             globals.append(node)
         elif type(node) == ast.FunctionDef:
-            defs.append(node)
+            if node.name == "__init__":
+                init.append(node)
+            else:
+                defs.append(node)
         else:
             raise ParserException("Unsupported top level node: " + str(node))
-    return "%pgm({},{},{}\n)".format(
-        parseList(events, parseEvent, "\n", "\n"),
-        parseList(globals, parseGlobal, "\n", "\n", " "),
-        parseList(defs, parseDef, "\n", "\n", " "))
+
+    if init is not None:
+        return "%pgm({},{},{},{}\n)".format(
+            parseList(events, parseEvent, "\n", "\n"),
+            parseList(globals, parseGlobal, "\n", "\n", " "),
+            parseList(init, parseDef, "\n", "\n", " "),
+            parseList(defs, parseDef, "\n", "\n", " "))
+    else:
+        return "%pgm({},{},{}\n)".format(
+            parseList(events, parseEvent, "\n", "\n"),
+            parseList(globals, parseGlobal, "\n", "\n", " "),
+            parseList(defs, parseDef, "\n", "\n", " "))
 
 
 inputLines: List[str]
