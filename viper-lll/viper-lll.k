@@ -124,7 +124,7 @@ module VIPER-LLL
     syntax KItem  ::= "#compileViperToLLLAux" "(" CLLLExps /*header code*/  ","
                                                   CLLLExps /*init func*/    ","
                                                   CLLLExps /*regular func*/
-                                               ")"                  [seqstrict]
+                                              ")"                   [seqstrict]
 
     syntax KItem  ::= "#compileViperToLLLAux" "(" CLLLExps /*header code*/  ","
                                                   CLLLExps /*regular func*/
@@ -378,8 +378,8 @@ module VIPER-LLL
     rule #mkPublicGetter(NAME, PARAMS, %mapT(VT, KT), VAR, DEPTH)
         => #mkPublicGetterMapT(NAME, PARAMS, %mapT(VT, KT), VAR, DEPTH)
 
-    rule #mkPublicGetter(NAME, PARAMS, %structT(VDECLS), VAR, DEPTH)
-        => #mkPublicGetterStructT(NAME, PARAMS, %structT(VDECLS), VAR, DEPTH)
+    rule #mkPublicGetter(NAME, PARAMS, %structT(ANNVARS), VAR, DEPTH)
+        => #mkPublicGetterStructT(NAME, PARAMS, %structT(ANNVARS), VAR, DEPTH)
 
 
     syntax Defs  ::= "#mkPublicGetterBase"      "(" String "," Params "," Type "," Var "," Int ")"  [function]
@@ -416,15 +416,15 @@ module VIPER-LLL
                            %subscript(VAR, %var(String2Id("arg" +String Int2String(DEPTH)))),
                            DEPTH +Int 1)
 
-    rule #mkPublicGetterStructT(NAME, PARAMS, %structT(%vdecl(VNAME, T) VS), VAR, DEPTH)
+    rule #mkPublicGetterStructT(NAME, PARAMS, %structT(%annvar(VNAME, T) ANNVARS), VAR, DEPTH)
         => #mkPublicGetter(NAME +String "___" +String Id2String(VNAME),
                            PARAMS,
                            T,
                            %attribute(VAR, VNAME),
                            DEPTH)
-           ++Def #mkPublicGetterStructT(NAME, PARAMS, %structT(VS), VAR, DEPTH)
+           ++Def #mkPublicGetterStructT(NAME, PARAMS, %structT(ANNVARS), VAR, DEPTH)
 
-    rule #mkPublicGetterStructT(NAME, PARAMS, %structT(.VarDecls), VAR, DEPTH)
+    rule #mkPublicGetterStructT(NAME, PARAMS, %structT(.AnnVars), VAR, DEPTH)
         => .Defs
 
 
@@ -658,7 +658,7 @@ module VIPER-LLL
 // ====================
 
 
-    rule #compileStmt(%vdecl(NAME, T)) => #annassign(NAME, #parseType(T, true))
+    rule #compileStmt(%annvar(NAME, T)) => #annassign(NAME, #parseType(T, true))
 
 
     syntax CLLLExps  ::= "#annassign" "(" Id "," CType ")"    [strict(2)]
@@ -2225,11 +2225,11 @@ module VIPER-LLL
     rule (ID IDS1) ++Id IDS2 => ID (IDS1 ++Id IDS2)
 
 
-    syntax VarDecls  ::= VarDecls "++Vdecl" VarDecls  [right, function]
- // -------------------------------------------------------------------
-    rule .VarDecls ++Vdecl VDECLS:VarDecls => VDECLS
+    syntax AnnVars  ::= AnnVars "++Annvar" AnnVars  [right, function]
+ // -----------------------------------------------------------------
+    rule .AnnVars ++Annvar ANNVARS:AnnVars => ANNVARS
 
-    rule (VDECL VDECLS1) ++Vdecl VDECLS2 => VDECL (VDECLS1 ++Vdecl VDECLS2)
+    rule (ANNVAR ANNVARS1) ++Annvar ANNVARS2 => ANNVAR (ANNVARS1 ++Annvar ANNVARS2)
 
 
     syntax Bytes  ::= Bytes "++Byte" Bytes  [right, function]
@@ -2320,9 +2320,9 @@ module VIPER-LLL
 
     rule #sizeOfType(%listT(T, N)) => #sizeOfType(T) *Int N
 
-    rule #sizeOfType(%structT(.VarDecls)) => 0
+    rule #sizeOfType(%structT(.AnnVars)) => 0
 
-    rule #sizeOfType(%structT(%vdecl(_, T) VS)) => #sizeOfType(T) +Int #sizeOfType(%structT(VS))
+    rule #sizeOfType(%structT(%annvar(_, T) ANNVARS)) => #sizeOfType(T) +Int #sizeOfType(%structT(ANNVARS))
 
 
     syntax KItem  ::= "#canonicalizeType" "(" Type "," Bool /*event?*/ ")"
@@ -2465,7 +2465,7 @@ module VIPER-LLL
                        #parseMapType(#parseType(VT, false), #parseType(KT, false)),
                        #exception("Mapping keys must be base or bytes types"))
 
-    rule #parseType(%structT(VDECLS), INMEM) => #parseStructType(VDECLS, INMEM, .VarDecls)
+    rule #parseType(%structT(ANNVARS), INMEM) => #parseStructType(ANNVARS, INMEM, .AnnVars)
 
     // TODO: support Tuple
 
@@ -2493,17 +2493,17 @@ module VIPER-LLL
     rule #parseMapType(VT, KT) => %mapT(VT, KT)
 
 
-    syntax CType  ::= "#parseStructType" "(" VarDecls "," Bool "," VarDecls ")"
+    syntax CType  ::= "#parseStructType" "(" AnnVars "," Bool "," AnnVars ")"
     syntax KItem  ::= "#nameWithType" "(" Id "," CType ")"    [strict(2)]
  // ---------------------------------------------------------------------------
-    rule #parseStructType(%vdecl(NAME, T) VDECLS, INMEM, RESULT)
+    rule #parseStructType(%annvar(NAME, T) ANNVARS, INMEM, RESULT)
         => #ifThenElse(#isVarNameValid(NAME),
                        #nameWithType(NAME, #parseType(T, INMEM)),
                        #exception("Invalid member variable for struct."))
-        ~> #parseStructType(VDECLS, INMEM, RESULT)
+        ~> #parseStructType(ANNVARS, INMEM, RESULT)
 
-    rule #nameWithType(NAME, T:Type) ~> #parseStructType(VDECLS, INMEM, RESULT)
-        => #parseStructType(VDECLS, INMEM, RESULT ++Vdecl (%vdecl(NAME, T) .VarDecls))
+    rule #nameWithType(NAME, T:Type) ~> #parseStructType(ANNVARS, INMEM, RESULT)
+        => #parseStructType(ANNVARS, INMEM, RESULT ++Annvar (%annvar(NAME, T) .AnnVars))
 
 // Units
 // =====
@@ -2859,18 +2859,18 @@ module VIPER-LLL
 
 
     syntax Map  ::= "#updateEnv" "(" Map "," Var "," Type "," Int /*loc*/ "," Bool /*mutable*/ ")"  [function]
-    syntax Map  ::= "#flattenStruct" "(" Map "," Var "," VarDecls "," Int "," Bool ")"              [function]
+    syntax Map  ::= "#flattenStruct" "(" Map "," Var "," AnnVars "," Int "," Bool ")"               [function]
  // ----------------------------------------------------------------------------------------------------------
-    rule #updateEnv(M, V, %structT(VARDECLS), LOC, MUTABLE) => #flattenStruct(M, V, VARDECLS, LOC, MUTABLE)
+    rule #updateEnv(M, V, %structT(ANNVARS), LOC, MUTABLE) => #flattenStruct(M, V, ANNVARS, LOC, MUTABLE)
 
     rule #updateEnv(M, V, T, LOC, MUTABLE) => M[V <- @taddr(T, LOC, @locattr(@memory, MUTABLE))]
       requires notBool isStructType(T)
 
-    rule #flattenStruct(M, V, .VarDecls, LOC, MUTABLE) => M
+    rule #flattenStruct(M, V, .AnnVars, LOC, MUTABLE) => M
 
-    rule #flattenStruct(M, V, %vdecl(NAME, T) VS, LOC, MUTABLE)
+    rule #flattenStruct(M, V, %annvar(NAME, T) ANNVARS, LOC, MUTABLE)
         => #flattenStruct(#updateEnv(M, %attribute(V, NAME), T, LOC, MUTABLE),
-                          V, VS, LOC +Int #sizeOfType(T), MUTABLE)
+                          V, ANNVARS, LOC +Int #sizeOfType(T), MUTABLE)
 
 
 // Others

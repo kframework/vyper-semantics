@@ -102,7 +102,7 @@ def parseUnit(node):
 # syntax MappingType   ::= "%mapT"    "(" Type "," BaseType ")"
 # syntax ByteArrayType ::= "%bytesT"  "(" Int ")"
 # syntax UnitType      ::= "%unitT" "(" PureNumType "," Unit "," Bool /*positional*/ ")"
-# syntax StructType    ::= "%structT" "(" VarDecls ")"
+# syntax StructType    ::= "%structT" "(" AnnVars ")"
 #
 # example:
 #   %mapT(%num256, %address)
@@ -121,7 +121,7 @@ def parseType(node):
         else:
             return "%mapT({}, {})".format(parseType(node.value), parseType(node.slice.value))
     elif type(node) == ast.Dict:
-        return "%structT({})".format(parseVarDecls(node))
+        return "%structT({})".format(parseAnnVars(node))
     elif type(node) == ast.Call:  # part of BaseType
         if isinstance(node.args[-1], ast.Name) and node.args[-1].id == "positional":
             positional = "true"
@@ -449,30 +449,30 @@ def parseAugAssignOp(op: ast.operator):
     return "{}=".format(parseBinOp(op))
 
 
-# syntax VarDecl  ::= "%vdecl" "(" Id "," Type ")"
+# syntax AnnVar  ::= "%annvar" "(" Id "," Type ")"
 #
-# ex: %vdecl(a, %listT(%num, 5))
-def parseVarDecl(stmt: ast.AnnAssign):
-    return parseVarDecl2(stmt.target, stmt.annotation)
+# ex: %annvar(a, %listT(%num, 5))
+def parseAnnVar(stmt: ast.AnnAssign):
+    return parseAnnVarAux(stmt.target, stmt.annotation)
 
 
-def parseVarDecl2(key, value):
-    return "%vdecl({}, {})".format(key.id, parseType(value))
+def parseAnnVarAux(key, value):
+    return "%annvar({}, {})".format(key.id, parseType(value))
 
 
-# syntax VarDecls ::= List{VarDecl, ""}
-def parseVarDecls(dict: ast.Dict):
+# syntax AnnVars ::= List{AnnVar, ""}
+def parseAnnVars(annVars: ast.Dict):
     rez = ""
-    for i in range(0, len(dict.keys)):
-        key = dict.keys[i]
-        value = dict.values[i]
+    for i in range(0, len(annVars.keys)):
+        key = annVars.keys[i]
+        value = annVars.values[i]
         if rez != "":
             rez += " "
-        rez += parseVarDecl2(key, value)
+        rez += parseAnnVarAux(key, value)
     return rez
 
 
-# syntax Stmt     ::= VarDecl                                              // annotated assign
+# syntax Stmt     ::= AnnVar
 #                   | "%assign"    "(" Var "," Expr ")"
 #                   | "%augassign" "(" AugAssignOp "," Var "," Expr ")"
 #                   | "%if"        "(" Expr "," Stmts "," Stmts ")"
@@ -513,7 +513,7 @@ def parseVarDecls(dict: ast.Dict):
 # %forrange(i, 10, %pass)
 def parseStmt(node):
     if type(node) == ast.AnnAssign:
-        return parseVarDecl(node)
+        return parseAnnVar(node)
     elif type(node) == ast.Assign:
         return "%assign({}, {})".format(parseVar(node.targets[0]), parseExpr(node.value))
     elif type(node) == ast.AugAssign:

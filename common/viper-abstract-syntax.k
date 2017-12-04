@@ -23,7 +23,7 @@ module VIPER-ABSTRACT-SYNTAX
     syntax Param    ::= "%param" "(" Id "," Type ")"
     syntax Params   ::= List{Param, ""}
 
-    syntax Stmt     ::= VarDecl                                              // annotated assign
+    syntax Stmt     ::= AnnVar
                       | "%assign"    "(" Var "," Expr ")"
                       | "%augassign" "(" AugAssignOp "," Var "," Expr ")"
                       | "%if"        "(" Expr "," Stmts "," Stmts ")"
@@ -44,8 +44,8 @@ module VIPER-ABSTRACT-SYNTAX
 
     syntax Stmts    ::= List{Stmt, ""}
 
-    syntax VarDecl  ::= "%vdecl" "(" Id "," Type ")"
-    syntax VarDecls ::= List{VarDecl, ""}
+    syntax AnnVar   ::= "%annvar" "(" Id "," Type ")"
+    syntax AnnVars  ::= List{AnnVar, ""}
 
     syntax AugAssignOp ::= "+=" | "-=" | "*=" | "/=" | "%="
 
@@ -127,7 +127,7 @@ module VIPER-ABSTRACT-SYNTAX
 
     syntax MappingType   ::= "%mapT"    "(" Type "," Type ")"
 
-    syntax StructType    ::= "%structT" "(" VarDecls ")"
+    syntax StructType    ::= "%structT" "(" AnnVars ")"
 
     syntax BinOp         ::= "+" | "-" | "*" | "/" | "%" | "**"
 
