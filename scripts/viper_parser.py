@@ -317,65 +317,65 @@ def tryParseReservedExpr(expr):
 #
 # we'll support all operators from Python.
 def parseBinOp(op: ast.operator):
-    map = {ast.Add: "+",
-           ast.BitAnd: "&",
-           ast.BitOr: "|",
-           ast.BitXor: "^",
-           ast.Div: "/",
-           ast.FloorDiv: "//",
-           ast.LShift: "<<",
-           ast.MatMult: "@",
-           ast.Mod: "%",
-           ast.Mult: "*",
-           ast.Pow: "**",
-           ast.RShift: ">>",
-           ast.Sub: "-"
-           }
-    if map[type(op)] is not None:
-        return map[type(op)]
+    binOpMap = {ast.Add: "+",
+                ast.BitAnd: "&",
+                ast.BitOr: "|",
+                ast.BitXor: "^",
+                ast.Div: "/",
+                ast.FloorDiv: "//",
+                ast.LShift: "<<",
+                ast.MatMult: "@",
+                ast.Mod: "%",
+                ast.Mult: "*",
+                ast.Pow: "**",
+                ast.RShift: ">>",
+                ast.Sub: "-"
+               }
+    if binOpMap[type(op)] is not None:
+        return binOpMap[type(op)]
     else:
         raise ParserException("Unsupported BinOp: " + str(op) + " in " + inputLines[op.lineno][op.col_offset:])
 
 
 # syntax CompareOp     ::= "%lt" | "%le" | "%gt" | "%ge" | "%eq" | "%ne" | "%in"
 def parseCompareOp(op: ast.cmpop):
-    map = {ast.Eq: "%eq",
-           ast.Gt: "%gt",
-           ast.GtE: "%ge",
-           ast.In: "%in",
-           ast.Is: None,
-           ast.IsNot: None,
-           ast.Lt: "%lt",
-           ast.LtE: "%le",
-           ast.NotEq: "%ne",
-           ast.NotIn: None
-           }
-    if map[type(op)] is not None:
-        return map[type(op)]
+    compareOpMap = {ast.Eq: "%eq",
+                    ast.Gt: "%gt",
+                    ast.GtE: "%ge",
+                    ast.In: "%in",
+                    ast.Is: None,
+                    ast.IsNot: None,
+                    ast.Lt: "%lt",
+                    ast.LtE: "%le",
+                    ast.NotEq: "%ne",
+                    ast.NotIn: None
+                   }
+    if compareOpMap[type(op)] is not None:
+        return compareOpMap[type(op)]
     else:
         raise ParserException("Unsupported CompareOp: " + str(op) + " in " + inputLines[op.lineno][op.col_offset:])
 
 
 # syntax BoolOp        ::= "%and" | "%or"
 def parseBoolOp(op: ast.boolop):
-    map = {ast.And: "%and",
-           ast.Or: "%or",
-           }
-    if map[type(op)] is not None:
-        return map[type(op)]
+    boolOpMap = {ast.And: "%and",
+                 ast.Or: "%or",
+                }
+    if boolOpMap[type(op)] is not None:
+        return boolOpMap[type(op)]
     else:
         raise ParserException("Unsupported BoolOp: " + str(op) + " in " + inputLines[op.lineno][op.col_offset:])
 
 
 # syntax UnaryOp       ::= "%not" | "%neg"
 def parseUnaryOp(op: ast.unaryop):
-    map = {ast.Invert: None,
-           ast.Not: "%not",
-           ast.UAdd: None,
-           ast.USub: "%neg",
-           }
-    if map[type(op)] is not None:
-        return map[type(op)]
+    unaryOpMap = {ast.Invert: None,
+                  ast.Not: "%not",
+                  ast.UAdd: None,
+                  ast.USub: "%neg",
+                 }
+    if unaryOpMap[type(op)] is not None:
+        return unaryOpMap[type(op)]
     else:
         raise ParserException("Unsupported UnaryOp: " + str(op) + " in " + inputLines[op.lineno][op.col_offset:])
 
@@ -592,42 +592,42 @@ def parseDef(node):
 
 # Pgm ::= "%pgm" "(" Events "," Globals "," Defs ")"
 def parseProgram(nodeList):
-    events = []
-    globals = []
-    init = []
-    defs = []
+    _events = []
+    _globals = []
+    _init = []
+    _defs = []
     for node in nodeList:
         if type(node) == ast.AnnAssign and type(node.annotation) == ast.Call and node.annotation.func.id == "__log__":
-            events.append(node)
+            _events.append(node)
         elif type(node) == ast.AnnAssign:
-            globals.append(node)
+            _globals.append(node)
         elif type(node) == ast.FunctionDef:
             if node.name == "__init__":
-                init.append(node)
+                _init.append(node)
             else:
-                defs.append(node)
+                _defs.append(node)
         else:
             raise ParserException("Unsupported top level node: " + str(node))
 
-    if init is not None:
+    if _init:
         return "%pgm({},{},{},{}\n)".format(
-            parseList(events, parseEvent, "\n", "\n"),
-            parseList(globals, parseGlobal, "\n", "\n", " "),
-            parseList(init, parseDef, "\n", "\n", " "),
-            parseList(defs, parseDef, "\n", "\n", " "))
+            parseList(_events, parseEvent, "\n", "\n"),
+            parseList(_globals, parseGlobal, "\n", "\n", " "),
+            parseList(_init, parseDef, "\n", "\n", " "),
+            parseList(_defs, parseDef, "\n", "\n", " "))
     else:
         return "%pgm({},{},{}\n)".format(
-            parseList(events, parseEvent, "\n", "\n"),
-            parseList(globals, parseGlobal, "\n", "\n", " "),
-            parseList(defs, parseDef, "\n", "\n", " "))
+            parseList(_events, parseEvent, "\n", "\n"),
+            parseList(_globals, parseGlobal, "\n", "\n", " "),
+            parseList(_defs, parseDef, "\n", "\n", " "))
 
 
 inputLines: List[str]
 
-def main(input):
+def main(viperPgm):
     global inputLines
-    inputLines = input.splitlines()
-    astList = parse(input)
+    inputLines = viperPgm.splitlines()
+    astList = parse(viperPgm)
     return parseProgram(astList)
 
 if __name__ == '__main__':
@@ -636,5 +636,5 @@ if __name__ == '__main__':
         sys.exit(1)
     fileName = sys.argv[1]
     with open(fileName, "r") as fin:
-        input = fin.read()
-    print(main(input))
+        viperPgm = fin.read()
+    print(main(viperPgm))
