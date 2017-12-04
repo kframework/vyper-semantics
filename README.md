@@ -7,22 +7,29 @@ For more details, refer to [wiki](https://github.com/kframework/viper-semantics/
 
 KViper can be used to compile Viper programs to EVM bytecodes, being comparable to the production Viper compiler.
 
-First, setup K (ignore JavaCC warnings):
+First, build K:
 ```
-$ source scripts/setup_k
+$ git submodule update --init k
+$ cd k
+$ mvn package -DskipTests
+```
+and add the bin directory to your path:
+```
+$ export PATH="`pwd`/k-distribution/target/release/k/bin:$PATH"
 ```
 
 Then, build KViper:
 ```
-$ ./build.sh
+$ kompile --syntax-module VIPER-ABSTRACT-SYNTAX viper-lll/viper-lll-post.k
+$ kompile --syntax-module LLL-EVM-INTERFACE     lll-evm/lll-evm.k
 ```
 
-Now you can run KViper:
+Now you can run KViper (Python 3.6 required):
 ```
-$ ./bin/kviper.sh <pgm>.v.py
+$ python3.6 kviper.py <pgm>.v.py
 ```
 
 For example,
 ```
-$ ./bin/kviper.sh tests/examples/token/ERC20.v.py
+$ python3.6 kviper.py tests/examples/token/ERC20.v.py
 ```
