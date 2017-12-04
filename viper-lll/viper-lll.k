@@ -420,7 +420,7 @@ module VIPER-LLL
         => #mkPublicGetter(NAME +String "___" +String Id2String(VNAME),
                            PARAMS,
                            T,
-                           %field(VAR, VNAME),
+                           %attribute(VAR, VNAME),
                            DEPTH)
            ++Def #mkPublicGetterStructT(NAME, PARAMS, %structT(VS), VAR, DEPTH)
 
@@ -704,7 +704,7 @@ module VIPER-LLL
 
     rule #getTarget(%svar(NAME), TCODE) => #getTargetAux(TCODE)
 
-    rule #getTarget(%field(V, FIELD), TCODE) => #getTargetAux(TCODE)
+    rule #getTarget(%attribute(V, FIELD), TCODE) => #getTargetAux(TCODE)
 
     rule <k> #getTarget(%subscript(V, INDEX), TCODE)
             => #exception("Altering list while being iterated!") ... </k>
@@ -2869,7 +2869,7 @@ module VIPER-LLL
     rule #flattenStruct(M, V, .VarDecls, LOC, MUTABLE) => M
 
     rule #flattenStruct(M, V, %vdecl(NAME, T) VS, LOC, MUTABLE)
-        => #flattenStruct(#updateEnv(M, %field(V, NAME), T, LOC, MUTABLE),
+        => #flattenStruct(#updateEnv(M, %attribute(V, NAME), T, LOC, MUTABLE),
                           V, VS, LOC +Int #sizeOfType(T), MUTABLE)
 
 

@@ -76,7 +76,7 @@ module VIPER-ABSTRACT-SYNTAX
                       | StructFieldVar
                       | SubscriptVar
 
-    syntax StructFieldVar  ::= "%field"     "(" Var "," Id   ")"  // struct field access
+    syntax StructFieldVar  ::= "%attribute" "(" Var "," Id   ")"  // struct field access
 
     syntax SubscriptVar    ::= "%subscript" "(" Var "," Expr ")"  // list or map element
 

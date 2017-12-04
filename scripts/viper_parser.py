@@ -208,7 +208,7 @@ def parseParams(args: List[ast.arg]):
 #                   | StructFieldVar
 #                   | SubscriptVar
 #
-# syntax StructFieldVar  ::= "%field"     "(" Var "," Id   ")"  // struct field access
+# syntax StructFieldVar  ::= "%attribute" "(" Var "," Id   ")"  // struct field access
 #
 # syntax SubscriptVar    ::= "%subscript" "(" Var "," Expr ")"  // list or map element
 #
@@ -226,7 +226,7 @@ def parseVar(var):
         if type(var.value) == ast.Name and var.value.id == "self":
             return "%svar({})".format(var.attr)
         else:
-            return "%field({}, {})".format(parseVar(var.value), var.attr)
+            return "%attribute({}, {})".format(parseVar(var.value), var.attr)
     elif type(var) == ast.Subscript:
         return "%subscript({}, {})".format(parseVar(var.value), parseExpr(var.slice))
     else:
