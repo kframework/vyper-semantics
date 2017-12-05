@@ -53,6 +53,9 @@ run_tests $TESTS_DIR
 TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_public
 run_tests $TESTS_DIR
 
+TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_struct
+run_tests $TESTS_DIR
+
 #parser/types
 TESTS_DIR=${SCRIPT_DIR}/parser/types/numbers/test_num
 run_tests $TESTS_DIR

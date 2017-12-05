@@ -735,7 +735,7 @@ module VIPER-LLL
 
     rule #mkSetter(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
         => #ifThen(notBool(isByteArrayType(RT)),
-                   #exception("Can only set a byte array to another byte array."))
+                   #exception("Setter type mismatch: left side is byte array but right side is not."))
         ~> #mkSetterBytesT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
       requires isByteArrayType(LT)
 
@@ -750,7 +750,11 @@ module VIPER-LLL
         ~> #mkSetterListT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
       requires isListType(LT)
 
-    // TODO: support Struct Type
+    rule #mkSetter(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+        => #ifThen(notBool(isStructType(RT)),
+                   #exception("Setter type mismatch: left side is struct but right side is not."))
+        ~> #mkSetterStructT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+      requires isStructType(LT)
 
 
     // Basic Types
@@ -763,7 +767,7 @@ module VIPER-LLL
         => $mstore(LOC, CODE),.LLLExps
 
 
-    // Byte arrays
+    // Byte array
     syntax CLLLExps  ::= "#mkSetterBytesT" "(" TypedLLLExp "," TypedLLLExp ")"
  // --------------------------------------------------------------------------
     rule #mkSetterBytesT(LTCODE, RTCODE) => #mkByteArrayCopier(LTCODE, RTCODE)
@@ -841,6 +845,73 @@ module VIPER-LLL
 
      rule CODE:LLLExps ~> #mkSetterListTVar(LTCODE, LTOKENCODE, INDEX, RTCODE, RTOKENCODE, RESULTCODE)
          => #mkSetterListTVar(LTCODE, LTOKENCODE, INDEX +Int 1, RTCODE, RTOKENCODE, RESULTCODE ++LLL CODE)
+
+
+    // Struct
+    syntax CLLLExps  ::= "#mkSetterStructT" "(" TypedLLLExp "," TypedLLLExp ")"
+
+    syntax CLLLExps  ::= "#mkSetterStructTAux" "(" TypedLLLExp ","  // left
+                                                   TypedLLLExp ","  // left token
+                                                   TypedLLLExp ")"  // right
+ // ---------------------------------------------------------------------------
+    rule #mkSetterStructT(@tlll(%structT(LANNVARS), LCODE, @locattr(LTARGET, LMUTABLE)),
+                          @tlll(%structT(RANNVARS), RCODE, REXPRATTR))
+        => #checkStructFieldNameMatch(LANNVARS, RANNVARS)
+        ~> #ifThenElse(LTARGET ==K @storage,
+                       #mkSetterStructTAux(@tlll(%structT(LANNVARS), $sha3_32(LCODE), @locattr(@storage_prehashed, LMUTABLE)),
+                                           @tlll(%structT(LANNVARS), $_L, @locattr(@storage_prehashed, LMUTABLE)),
+                                           @tlll(%structT(RANNVARS), RCODE, REXPRATTR)),
+                       #mkSetterStructTAux(@tlll(%structT(LANNVARS), LCODE, @locattr(LTARGET, LMUTABLE)),
+                                           @tlll(%structT(LANNVARS), $_L, @locattr(LTARGET, LMUTABLE)),
+                                           @tlll(%structT(RANNVARS), RCODE, REXPRATTR)))
+
+    // TODO: support Struct Literal
+    /*rule #mkSetterStructTAux(LTCODE, LTTOKENCODE, @tlll(RT, RCODE, REXPRATTR))
+        => #mkSetterStructTLiteral(LTCODE, LTTOKENCODE, @tlll(RT, RCODE, REXPRATTR), .LLLExps)
+      requires isMultiLLLExp(RCODE)*/
+
+    rule #mkSetterStructTAux(@tlll(%structT(LANNVARS), LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
+        => #mkSetterStructTVar(LANNVARS, LCODE, LTTOKENCODE, RCODE,
+                               @tlll(RT, $_R, RLOCATTR), .LLLExps)
+      requires notBool isMultiLLLExp(RCODE)
+
+
+    syntax KItem  ::= "#checkStructFieldNameMatch" "(" AnnVars "," AnnVars ")"
+ // -----------------------------------------------------------------------
+    rule #checkStructFieldNameMatch(.AnnVars, .AnnVars) => .
+
+    rule #checkStructFieldNameMatch(%annvar(LNAME, _) LANNVARS, %annvar(RNAME, _) RANNVARS)
+        => #checkStructFieldNameMatch(LANNVARS, RANNVARS)
+      requires LNAME ==K RNAME
+
+    rule #checkStructFieldNameMatch(%annvar(LNAME, _) LANNVARS, %annvar(RNAME, _) RANNVARS)
+        => #exception("Keys don't match for structs.")
+      requires LNAME =/=K RNAME
+
+    rule #checkStructFieldNameMatch(%annvar(LNAME, _) LANNVARS, .AnnVars)
+        => #exception("Keys don't match for structs.")
+
+    rule #checkStructFieldNameMatch(.AnnVars, %annvar(RNAME, _) RANNVARS)
+        => #exception("Keys don't match for structs.")
+
+
+    syntax CLLLExps ::= "#mkSetterStructTVar" "(" AnnVars     ","  // left struct field
+                                                  LLLExp      ","  // left code
+                                                  TypedLLLExp ","  // left token
+                                                  LLLExp      ","  // right code
+                                                  TypedLLLExp ","  // right token
+                                                  LLLExps     ")"  // result code
+ // -------------------------------------------------------------
+    rule #mkSetterStructTVar(.AnnVars, LCODE, _, RCODE, _, RESULTCODE)
+        => $with($_L, LCODE, $with($_R, RCODE, $%seq(RESULTCODE))),.LLLExps
+
+    rule #mkSetterStructTVar(%annvar(NAME, T) ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
+        => #mkSetter(#addVarOffset(LTTOKENCODE, @tlll(%void, NAME, @none)),
+                     #addVarOffset(RTTOKENCODE, @tlll(%void, NAME, @none)))
+        ~> #mkSetterStructTVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
+
+    rule CODE:LLLExps ~> #mkSetterStructTVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
+        => #mkSetterStructTVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE ++LLL CODE)
 
 
 // Aug Assignment
@@ -2495,7 +2566,9 @@ module VIPER-LLL
 
     syntax CType  ::= "#parseStructType" "(" AnnVars "," Bool "," AnnVars ")"
     syntax KItem  ::= "#nameWithType" "(" Id "," CType ")"    [strict(2)]
- // ---------------------------------------------------------------------------
+ // -------------------------------------------------------------------------
+    rule #parseStructType(.AnnVars, _, ANNVARS) => %structT(ANNVARS)
+
     rule #parseStructType(%annvar(NAME, T) ANNVARS, INMEM, RESULT)
         => #ifThenElse(#isVarNameValid(NAME),
                        #nameWithType(NAME, #parseType(T, INMEM)),
@@ -2761,6 +2834,9 @@ module VIPER-LLL
     rule #lookupVar(%subscript(V, EXPR))
         => #lookupSubscriptVar(#lookupVar(V), #compileValueExpr(EXPR))
 
+    rule #lookupVar(%attribute(V, NAME))
+        => #lookupAttributeVar(#lookupVar(V), NAME)
+
 
     syntax CTypedLLLExp  ::= "#lookupSubscriptVar" "(" CTypedLLLExp ","
                                                        CTypedLLLExp
@@ -2770,47 +2846,124 @@ module VIPER-LLL
         => #addVarOffset(SUBEXPR, INDEXEXPR)
 
 
-    syntax CTypedLLLExp  ::= "#addVarOffset" "(" TypedLLLExp /*parent*/ ","
-                                                 TypedLLLExp /*key*/    ")"
- // -----------------------------------------------------------------------
-    rule #addVarOffset(@tlll(%listT(T, N), LOC, LOCATTR), KEYCODE)
-        => #addListVarOffset(@tlll(%listT(T, N), LOC, LOCATTR),
-                             #baseTypeConvert(KEYCODE, %num))
-
-    rule #addVarOffset(@tlll(%mapT(VT, KT), LOC, LOCATTR), KEYCODE)
-        => #addMapVarOffset(@tlll(%mapT(VT, KT), LOC, LOCATTR),
-                            #baseTypeConvert(KEYCODE, KT))
+    syntax CTypedLLLExp  ::= "#lookupAttributeVar" "(" CTypedLLLExp ","
+                                                       Id
+                                                   ")"      [strict(1)]
+ // -------------------------------------------------------------------
+    rule #lookupAttributeVar(SUBEXPR, FILEDNAME)
+        => #addVarOffset(SUBEXPR, @tlll(%void, FILEDNAME, @none))
 
 
-    syntax CTypedLLLExp  ::= "#addListVarOffset" "(" CTypedLLLExp ","
-                                                     CTypedLLLExp ")"  [seqstrict]
+    syntax CTypedLLLExp  ::= "#addVarOffset" "(" TypedLLLExp ","  // base
+                                                 TypedLLLExp ")"  // index
+ // ------------------------------------------------------------
+    // List
+    rule #addVarOffset(@tlll(%listT(T, N), BASELOC, LOCATTR), TINDEX)
+        => #addListVarOffset(@tlll(%listT(T, N), BASELOC, LOCATTR),
+                             #baseTypeConvert(TINDEX, %num))
+
+    // Map, index is not byte array
+    rule #addVarOffset(@tlll(%mapT(VT, KT), BASELOC, LOCATTR),
+                       @tlll(INDEXT, INDEX, EXPRATTR))
+        => #addMapVarOffset(@tlll(%mapT(VT, KT), BASELOC, LOCATTR),
+                            #baseTypeConvert(@tlll(INDEXT, INDEX, EXPRATTR), KT))
+      requires notBool(isByteArrayType(INDEXT))
+
+    // Map, index is byte array
+    rule #addVarOffset(@tlll(%mapT(VT, KT), BASELOC, LOCATTR),
+                       @tlll(INDEXT, INDEX, EXPRATTR))
+        => #addMapVarOffset(@tlll(%mapT(VT, KT), BASELOC, LOCATTR),
+                            #mapKeyByteArrayConvert(@tlll(INDEXT, INDEX, EXPRATTR), KT))
+      requires isByteArrayType(INDEXT)
+
+    // Struct
+    rule #addVarOffset(@tlll(%structT(ANNVARS), BASELOC, LOCATTR), @tlll(_, INDEXNAME, _))
+        => #addStructVarOffset(@tlll(%structT(ANNVARS), BASELOC, LOCATTR),
+                               ANNVARS, 0, INDEXNAME)
+
+
+    syntax CTypedLLLExp  ::= "#mapKeyByteArrayConvert" "(" TypedLLLExp "," Type ")"
+ // -------------------------------------------------------------------------------
+    // TODO: finish map key conversion
+
+
+    syntax CTypedLLLExp  ::= "#addListVarOffset" "(" TypedLLLExp  ","
+                                                     CTypedLLLExp ")"  [strict(2)]
+ // ------------------------------------------------------------------------------
+    rule #addListVarOffset(@tlll(%listT(T, N), BASELOC, @locattr(@storage, MUTABLE)),
+                           @tlll(_, INDEX, _))
+        => @tlll(T, $add($sha3_32(BASELOC), $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
+
+    rule #addListVarOffset(@tlll(%listT(T, N), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
+                          @tlll(_, INDEX, _))
+        => @tlll(T, $add(BASELOC, $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
+
+    rule #addListVarOffset(@tlll(%listT(T, N), BASELOC, @locattr(@memory, MUTABLE)),
+                           @tlll(_, INDEX, _))
+        => @tlll(T, $add($mul(#sizeOfType(T), $uclamplt(INDEX, N)), BASELOC), @locattr(@memory, MUTABLE))
+
+
+    syntax CTypedLLLExp  ::= "#addMapVarOffset" "(" TypedLLLExp  ","
+                                                    CTypedLLLExp ")"  [strict(2)]
  // -----------------------------------------------------------------------------
-    rule #addListVarOffset(@tlll(%listT(T, N), LOC, @locattr(@storage, MUTABLE)),
-                           @tlll(_, CODE, _))
-        => @tlll(T, $add($sha3_32(LOC), $uclamplt(CODE, N)), @locattr(@storage, MUTABLE))
+    rule #addMapVarOffset(@tlll(%mapT(VT, KT), BASELOC, @locattr(@storage, MUTABLE)),
+                          @tlll(_, INDEX, _))
+        => @tlll(VT, $add($sha3_32(BASELOC), INDEX), @locattr(@storage, MUTABLE))
 
-    rule #addListVarOffset(@tlll(%listT(T, N), LOC, @locattr(@storage_prehashed, MUTABLE)),
-                          @tlll(_, CODE, _))
-        => @tlll(T, $add(LOC, $uclamplt(CODE, N)), @locattr(@storage, MUTABLE))
-
-    rule #addListVarOffset(@tlll(%listT(T, N), LOC, @locattr(@memory, MUTABLE)),
-                           @tlll(_, CODE, _))
-        => @tlll(T, $add($mul(#sizeOfType(T), $uclamplt(CODE, N)), LOC), @locattr(@memory, MUTABLE))
-
-
-    syntax CTypedLLLExp  ::= "#addMapVarOffset" "(" CTypedLLLExp ","
-                                                    CTypedLLLExp ")"  [seqstrict]
- // -----------------------------------------------------------------------------
-    rule #addMapVarOffset(@tlll(%mapT(VT, KT), LOC, @locattr(@storage, MUTABLE)),
-                          @tlll(_, CODE, _))
-        => @tlll(VT, $add($sha3_32(LOC), CODE), @locattr(@storage, MUTABLE))
-
-    rule #addMapVarOffset(@tlll(%mapT(VT, KT), LOC, @locattr(@storage_prehashed, MUTABLE)),
-                          @tlll(_, CODE, _))
-        => @tlll(VT, $add(LOC, CODE), @locattr(@storage, MUTABLE))
+    rule #addMapVarOffset(@tlll(%mapT(VT, KT), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
+                          @tlll(_, INDEX, _))
+        => @tlll(VT, $add(BASELOC, INDEX), @locattr(@storage, MUTABLE))
 
     rule #addMapVarOffset(@tlll(%mapT(VT, KT), _, @locattr(@memory, _)), _)
         => #exception("Can only have fixed-side arrays in memory, not mappings")
+
+
+    syntax CTypedLLLExp  ::= "#addStructVarOffset" "(" TypedLLLExp ","  // parent
+                                                       AnnVars     ","  // struct fields
+                                                       Int         ","  // offset
+                                                       LLLExp      ")"  // index name
+ // ------------------------------------------------------------------
+    // storage
+    rule #addStructVarOffset(@tlll(_, BASELOC, @locattr(@storage, MUTABLE)),
+                             %annvar(FIELDNAME, FIELDT) ANNVARS, OFFSET,
+                             INDEXNAME)
+        => @tlll(FIELDT, $add($sha3_32(BASELOC), OFFSET), @locattr(@storage, MUTABLE))
+      requires INDEXNAME ==K FIELDNAME
+
+    rule #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@storage, MUTABLE)),
+                             %annvar(FIELDNAME, FIELDT) ANNVARS, OFFSET,
+                             INDEXNAME)
+        => #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@storage, MUTABLE)),
+                               ANNVARS, OFFSET +Int 1, INDEXNAME)
+      requires INDEXNAME =/=K FIELDNAME
+
+    // storage prehashed
+    rule #addStructVarOffset(@tlll(_, BASELOC, @locattr(@storage_prehashed, MUTABLE)),
+                             %annvar(FIELDNAME, FIELDT) ANNVARS, OFFSET,
+                             INDEXNAME)
+        => @tlll(FIELDT, $add(BASELOC, OFFSET), @locattr(@storage, MUTABLE))
+      requires INDEXNAME ==K FIELDNAME
+
+    rule #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@storage_prehashed, MUTABLE)),
+                             %annvar(FIELDNAME, FIELDT) ANNVARS, OFFSET,
+                             INDEXNAME)
+        => #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@storage_prehashed, MUTABLE)),
+                               ANNVARS, OFFSET +Int 1, INDEXNAME)
+      requires INDEXNAME =/=K FIELDNAME
+
+    // memory
+    rule #addStructVarOffset(@tlll(_, BASELOC, @locattr(@memory, MUTABLE)),
+                             %annvar(FIELDNAME, FIELDT) ANNVARS, OFFSET,
+                             INDEXNAME)
+        => @tlll(FIELDT, $add(OFFSET, BASELOC), @locattr(@memory, MUTABLE))
+      requires INDEXNAME ==K FIELDNAME
+
+    rule #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@memory, MUTABLE)),
+                             %annvar(FIELDNAME, FIELDT) ANNVARS, OFFSET,
+                             INDEXNAME)
+        => #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@memory, MUTABLE)),
+                               ANNVARS, OFFSET +Int #sizeOfType(FIELDT), INDEXNAME)
+      requires INDEXNAME =/=K FIELDNAME
 
 
     syntax CTypedLLLExp  ::= "#newVar" "(" Id "," Type ")"

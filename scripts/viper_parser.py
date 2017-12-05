@@ -205,12 +205,12 @@ def parseParams(args: List[ast.arg]):
 
 # syntax Var      ::= "%var"  "(" Id ")"
 #                   | "%svar" "(" Id ")"
-#                   | StructFieldVar
+#                   | AttributeVar
 #                   | SubscriptVar
 #
-# syntax StructFieldVar  ::= "%attribute" "(" Var "," Id   ")"  // struct field access
+# syntax AttributeVar  ::= "%attribute" "(" Var "," Id   ")"  // struct field access
 #
-# syntax SubscriptVar    ::= "%subscript" "(" Var "," Expr ")"  // list or map element
+# syntax SubscriptVar  ::= "%subscript" "(" Var "," Expr ")"  // list or map element
 #
 # examples:
 #   %var(_value)
