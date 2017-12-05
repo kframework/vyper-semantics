@@ -549,11 +549,11 @@ module VIPER-LLL
     syntax CLLLExps  ::= "#fillParam"  "(" Param  "," Int "," Bool ")"
  // ------------------------------------------------------------------
     rule <k> #fillParam(%param(NAME, %bytesT(L)), DATAPOS, ISINIT) => #mkClamper(%bytesT(L), DATAPOS, LOC, ISINIT) ... </k>
-         <env> ENV => #updateEnv(ENV, %var(NAME), %bytesT(L), LOC, false) </env>
+         <env> ENV => ENV[%var(NAME) <- @taddr(%bytesT(L), LOC, @locattr(@memory, false))] </env>
          <nextMem> LOC => LOC +Int #sizeOfType(%bytesT(L)) </nextMem>
 
     rule <k> #fillParam(%param(NAME, T), DATAPOS, ISINIT) => #mkClamper(T, DATAPOS, LOC, ISINIT) ... </k>
-         <env> ENV => #updateEnv(ENV, %var(NAME), T, @reservedMemPos +Int DATAPOS, false) </env>
+         <env> ENV => ENV[%var(NAME) <- @taddr(T, @reservedMemPos +Int DATAPOS, @locattr(@memory, false))] </env>
          <nextMem> LOC </nextMem>
       requires notBool isByteArrayType(T)
 
@@ -593,8 +593,8 @@ module VIPER-LLL
     rule #mkClamperListT(1, T, DPOS, MPOS, ISINIT) => #mkClamper(T, DPOS, MPOS, ISINIT)
 
     rule #mkClamperListT(N, T, DPOS, MPOS, ISINIT)
-             => #mkClamper(T, DPOS, MPOS, ISINIT) ++LLL
-                #mkClamperListT(N -Int 1, T, DPOS +Int #sizeOfType(T), MPOS +Int #sizeOfType(T), ISINIT)
+        => #mkClamper(T, DPOS, MPOS, ISINIT) ++LLL
+           #mkClamperListT(N -Int 1, T, DPOS +Int #sizeOfType(T), MPOS +Int #sizeOfType(T), ISINIT)
       requires N >Int 1
 
     rule #mkClamper(%decimal, _, _, _) => $pass,.LLLExps
@@ -2969,7 +2969,7 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#newVar" "(" Id "," Type ")"
  // ------------------------------------------------------
     rule <k> #newVar(NAME, T) => @tlll(T, LOC, @locattr(@memory, true)) ...</k>
-         <env> ENV => #updateEnv(ENV, %var(NAME), T, LOC, true) </env>
+         <env> ENV => ENV[%var(NAME) <- @taddr(T, LOC, @locattr(@memory, true))] </env>
          <nextMem> LOC => LOC +Int #sizeOfType(T) </nextMem>
       requires notBool %var(NAME) in_keys(ENV)
 
@@ -3009,21 +3009,6 @@ module VIPER-LLL
     rule <k> #newPlaceholder(T)
            => #newVar(String2Id("_placeholder_" +String Int2String(I)), T) ... </k>
          <placeholder> I => I +Int 1 </placeholder>
-
-
-    syntax Map  ::= "#updateEnv" "(" Map "," Var "," Type "," Int /*loc*/ "," Bool /*mutable*/ ")"  [function]
-    syntax Map  ::= "#flattenStruct" "(" Map "," Var "," AnnVars "," Int "," Bool ")"               [function]
- // ----------------------------------------------------------------------------------------------------------
-    rule #updateEnv(M, V, %structT(ANNVARS), LOC, MUTABLE) => #flattenStruct(M, V, ANNVARS, LOC, MUTABLE)
-
-    rule #updateEnv(M, V, T, LOC, MUTABLE) => M[V <- @taddr(T, LOC, @locattr(@memory, MUTABLE))]
-      requires notBool isStructType(T)
-
-    rule #flattenStruct(M, V, .AnnVars, LOC, MUTABLE) => M
-
-    rule #flattenStruct(M, V, %annvar(NAME, T) ANNVARS, LOC, MUTABLE)
-        => #flattenStruct(#updateEnv(M, %attribute(V, NAME), T, LOC, MUTABLE),
-                          V, ANNVARS, LOC +Int #sizeOfType(T), MUTABLE)
 
 
 // Others
