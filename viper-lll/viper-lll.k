@@ -792,59 +792,56 @@ module VIPER-LLL
                                          @tlll(LT, $_L, @locattr(LTARGET, LMUTABLE)),
                                          @tlll(RT, RCODE, REXPRATTR)))
 
-    rule #mkSetterListTAux(LTCODE, LTTOKENCODE, @tlll(RT, RCODE, REXPRATTR))
-        => #mkSetterListTLiteral(LTCODE, LTTOKENCODE, 0, @tlll(RT, RCODE, REXPRATTR), .LLLExps)
+    rule #mkSetterListTAux(@tlll(LT, LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, REXPRATTR))
+        => #mkSetterListTLiteral(LT, LCODE, LTTOKENCODE, 0, RCODE, .LLLExps)
       requires isMultiLLLExp(RCODE)
 
-    rule #mkSetterListTAux(LTCODE, LTTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
-        => #mkSetterListTVar(LTCODE, LTTOKENCODE, 0,
-                             @tlll(RT, RCODE, RLOCATTR),
-                             @tlll(RT, $_R, RLOCATTR),
-                             .LLLExps)
+    rule #mkSetterListTAux(@tlll(LT, LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
+        => #mkSetterListTVar(LT, LCODE, LTTOKENCODE, 0, RCODE,
+                             @tlll(RT, $_R, RLOCATTR), .LLLExps)
       requires notBool isMultiLLLExp(RCODE)
 
 
-    syntax CLLLExps  ::= "#mkSetterListTLiteral" "(" TypedLLLExp  ","  // left
+    syntax CLLLExps  ::= "#mkSetterListTLiteral" "(" Type         ","  // left list type
+                                                     LLLExp       ","  // left code
                                                      TypedLLLExp  ","  // left token
                                                      Int          ","  // index
-                                                     TypedLLLExp  ","  // right
+                                                     LLLExp       ","  // right code
                                                      LLLExps      ")"  // result code
  // -------------------------------------------------------------------------------
-    rule #mkSetterListTLiteral(LTCODE, LTOKENCODE, INDEX,
-                               @tlll(%listT(T, N), $multi(TEXPR TEXPRS), EXPRATTR), RESULTCODE)
-        => #mkSetter(#addVarOffset(LTOKENCODE, @tlll(%num, INDEX, @none)),
-                     TEXPR)
-        ~> #mkSetterListTLiteral(LTCODE, LTOKENCODE, INDEX,
-                                 @tlll(%listT(T, N), $multi(TEXPRS), EXPRATTR), RESULTCODE)
+    rule #mkSetterListTLiteral(%listT(T, N), LCODE, LTTOKENCODE, INDEX, $multi(TEXPR TEXPRS), RESULTCODE)
+        => #mkSetter(#addVarOffset(LTTOKENCODE, @tlll(%num, INDEX, @none)), TEXPR)
+        ~> #mkSetterListTLiteral(%listT(T, N), LCODE, LTTOKENCODE, INDEX, $multi(TEXPRS), RESULTCODE)
       requires INDEX <Int N
 
-    rule #mkSetterListTLiteral(@tlll(%listT(T, N), LOC, _), _, INDEX, _, RESULTCODE)
-        => $with($_L, LOC, $%seq(RESULTCODE)),.LLLExps
+    rule #mkSetterListTLiteral(%listT(T, N), LCODE, _, INDEX, _, RESULTCODE)
+        => $with($_L, LCODE, $%seq(RESULTCODE)),.LLLExps
       requires INDEX ==Int N
 
-    rule CODE:LLLExps ~> #mkSetterListTLiteral(LTCODE, LTOKENCODE, INDEX, RTCODE, RESULTCODE)
-        => #mkSetterListTLiteral(LTCODE, LTOKENCODE, INDEX +Int 1, RTCODE, RESULTCODE ++LLL CODE)
+    rule CODE:LLLExps ~> #mkSetterListTLiteral(LT, LCODE, LTTOKENCODE, INDEX, RCODE, RESULTCODE)
+        => #mkSetterListTLiteral(LT, LCODE, LTTOKENCODE, INDEX +Int 1, RCODE, RESULTCODE ++LLL CODE)
 
 
-    syntax CLLLExps  ::= "#mkSetterListTVar" "(" TypedLLLExp ","  // left
+    syntax CLLLExps  ::= "#mkSetterListTVar" "(" Type        ","  // left list type
+                                                 LLLExp      ","  // left code
                                                  TypedLLLExp ","  // left token
                                                  Int         ","  // index
-                                                 TypedLLLExp ","  // right
+                                                 LLLExp      ","  // right code
                                                  TypedLLLExp ","  // right token
                                                  LLLExps     ")"  // result code
   // --------------------------------------------------------------------------------
-     rule #mkSetterListTVar(@tlll(%listT(T, N), LLOC, LOCATTR), LTOKENCODE, INDEX, RTCODE, RTOKENCODE, RESULTCODE)
-         => #mkSetter(#addVarOffset(LTOKENCODE, @tlll(%num, INDEX, @none)),
-                      #addVarOffset(RTOKENCODE, @tlll(%num, INDEX, @none)))
-         ~> #mkSetterListTVar(@tlll(%listT(T, N), LLOC, LOCATTR), LTOKENCODE, INDEX, RTCODE, RTOKENCODE, RESULTCODE)
+     rule #mkSetterListTVar(%listT(T, N), LCODE, LTTOKENCODE, INDEX, RCODE, RTTOKENCODE, RESULTCODE)
+         => #mkSetter(#addVarOffset(LTTOKENCODE, @tlll(%num, INDEX, @none)),
+                      #addVarOffset(RTTOKENCODE, @tlll(%num, INDEX, @none)))
+         ~> #mkSetterListTVar(%listT(T, N), LCODE, LTTOKENCODE, INDEX, RCODE, RTTOKENCODE, RESULTCODE)
        requires INDEX <Int N
 
-     rule #mkSetterListTVar(@tlll(%listT(T, N), LLOC, _), _, INDEX, @tlll(_, RLOC, _), _, RESULTCODE)
-         => $with($_L, LLOC, $with($_R, RLOC, $%seq(RESULTCODE))),.LLLExps
+     rule #mkSetterListTVar(%listT(T, N), LCODE, _, INDEX, RCODE, _, RESULTCODE)
+         => $with($_L, LCODE, $with($_R, RCODE, $%seq(RESULTCODE))),.LLLExps
        requires INDEX ==Int N
 
-     rule CODE:LLLExps ~> #mkSetterListTVar(LTCODE, LTOKENCODE, INDEX, RTCODE, RTOKENCODE, RESULTCODE)
-         => #mkSetterListTVar(LTCODE, LTOKENCODE, INDEX +Int 1, RTCODE, RTOKENCODE, RESULTCODE ++LLL CODE)
+     rule CODE:LLLExps ~> #mkSetterListTVar(LT, LCODE, LTTOKENCODE, INDEX, RCODE, RTTOKENCODE, RESULTCODE)
+         => #mkSetterListTVar(LT, LCODE, LTTOKENCODE, INDEX +Int 1, RCODE, RTTOKENCODE, RESULTCODE ++LLL CODE)
 
 
     // Struct
@@ -895,7 +892,7 @@ module VIPER-LLL
         => #exception("Keys don't match for structs.")
 
 
-    syntax CLLLExps ::= "#mkSetterStructTVar" "(" AnnVars     ","  // left struct field
+    syntax CLLLExps ::= "#mkSetterStructTVar" "(" AnnVars     ","  // left struct fields
                                                   LLLExp      ","  // left code
                                                   TypedLLLExp ","  // left token
                                                   LLLExp      ","  // right code
