@@ -330,7 +330,7 @@ def parseBinOp(op: ast.operator):
                 ast.Pow: "**",
                 ast.RShift: ">>",
                 ast.Sub: "-"
-               }
+                }
     if binOpMap[type(op)] is not None:
         return binOpMap[type(op)]
     else:
@@ -349,7 +349,7 @@ def parseCompareOp(op: ast.cmpop):
                     ast.LtE: "%le",
                     ast.NotEq: "%ne",
                     ast.NotIn: None
-                   }
+                    }
     if compareOpMap[type(op)] is not None:
         return compareOpMap[type(op)]
     else:
@@ -360,7 +360,7 @@ def parseCompareOp(op: ast.cmpop):
 def parseBoolOp(op: ast.boolop):
     boolOpMap = {ast.And: "%and",
                  ast.Or: "%or",
-                }
+                 }
     if boolOpMap[type(op)] is not None:
         return boolOpMap[type(op)]
     else:
@@ -373,16 +373,30 @@ def parseUnaryOp(op: ast.unaryop):
                   ast.Not: "%not",
                   ast.UAdd: None,
                   ast.USub: "%neg",
-                 }
+                  }
     if unaryOpMap[type(op)] is not None:
         return unaryOpMap[type(op)]
     else:
         raise ParserException("Unsupported UnaryOp: " + str(op) + " in " + inputLines[op.lineno][op.col_offset:])
 
 
+# syntax StructItems   ::= List{StructItem, ""}
+# syntax StructItem    ::= "%item" "(" Id "," Expr ")"
+def parseStructItems(node):
+    rez = ""
+    for i in range(0, len(node.keys)):
+        key = node.keys[i]
+        value = node.values[i]
+        if rez != "":
+            rez += " "
+        rez += "%item({}, {})".format(key.id, parseExpr(value))
+    return rez
+
+
 # syntax Expr     ::= Const
 #                   | Var
 #                   | ListExpr
+#                   | StructExpr
 #                   | "%self"
 #                   | "%binop"     "(" BinOp     "," Expr "," Expr ")"
 #                   | "%compareop" "(" CompareOp "," Expr "," Expr ")"
@@ -394,6 +408,7 @@ def parseUnaryOp(op: ast.unaryop):
 #                   | ReservedFunc  // expr dispatch table
 #
 # syntax ListExpr      ::= "%list" "(" Exprs ")"
+# syntax StructExpr    ::= "%struct" "(" StructItems ")"
 #
 # examples:
 #   %var(_sender)
@@ -430,6 +445,8 @@ def parseExpr(node):
         return parseVar(node)
     elif type(node) == ast.List:
         return "%list({})".format(parseExprs(node.elts))
+    elif type(node) == ast.Dict:
+        return "%struct({})".format(parseStructItems(node))
     elif type(node) == ast.Call and type(node.func) == ast.Name:
         return parseCallExpr(node)
     elif type(node) == ast.Call and type(node.func) == ast.Attribute and type(node.func.value) == ast.Name \
@@ -624,11 +641,13 @@ def parseProgram(nodeList):
 
 inputLines: List[str]
 
+
 def main(viperPgm):
     global inputLines
     inputLines = viperPgm.splitlines()
     astList = parse(viperPgm)
     return parseProgram(astList)
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
