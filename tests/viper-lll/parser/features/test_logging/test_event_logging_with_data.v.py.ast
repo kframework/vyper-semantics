@@ -1,0 +1,5 @@
+%pgm(
+  %event(MyLog, %eparam(arg1, %num, false)), ,
+  %fdecl(%@public, foo, , %void,
+    %log(MyLog, 123))
+)

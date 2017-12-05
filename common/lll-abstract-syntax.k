@@ -112,5 +112,6 @@ module LLL-ABSTRACT-SYNTAX
                     | "$_L"      [token] | "$_R"    [token]
                     | "$_source" [token] | "$_sz"   [token] | "$_pos" [token]
                     | "$_opos"   [token] | "$_actual_len" [token]
+                    | "$_sub"    [token] | "$_len"  [token] | "$_el1" [token]
 
 endmodule

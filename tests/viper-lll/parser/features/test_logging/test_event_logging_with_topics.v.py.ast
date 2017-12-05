@@ -1,0 +1,5 @@
+%pgm(
+  %event(MyLog, %eparam(arg1, %bytesT(3), true)), ,
+  %fdecl(%@public, foo, , %void,
+    %log(MyLog, "bar"))
+)

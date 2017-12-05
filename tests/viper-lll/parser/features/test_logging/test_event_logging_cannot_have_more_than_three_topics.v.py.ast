@@ -1,0 +1,3 @@
+%pgm(
+  %event(MyLog, %eparam(arg1, %bytesT(3), true) %eparam(arg2, %bytesT(4), true) %eparam(arg3, %address, true) %eparam(arg4, %num, true)), , 
+)

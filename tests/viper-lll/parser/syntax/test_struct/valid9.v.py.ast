@@ -1,0 +1,5 @@
+%pgm(,
+  %svdecl(b, %structT(%annvar(bar, %num) %annvar(foo, %num)), %private),
+  %fdecl(%@public, foo, , %void,
+    %assign(%var(x), %attribute(%svar(b), bar)))
+)

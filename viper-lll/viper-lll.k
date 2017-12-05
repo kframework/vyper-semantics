@@ -1,5 +1,5 @@
 /* Viper source code:
- * https://github.com/ethereum/viper/commit/67963b582d8a0c62fbef081df97e32f0ed5bb34d
+ * https://github.com/ethereum/viper/commit/8c6000b16e11127462506fd0ac632ce535491bec
  */
 
 require "../common/viper-abstract-syntax.k"
@@ -920,15 +920,15 @@ module VIPER-LLL
                                                           #compileValueExpr(E))
 
 
-    syntax CLLLExps  ::= "#augassign"    "(" AugAssignOp                    ","
-                                             CTypedLLLExp  /*variable loc*/ ","
-                                             CTypedLLLExp /*compiled expr*/
-                                         ")"                   [seqstrict(2,3)]
+    syntax CLLLExps  ::= "#augassign"    "(" AugAssignOp  ","
+                                             CTypedLLLExp ","  // variable loc
+                                             CTypedLLLExp      // compiled expr
+                                         ")"  [seqstrict(2,3)]
 
-    syntax CLLLExps  ::= "#augassignAux" "(" AugAssignOp                    ","
-                                             CTypedLLLExp                   ","
-                                             TypedLLLExp                    ")"
- // ---------------------------------------------------------------------------
+    syntax CLLLExps  ::= "#augassignAux" "(" AugAssignOp  ","
+                                             CTypedLLLExp ","
+                                             TypedLLLExp  ")"
+ // ---------------------------------------------------------
     rule #augassign(OP, @tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
         => #ifThen(notBool(isBaseType(LT)),
                    #exception("Can only use aug-assign operators with simple types!"))
@@ -943,10 +943,10 @@ module VIPER-LLL
                              #convertToBinaryArith(OP, @tlll(LT, $mload($_mloc), @none), RTCODE))
 
 
-    syntax CTypedLLLExp  ::= "#convertToBinaryArith" "(" AugAssignOp           ","
-                                                         TypedLLLExp  /*left*/ ","
-                                                         TypedLLLExp  /*right*/")"
- // ------------------------------------------------------------------------------
+    syntax CTypedLLLExp  ::= "#convertToBinaryArith" "(" AugAssignOp ","
+                                                         TypedLLLExp ","  // left
+                                                         TypedLLLExp ")"  // right
+ // --------------------------------------------------------------------
     rule #convertToBinaryArith(+=, LTCODE, RTCODE) => #binOp(+, LTCODE, RTCODE)
 
     rule #convertToBinaryArith(-=, LTCODE, RTCODE) => #binOp(-, LTCODE, RTCODE)
@@ -981,15 +981,15 @@ module VIPER-LLL
 // ==================
 
 
-    syntax CLLLExps  ::= "#ifstmt" "(" CTypedLLLExp /*TEST*/ ","
-                                       CLLLExps     /*Then*/ ","
-                                       CLLLExps     /*Else*/
-                                   ")"               [seqstrict]
+    syntax CLLLExps  ::= "#ifstmt" "(" CTypedLLLExp ","  // Test
+                                       CLLLExps     ","  // Then
+                                       CLLLExps          // Else
+                                   ")"      [seqstrict]
 
-    syntax CLLLExps  ::= "#ifstmt" "(" CTypedLLLExp /*TEST*/ ","
-                                       CLLLExps     /*Then*/
-                                   ")"               [seqstrict]
- // ------------------------------------------------------------
+    syntax CLLLExps  ::= "#ifstmt" "(" CTypedLLLExp ","  // Test
+                                       CLLLExps          // Then
+                                   ")"      [seqstrict]
+ // ---------------------------------------------------
     rule #compileStmt(%if(TEST, THENSTMTS, ELSESTMTS))
         => #ifstmt(#compileValueExpr(TEST),
                    #compileStmts(THENSTMTS, .LLLExps),
@@ -1028,12 +1028,12 @@ module VIPER-LLL
         ~> #clearVar(String2Id("_index_for_" +String Id2String(ITER)))
 
 
-    syntax CLLLExps  ::= "#forrange" "(" CTypedLLLExp           ","
-                                         CTypedLLLExp /*start*/ ","
-                                         Int         /*rounds*/ ","
-                                         CLLLExps
-                                     ")"         [seqstrict(1,2,4)]
- // ---------------------------------------------------------------
+    syntax CLLLExps  ::= "#forrange" "(" CTypedLLLExp ","
+                                         CTypedLLLExp ","  // start
+                                         Int          ","  // rounds
+                                         CLLLExps          // body code
+                                     ")"  [seqstrict(1,2,4)]
+ // --------------------------------------------------------
     rule #forrange(@tlll(%num, LOC:Int, _), @tlll(_, STARTCODE, _), ROUNDS, BODYCODE:LLLExps)
         => $repeat(LOC, STARTCODE, ROUNDS, $%seq(BODYCODE)),.LLLExps
 
@@ -1211,6 +1211,8 @@ module VIPER-LLL
                                     RETURNTYPE))
       requires isListType(T)
 
+    // TODO: support return Tuple
+
 
     syntax CLLLExps  ::= "#returnBase"    "(" TypedLLLExp "," Type ")"
     syntax CLLLExps  ::= "#returnBaseAux" "(" TypedLLLExp "," Type ")"
@@ -1270,7 +1272,7 @@ module VIPER-LLL
                                                Int          ","
                                                Type
                                            ")"      [strict(1)]
- // --------------------------------------------------------------------------
+ // -----------------------------------------------------------
     rule #returnListT(@tlll(T, LOC, LOCATTR), TCODE, RETURNTYPE)
         => #returnListTAux(#mkSetter(@tlll(T, LOC, LOCATTR), TCODE),
                            LOC, RETURNTYPE)
@@ -1341,22 +1343,22 @@ module VIPER-LLL
     // 1 topic
     rule #logAux(EID, .Exprs, .EventParams, (TARG1 .Exprs), (TEPARAM1 .EventParams), DARGS, DEPARAMS)
         => #log2(EID,
-                 #packLoggingTopic(#compileExpr(TARG1), TEPARAM1),
+                 #packLoggingTopic(TARG1, TEPARAM1),
                  #packLoggingData(DARGS, DEPARAMS))
 
     // 2 topics
     rule #logAux(EID, .Exprs, .EventParams, (TARG1 TARG2 .Exprs), (TEPARAM1 TEPARAM2 .EventParams), DARGS, DEPARAMS)
         => #log3(EID,
-                 #packLoggingTopic(#compileExpr(TARG1), TEPARAM1),
-                 #packLoggingTopic(#compileExpr(TARG2), TEPARAM2),
+                 #packLoggingTopic(TARG1, TEPARAM1),
+                 #packLoggingTopic(TARG2, TEPARAM2),
                  #packLoggingData(DARGS, DEPARAMS))
 
     // 3 topics
     rule #logAux(EID, .Exprs, .EventParams, (TARG1 TARG2 TARG3 .Exprs), (TEPARAM1 TEPARAM2 TEPARAM3 .EventParams), DARGS, DEPARAMS)
         => #log4(EID,
-                 #packLoggingTopic(#compileExpr(TARG1), TEPARAM1),
-                 #packLoggingTopic(#compileExpr(TARG2), TEPARAM2),
-                 #packLoggintTopic(#compileExpr(TARG3), TEPARAM3),
+                 #packLoggingTopic(TARG1, TEPARAM1),
+                 #packLoggingTopic(TARG2, TEPARAM2),
+                 #packLoggingTopic(TARG3, TEPARAM3),
                  #packLoggingData(DARGS, DEPARAMS))
 
 
@@ -1432,11 +1434,20 @@ module VIPER-LLL
                                                   Type
                                               ")"      [strict(1)]
  // --------------------------------------------------------------
+    // Base Type
     rule #packArgBy32(PLACEHOLDER, EXPR, T)
         => #packArgBy32Base(PLACEHOLDER, #compileExpr(EXPR), T)
       requires isBaseType(T)
 
-    // TODO: Add support for ByteArray
+    // String Literal
+    rule #packArgBy32(PLACEHOLDER, STR:String, %bytesT(L))
+        => #ifThen(lengthString(STR) >Int L,
+                   #exception("Data input bytes are too big."))
+        ~> #ifThen(lengthString(STR) >Int 32,
+                   #exception("Can only log a maximum of 32 bytes at a time."))
+        ~> #packArgBy32StringLiteral(PLACEHOLDER, #string2Bytes(STR))
+
+    // TODO: Waiting for fix for the Byte Array Variable.
 
     // TODO: Add support for List
 
@@ -1454,10 +1465,49 @@ module VIPER-LLL
     rule #packArgBy32BaseAux(LOC, @tlll(_, CODE, _)) => @argby32($mstore(LOC, CODE),.LLLExps, 32)
 
 
-    syntax CTypedLLLExp  ::= "#packLoggingTopic" "(" CTypedLLLExp "," EventParams ")"  [strict(1)]
- // ----------------------------------------------------------------------------------------------
-    rule #packLoggingTopic(ARGCODE, %eparam(_, T, _)) => #baseTypeConvert(ARGCODE, T)
+    syntax CPackedArgBy32  ::= "#packArgBy32StringLiteral" "(" TypedLLLExp ","
+                                                               CBytes      ")"  [strict(2)]
+ // ---------------------------------------------------------------------------------------
+    rule #packArgBy32StringLiteral(@tlll(_, LOC, _), BS)
+        => @argby32($mstore(LOC, #bytes2Int(BS, 32, 0)), 32)
+
+
+    syntax CTypedLLLExp  ::= "#packLoggingTopic" "(" Expr "," EventParams ")"
+ // -------------------------------------------------------------------------
+    // Base Type
+    rule #packLoggingTopic(ARG, %eparam(_, T, _)) => #packLoggingTopicBase(#compileExpr(ARG), T)
       requires isBaseType(T)
+
+    // String Literal
+    rule #packLoggingTopic(ARG, %eparam(_, %bytesT(L), _))
+        => #ifThen(lengthString(ARG) >Int L,
+                   #exception("Topic input bytes are to big."))
+        ~> #packLoggingTopicStringLiteral(#string2Bytes(ARG), %bytesT(L))
+      requires isString(ARG)
+
+    // Byte Array Variable
+    rule #packLoggingTopic(ARG, %eparam(_, %bytesT(L), _))
+        => #packLoggingTopicBytesTVar(#compileExpr(ARG), %bytesT(L))
+      requires notBool isString(ARG)
+
+
+
+    syntax CTypedLLLExp  ::= "#packLoggingTopicBase" "(" CTypedLLLExp "," Type ")"  [strict(1)]
+ // -------------------------------------------------------------------------------------------
+    rule #packLoggingTopicBase(ARGCODE, T) => #baseTypeConvert(ARGCODE, T)
+
+
+    syntax CTypedLLLExp  ::= "#packLoggingTopicStringLiteral" "(" CBytes "," Type ")"  [strict(1)]
+ // ----------------------------------------------------------------------------------------------
+    rule #packLoggingTopicStringLiteral(BS, %bytesT(L))
+        => #ifThen(#numOfBytes(BS) >Int 32,
+                   #exception("Can only log a maximum of 32 bytes at a time."))
+        ~> @tlll(%bytesT(L), #bytes2Int(BS, 32, 0), @none)
+
+
+    syntax CTypedLLLExp  ::= "#packLoggingTopicBytesTVar" "(" CTypedLLLExp "," Type ")"  [strict(1)]
+ // ------------------------------------------------------------------------------------------------
+    // TODO: There is something wrong with Byte array variable
 
 
 // Send
@@ -2749,6 +2799,10 @@ module VIPER-LLL
     rule #drop(N, (B : BS)) => #drop(N -Int 1, BS)    requires N >Int 0
 
 
+    syntax TypedLLLExp  ::= "#byteArray2Num"  "(" TypedLLLExp "," Type "," Int ")"
+ // ------------------------------------------------------------------------------
+
+
 // Compute signatures
 // ==================
 
@@ -2988,6 +3042,8 @@ module VIPER-LLL
     rule #lookupOrNewVar(%svar(NAME), _) => #lookupVar(%svar(NAME))
 
     rule #lookupOrNewVar(%subscript(V, EXPR), _) => #lookupVar(%subscript(V, EXPR))
+
+    rule #lookupOrNewVar(%attribute(V, FILEDNAME), _) => #lookupVar(%attribute(V, FILEDNAME))
 
 
     syntax CTypedLLLExp  ::= "#newLoopVar" "(" Id "," Type ")"
