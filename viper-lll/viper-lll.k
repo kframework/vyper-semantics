@@ -2425,25 +2425,34 @@ module VIPER-LLL
 // ============
 
 
-    syntax Int  ::= "#numOfExprs" "(" Exprs ")"  [function]
- // -------------------------------------------------------
-    rule #numOfExprs(.Exprs) => 0
+    syntax Int  ::= "#numOfExprs"    "(" Exprs ")"          [function]
+    syntax Int  ::= "#numOfExprsAux" "(" Exprs "," Int ")"  [function]
+ // ------------------------------------------------------------------
+    rule #numOfExprs(EXPRS) => #numOfExprsAux(EXPRS, 0)
 
-    rule #numOfExprs(EXPR EXPRS) => 1 +Int #numOfExprs(EXPRS)
+    rule #numOfExprsAux(.Exprs, NUM) => NUM
 
-
-    syntax Int  ::= "#numOfParams" "(" Params ")"  [function]
- // ---------------------------------------------------------
-    rule #numOfParams(.Params) => 0
-
-    rule #numOfParams(PARAM PARAMS) => 1 +Int #numOfParams(PARAMS)
+    rule #numOfExprsAux((EXPR EXPRS), NUM) => #numOfExprsAux(EXPRS, NUM +Int 1)
 
 
-    syntax Int  ::= "#numOfEventParams" "(" EventParams ")"  [function]
- // -------------------------------------------------------------------
-    rule #numOfEventParams(.EventParams) => 0
+    syntax Int  ::= "#numOfParams"    "(" Params ")"          [function]
+    syntax Int  ::= "#numOfParamsAux" "(" Params "," Int ")"  [function]
+ // --------------------------------------------------------------------
+    rule #numOfParams(PARAMS) => #numOfParamsAux(PARAMS, 0)
 
-    rule #numOfEventParams(EPARAM EPARAMS) => 1 +Int #numOfEventParams(EPARAMS)
+    rule #numOfParamsAux(.Params, NUM) => NUM
+
+    rule #numOfParamsAux((PARAM PARAMS), NUM) => #numOfParamsAux(PARAMS, NUM +Int 1)
+
+
+    syntax Int  ::= "#numOfEventParams"    "(" EventParams ")"          [function]
+    syntax Int  ::= "#numOfEventParamsAux" "(" EventParams "," Int ")"  [function]
+ // ------------------------------------------------------------------------------
+    rule #numOfEventParams(EPARAMS) => #numOfEventParamsAux(EPARAMS, 0)
+
+    rule #numOfEventParamsAux(.EventParams, NUM) => NUM
+
+    rule #numOfEventParamsAux((EPARAM EPARAMS), NUM) => #numOfEventParamsAux(EPARAMS, NUM +Int 1)
 
 
     syntax Int  ::= "#numOfBytes"    "(" Bytes ")"          [function]
@@ -2451,23 +2460,29 @@ module VIPER-LLL
  // -------------------------------------------------------------------
     rule #numOfBytes(BS) => #numOfBytesAux(BS, 0)
 
-    rule #numOfBytesAux(.Bytes, SIZE) => SIZE
+    rule #numOfBytesAux(.Bytes, NUM) => NUM
 
-    rule #numOfBytesAux((B : BS), SIZE) => #numOfBytesAux(BS, SIZE +Int 1)
-
-
-    syntax Int  ::= "#numOfTypedLLLExps" "(" TypedLLLExps ")"  [function]
- // ---------------------------------------------------------------------
-    rule #numOfTypedLLLExps(.TypedLLLExps) => 0
-
-    rule #numOfTypedLLLExps(TLLL TLLLS) => 1 +Int #numOfTypedLLLExps(TLLLS)
+    rule #numOfBytesAux((B : BS), NUM) => #numOfBytesAux(BS, NUM +Int 1)
 
 
-    syntax Int  ::= "#numOfAnnVars" "(" AnnVars ")"  [function]
- // -----------------------------------------------------------
-    rule #numOfAnnVars(.AnnVars) => 0
+    syntax Int  ::= "#numOfTypedLLLExps"    "(" TypedLLLExps ")"          [function]
+    syntax Int  ::= "#numOfTypedLLLExpsAux" "(" TypedLLLExps "," Int ")"  [function]
+ // --------------------------------------------------------------------------------
+    rule #numOfTypedLLLExps(TLLLS) => numOfTypedLLLExpsAux(TLLLS, 0)
 
-    rule #numOfAnnVars(ANNVAR ANNVARS) => 1 +Int #numOfAnnVars(ANNVARS)
+    rule #numOfTypedLLLExpsAux(.TypedLLLExps, NUM) => NUM
+
+    rule #numOfTypedLLLExpsAux((TLLL TLLLS), NUM) => #numOfTypedLLLExpsAux(TLLLS, NUM +Int 1)
+
+
+    syntax Int  ::= "#numOfAnnVars"    "(" AnnVars ")"          [function]
+    syntax Int  ::= "#numOfAnnVarsAux" "(" AnnVars "," Int ")"  [function]
+ // ----------------------------------------------------------------------
+    rule #numOfAnnVars(ANNVARS) => #numOfAnnVarsAux(ANNVARS, 0)
+
+    rule #numOfAnnVarsAux(.AnnVars, NUM) => NUM
+
+    rule #numOfAnnVarsAux((ANNVAR ANNVARS), NUM) => #numOfAnnVarsAux(ANNVARS, NUM +Int 1)
 
 
 // Type Related

@@ -65,9 +65,9 @@ module VIPER-LLL-UTILS
     syntax Int  ::= "#ceil32" "(" Int ")"     [function]
  // ----------------------------------------------------
     rule #ceil32(NUM) => NUM
-      requires (NUM %Int 32) ==Int 0
+      requires (NUM modInt 32) ==Int 0
 
-    rule #ceil32(NUM) => NUM +Int 32 -Int (NUM %Int 32)
-      requires (NUM %Int 32) =/=Int 0
+    rule #ceil32(NUM) => NUM +Int 32 -Int (NUM modInt 32)
+      requires (NUM modInt 32) =/=Int 0
 
 endmodule
