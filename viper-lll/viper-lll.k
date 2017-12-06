@@ -198,7 +198,8 @@ module VIPER-LLL
 
     rule #checkEventParams(%eparam(NAME, T, true) EPARAMS, TOPICNUM, NAMES)
         => #checkEventParamType(T)
-        ~> #checkNameDuplicateWithParams(NAME, NAMES)
+        ~> #ifThen(#inIds(NAME, NAMES),
+                   #exception("Duplicate function argument name: " +String Id2String(NAME)))
         ~> #checkEventParams(EPARAMS, TOPICNUM +Int 1, NAMES ++Id (NAME .Ids))
       requires TOPICNUM <Int 3
 
@@ -208,7 +209,8 @@ module VIPER-LLL
 
     rule #checkEventParams(%eparam(NAME, T, false) EPARAMS, TOPICNUM, NAMES)
         => #checkEventParamType(T)
-        ~> #checkNameDuplicateWithParams(NAME, NAMES)
+        ~> #ifThen(#inIds(NAME, NAMES),
+                   #exception("Duplicate function argument name: " +String Id2String(NAME)))
         ~> #checkEventParams(EPARAMS, TOPICNUM, NAMES ++Id (NAME .Ids))
 
     rule #checkEventParamType(%bytesT(L)) => .
@@ -219,16 +221,6 @@ module VIPER-LLL
 
     rule #checkEventParamType(T) => .
       requires notBool isByteArrayType(T)
-
-
-    syntax KItem  ::= "#checkNameDuplicateWithParams" "(" Id "," Ids ")"
- // --------------------------------------------------------------------
-    rule #checkNameDuplicateWithParams(NAME, NAMES)
-        => #exception("Duplicate function argument name: " +String Id2String(NAME))
-      requires #inIds(NAME, NAMES)
-
-    rule #checkNameDuplicateWithParams(NAME, NAMES) => .
-      requires notBool #inIds(NAME, NAMES)
 
 
 // Process Globals
@@ -321,19 +313,22 @@ module VIPER-LLL
 
 
     syntax KItem  ::= "#checkFuncParams"       "(" Params "," Ids ")"
-    syntax KItem  ::= "#checkNameDuplicateWithGlobals" "(" Id ")"
  // -----------------------------------------------------------------
     rule #checkFuncParams(.Params, NAMES) => .
 
     rule #checkFuncParams(%param(NAME, _) PARAMS, NAMES)
-        => #checkNameDuplicateWithParams(NAME, NAMES)
-        ~> #checkNameDuplicateWithGlobals(NAME)
+        => #ifThen(#inIds(NAME, NAMES),
+                   #exception("Duplicate function argument name: " +String Id2String(NAME)))
+        ~> #checkNameIsInGlobals(NAME)
 
-    rule <k> #checkNameDuplicateWithGlobals(NAME) => . ... </k>
+
+    syntax KItem  ::= "#checkNameIsInGlobals" "(" Id ")"
+ // ----------------------------------------------------
+    rule <k> #checkNameIsInGlobals(NAME) => . ... </k>
          <global> GLOBALS </global>
       requires notBool %svar(NAME) in_keys(GLOBALS)
 
-    rule <k> #checkNameDuplicateWithGlobals(NAME)
+    rule <k> #checkNameIsInGlobals(NAME)
             => #exception("Variable name duplicated between function arguments and globals: +String Id2String(NAME)")
          ... </k>
          <global> GLOBALS </global>
@@ -862,10 +857,9 @@ module VIPER-LLL
                                            @tlll(%structT(LANNVARS), $_L, @locattr(LTARGET, LMUTABLE)),
                                            @tlll(%structT(RANNVARS), RCODE, REXPRATTR)))
 
-    // TODO: support Struct Literal
-    /*rule #mkSetterStructTAux(LTCODE, LTTOKENCODE, @tlll(RT, RCODE, REXPRATTR))
-        => #mkSetterStructTLiteral(LTCODE, LTTOKENCODE, @tlll(RT, RCODE, REXPRATTR), .LLLExps)
-      requires isMultiLLLExp(RCODE)*/
+    rule #mkSetterStructTAux(@tlll(%structT(LANNVARS), LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, REXPRATTR))
+        => #mkSetterStructTLiteral(LANNVARS, LCODE, LTTOKENCODE, RCODE, .LLLExps)
+      requires isMultiLLLExp(RCODE)
 
     rule #mkSetterStructTAux(@tlll(%structT(LANNVARS), LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
         => #mkSetterStructTVar(LANNVARS, LCODE, LTTOKENCODE, RCODE,
@@ -892,12 +886,29 @@ module VIPER-LLL
         => #exception("Keys don't match for structs.")
 
 
-    syntax CLLLExps ::= "#mkSetterStructTVar" "(" AnnVars     ","  // left struct fields
-                                                  LLLExp      ","  // left code
-                                                  TypedLLLExp ","  // left token
-                                                  LLLExp      ","  // right code
-                                                  TypedLLLExp ","  // right token
-                                                  LLLExps     ")"  // result code
+    syntax CLLLExps  ::= "#mkSetterStructTLiteral" "(" AnnVars     ","  // left struct fields
+                                                       LLLExp      ","  // left code
+                                                       TypedLLLExp ","  // left token
+                                                       LLLExp      ","  // right code
+                                                       LLLExps     ")"  // result code
+ // ------------------------------------------------------------------
+    rule #mkSetterStructTLiteral(.AnnVars, LCODE, _, _, RESULTCODE)
+        => $with($_L, LCODE, $%seq(RESULTCODE)), .LLLExps
+
+    rule #mkSetterStructTLiteral(%annvar(NAME, T) ANNVARS, LCODE, LTTOKENCODE, $multi(TEXPR TEXPRS), RESULTCODE)
+        => #mkSetter(#addVarOffset(LTTOKENCODE, @tlll(%void, NAME, @none)), TEXPR)
+        ~> #mkSetterStructTLiteral(ANNVARS, LCODE, LTTOKENCODE, $multi(TEXPRS), RESULTCODE)
+
+    rule CODE:LLLExps ~> #mkSetterStructTLiteral(ANNVARS, LCODE, LTTOKENCODE, RCODE, RESULTCODE)
+        => #mkSetterStructTLiteral(ANNVARS, LCODE, LTTOKENCODE, RCODE, RESULTCODE ++LLL CODE)
+
+
+    syntax CLLLExps  ::= "#mkSetterStructTVar" "(" AnnVars     ","  // left struct fields
+                                                   LLLExp      ","  // left code
+                                                   TypedLLLExp ","  // left token
+                                                   LLLExp      ","  // right code
+                                                   TypedLLLExp ","  // right token
+                                                   LLLExps     ")"  // result code
  // -------------------------------------------------------------
     rule #mkSetterStructTVar(.AnnVars, LCODE, _, RCODE, _, RESULTCODE)
         => $with($_L, LCODE, $with($_R, RCODE, $%seq(RESULTCODE))),.LLLExps
@@ -1584,7 +1595,7 @@ module VIPER-LLL
                          #exception("Cannot read 0x value with length:" +String Int2String(lengthString(STR)))))
 
 
-// String Literals
+// String Literal
 // ===============
 
 
@@ -1653,11 +1664,11 @@ module VIPER-LLL
     rule #compileExpr(V) => #lookupVar(V)
 
 
-// List
-// ====
+// List Literal
+// =============
 
 
-    rule #compileExpr(%list(EXPRS)) => #listLiterals(EXPRS)
+    rule #compileExpr(%list(EXPRS)) => #listLiteral(EXPRS)
       requires #numOfExprs(EXPRS) >Int 0
 
     rule #compileExpr(%list(EXPRS)) => #exception("List must have elements")
@@ -1670,37 +1681,68 @@ module VIPER-LLL
  // ------------------------------------------------
 
 
-    syntax CTypedLLLExp  ::= "#listLiterals" "(" Exprs ")"
+    syntax CTypedLLLExp  ::= "#listLiteral" "(" Exprs ")"
  // ------------------------------------------------------
-    rule #listLiterals(EXPR EXPRS) => #processListLiteralsFirstElem(EXPR)
-                                   ~> #processListLiteralsRestElems(EXPRS, .TypedLLLExps)
+    rule #listLiteral(EXPR EXPRS) => #processListLiteralFirstElem(EXPR)
+                                  ~> #processListLiteralRestElems(EXPRS, .TypedLLLExps)
 
 
-    syntax CTypedLLLExp  ::= "#processListLiteralsFirstElem" "(" Expr ")"
+    syntax CTypedLLLExp  ::= "#processListLiteralFirstElem" "(" Expr ")"
  // ----------------------------------------------------------------------
-    rule #processListLiteralsFirstElem(EXPR) => #compileExpr(EXPR)
+    rule #processListLiteralFirstElem(EXPR) => #compileExpr(EXPR)
 
 
-    syntax CTypedLLLExp  ::= "#processListLiteralsRestElems"    "(" Exprs "," TypedLLLExps ")"
-    syntax CTypedLLLExp  ::= "#processListLiteralsRestElemsAux" "(" Type "," Int "," Exprs "," TypedLLLExps ")"
+    syntax CTypedLLLExp  ::= "#processListLiteralRestElems"    "(" Exprs "," TypedLLLExps ")"
+    syntax CTypedLLLExp  ::= "#processListLiteralRestElemsAux" "(" Type "," Int "," Exprs "," TypedLLLExps ")"
  // -----------------------------------------------------------------------------------------------------------
-    rule @tlll(T, CODE, EXPRATTR) ~> #processListLiteralsRestElems(EXPRS, .TypedLLLExps)
-        => #processListLiteralsRestElemsAux(T, 1, EXPRS, @tlll(T, CODE, EXPRATTR) .TypedLLLExps)
+    rule @tlll(T, CODE, EXPRATTR) ~> #processListLiteralRestElems(EXPRS, .TypedLLLExps)
+        => #processListLiteralRestElemsAux(T, 1, EXPRS, @tlll(T, CODE, EXPRATTR) .TypedLLLExps)
 
-    rule #processListLiteralsRestElemsAux(T, LEN, .Exprs, RESULTCODE)
+    rule #processListLiteralRestElemsAux(T, LEN, .Exprs, RESULTCODE)
         => @tlll(%listT(T, LEN), $multi(RESULTCODE), @none)
 
-    rule #processListLiteralsRestElemsAux(T, LEN, (EXPR EXPRS), RESULTCODE)
-        => #compileExpr(EXPR) ~> #processListLiteralsRestElemsAux(T, LEN, EXPRS, RESULTCODE)
+    rule #processListLiteralRestElemsAux(T, LEN, (EXPR EXPRS), RESULTCODE)
+        => #compileExpr(EXPR) ~> #processListLiteralRestElemsAux(T, LEN, EXPRS, RESULTCODE)
 
-    rule @tlll(T, CODE, EXPRATTR) ~> #processListLiteralsRestElemsAux(T, LEN, EXPRS, RESULTCODE)
-        => #processListLiteralsRestElemsAux(T, LEN +Int 1, EXPRS,
-                                            RESULTCODE ++TLLL (@tlll(T, CODE, EXPRATTR) .TypedLLLExps))
+    rule @tlll(T, CODE, EXPRATTR) ~> #processListLiteralRestElemsAux(T, LEN, EXPRS, RESULTCODE)
+        => #processListLiteralRestElemsAux(T, LEN +Int 1, EXPRS,
+                                           RESULTCODE ++TLLL (@tlll(T, CODE, EXPRATTR) .TypedLLLExps))
 
-    rule @tlll(T, CODE, EXPRATTR) ~> #processListLiteralsRestElemsAux(ELEMT, LEN, EXPRS, RESULTCODE)
-        => #processListLiteralsRestElemsAux(%mixedT, LEN +Int 1, EXPRS,
-                                            RESULTCODE ++TLLL (@tlll(T, CODE, EXPRATTR) .TypedLLLExps))
+    rule @tlll(T, CODE, EXPRATTR) ~> #processListLiteralRestElemsAux(ELEMT, LEN, EXPRS, RESULTCODE)
+        => #processListLiteralRestElemsAux(%mixedT, LEN +Int 1, EXPRS,
+                                           RESULTCODE ++TLLL (@tlll(T, CODE, EXPRATTR) .TypedLLLExps))
       requires T =/=K ELEMT
+
+
+// Struct Literal
+// ===============
+
+
+    rule #compileExpr(%struct(ITEMS)) => #structLiteral(ITEMS, .Ids, .AnnVars, .TypedLLLExps)
+
+
+    syntax CTypedLLLExp  ::= "#structLiteral" "(" StructItems  ","
+                                                  Ids          ","  // names of the fields (for name duplication check)
+                                                  AnnVars      ","  // struct fields (for inferring struct type)
+                                                  TypedLLLExps ")"  // result code
+
+    syntax KItem  ::= "#nameWithValue" "(" Id "," CTypedLLLExp ")"    [strict(2)]
+ // -----------------------------------------------------------------------------
+    rule #structLiteral(.StructItems, NAMES, ANNVARS, RESULTCODE)
+        => @tlll(%structT(ANNVARS), $multi(RESULTCODE), @none)
+
+    rule #structLiteral(%item(NAME, EXPR) ITEMS, NAMES, ANNVARS, RESULTCODE)
+        => #ifThen(notBool #isVarNameValid(NAME),
+                   #exception("Invalid member variable for struct."))
+        ~> #ifThen(#inIds(NAME, NAMES),
+                   #exception("Member variable duplicated: " +String Id2String(NAME)))
+        ~> #nameWithValue(NAME, #compileExpr(EXPR))
+        ~> #structLiteral(ITEMS, NAMES, ANNVARS, RESULTCODE)
+
+    rule #nameWithValue(NAME, @tlll(T, CODE, EXPRATTR)) ~> #structLiteral(ITEMS, NAMES, ANNVARS, RESULTCODE)
+        => #structLiteral(ITEMS, NAMES ++Id (NAME .Ids),
+                          ANNVARS ++Annvar (%annvar(NAME, T) .AnnVars),
+                          RESULTCODE ++TLLL (@tlll(T, CODE, EXPRATTR) .TypedLLLExps))
 
 
 // Arithmetic
@@ -2414,6 +2456,20 @@ module VIPER-LLL
     rule #numOfBytesAux((B : BS), SIZE) => #numOfBytesAux(BS, SIZE +Int 1)
 
 
+    syntax Int  ::= "#numOfTypedLLLExps" "(" TypedLLLExps ")"  [function]
+ // ---------------------------------------------------------------------
+    rule #numOfTypedLLLExps(.TypedLLLExps) => 0
+
+    rule #numOfTypedLLLExps(TLLL TLLLS) => 1 +Int #numOfTypedLLLExps(TLLLS)
+
+
+    syntax Int  ::= "#numOfAnnVars" "(" AnnVars ")"  [function]
+ // -----------------------------------------------------------
+    rule #numOfAnnVars(.AnnVars) => 0
+
+    rule #numOfAnnVars(ANNVAR ANNVARS) => 1 +Int #numOfAnnVars(ANNVARS)
+
+
 // Type Related
 // ============
 
@@ -2583,7 +2639,7 @@ module VIPER-LLL
                        #parseMapType(#parseType(VT, false), #parseType(KT, false)),
                        #exception("Mapping keys must be base or bytes types"))
 
-    rule #parseType(%structT(ANNVARS), INMEM) => #parseStructType(ANNVARS, INMEM, .AnnVars)
+    rule #parseType(%structT(ANNVARS), INMEM) => #parseStructType(ANNVARS, INMEM, .Ids, .AnnVars)
 
     // TODO: support Tuple
 
@@ -2611,19 +2667,21 @@ module VIPER-LLL
     rule #parseMapType(VT, KT) => %mapT(VT, KT)
 
 
-    syntax CType  ::= "#parseStructType" "(" AnnVars "," Bool "," AnnVars ")"
+    syntax CType  ::= "#parseStructType" "(" AnnVars "," Bool "," Ids "," AnnVars ")"
     syntax KItem  ::= "#nameWithType" "(" Id "," CType ")"    [strict(2)]
- // -------------------------------------------------------------------------
-    rule #parseStructType(.AnnVars, _, ANNVARS) => %structT(ANNVARS)
+ // ---------------------------------------------------------------------------------
+    rule #parseStructType(.AnnVars, _, _, ANNVARS) => %structT(ANNVARS)
 
-    rule #parseStructType(%annvar(NAME, T) ANNVARS, INMEM, RESULT)
-        => #ifThenElse(#isVarNameValid(NAME),
-                       #nameWithType(NAME, #parseType(T, INMEM)),
-                       #exception("Invalid member variable for struct."))
-        ~> #parseStructType(ANNVARS, INMEM, RESULT)
+    rule #parseStructType(%annvar(NAME, T) ANNVARS, INMEM, NAMES, RESULT)
+        => #ifThen(notBool #isVarNameValid(NAME),
+                   #exception("Invalid member variable for struct."))
+        ~> #ifThen(#inIds(NAME, NAMES),
+                   #exception("Member variable duplicated: " +String Id2String(NAME)))
+        ~> #nameWithType(NAME, #parseType(T, INMEM))
+        ~> #parseStructType(ANNVARS, INMEM, NAMES, RESULT)
 
-    rule #nameWithType(NAME, T:Type) ~> #parseStructType(ANNVARS, INMEM, RESULT)
-        => #parseStructType(ANNVARS, INMEM, RESULT ++Annvar (%annvar(NAME, T) .AnnVars))
+    rule #nameWithType(NAME, T:Type) ~> #parseStructType(ANNVARS, INMEM, NAMES, RESULT)
+        => #parseStructType(ANNVARS, INMEM, NAMES ++Id (NAME .Ids), RESULT ++Annvar (%annvar(NAME, T) .AnnVars))
 
 // Units
 // =====

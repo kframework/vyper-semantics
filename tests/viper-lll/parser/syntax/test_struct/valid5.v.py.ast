@@ -1,0 +1,6 @@
+%pgm(,
+  %svdecl(mom, %structT(%annvar(a, %listT(%structT(%annvar(c, %num)), 3)) %annvar(b, %num)), %private)
+  %svdecl(nom, %listT(%structT(%annvar(c, %num)), 3), %private),
+  %fdecl(%@public, foo, , %void,
+    %assign(%svar(mom), %struct(%item(a, %svar(nom)) %item(b, 5))))
+)
