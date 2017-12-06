@@ -138,14 +138,13 @@ def parseType(node):
 #   =>
 #   %eparam(_from, %address, true)
 def parseEventParam(key, value):  # value is Call
-    rez = "%eparam(" + key.id + ", "
     if type(value) == ast.Call and value.func.id == "indexed":
-        rez += parseType(value.args[0]) + ", true)"
-    elif type(value) == ast.Name:
-        rez += parseType(value) + ", false)"
+        indexed = "true"
+        typeNode = value.args[0]
     else:
-        raise ParserException("Unsupported EventParam format: " + str(key) + " -> " + str(value))
-    return rez
+        indexed = "false"
+        typeNode = value
+    return "%eparam({}, {}, {})".format(key.id, parseType(typeNode), indexed)
 
 
 def parseEventParams(node: ast.Dict):
