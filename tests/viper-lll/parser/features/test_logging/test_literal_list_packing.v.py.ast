@@ -1,0 +1,5 @@
+%pgm(
+  %event(Bar, %eparam(_value, %listT(%num, 4), false)), ,
+  %fdecl(%@public, foo, , %void,
+    %log(Bar, %list(1 2 3 4)))
+)

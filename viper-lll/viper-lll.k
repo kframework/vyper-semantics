@@ -359,7 +359,7 @@ module VIPER-LLL
                             DEFS ++Def #mkPublicGetter(Id2String(NAME), .Params, T, %svar(NAME), 0))
 
     rule #mkPublicGetters(%svdecl(_, _, %private) GS, DEFS)
-           => #mkPublicGetters(GS, DEFS)
+        => #mkPublicGetters(GS, DEFS)
 
     rule #mkPublicGetter(NAME, PARAMS, T, VAR, DEPTH) => #mkPublicGetterBase(NAME, PARAMS, T, VAR, DEPTH)
       requires isBaseType(T)
@@ -367,8 +367,8 @@ module VIPER-LLL
     rule #mkPublicGetter(NAME, PARAMS, %bytesT(L), VAR, DEPTH)
         => #mkPublicGetterByteArray(NAME, PARAMS, %bytesT(L), VAR, DEPTH)
 
-    rule #mkPublicGetter(NAME, PARAMS, %listT(T, L), VAR, DEPTH)
-        => #mkPublicGetterListT(NAME, PARAMS, %listT(T, L), VAR, DEPTH)
+    rule #mkPublicGetter(NAME, PARAMS, %listT(SUBTYPE, L), VAR, DEPTH)
+        => #mkPublicGetterListT(NAME, PARAMS, %listT(SUBTYPE, L), VAR, DEPTH)
 
     rule #mkPublicGetter(NAME, PARAMS, %mapT(VT, KT), VAR, DEPTH)
         => #mkPublicGetterMapT(NAME, PARAMS, %mapT(VT, KT), VAR, DEPTH)
@@ -397,10 +397,10 @@ module VIPER-LLL
                   %bytesT(L),
                   %return(VAR) .Stmts) .Defs
 
-    rule #mkPublicGetterListT(NAME, PARAMS, %listT(T, L), VAR, DEPTH)
+    rule #mkPublicGetterListT(NAME, PARAMS, %listT(SUBTYPE, L), VAR, DEPTH)
         => #mkPublicGetter(NAME,
                            PARAMS ++Param (%param(String2Id("arg" +String Int2String(DEPTH)), %num) .Params),
-                           T,
+                           SUBTYPE,
                            %subscript(VAR, %var(String2Id("arg" +String Int2String(DEPTH)))),
                            DEPTH +Int 1)
 
@@ -583,7 +583,7 @@ module VIPER-LLL
                  $calldataload($add(4, #mkDataDecl(DPOS, ISINIT))),
                  L)),.LLLExps),.LLLExps
 
-    rule #mkClamper(%listT(T, N), DPOS, MPOS, ISINIT) => $%seq(#mkClamperListT(N, T, DPOS, MPOS, ISINIT)),.LLLExps
+    rule #mkClamper(%listT(SUBTYPE, N), DPOS, MPOS, ISINIT) => $%seq(#mkClamperListT(N, SUBTYPE, DPOS, MPOS, ISINIT)),.LLLExps
 
     rule #mkClamperListT(1, T, DPOS, MPOS, ISINIT) => #mkClamper(T, DPOS, MPOS, ISINIT)
 
@@ -804,12 +804,12 @@ module VIPER-LLL
                                                      LLLExp       ","  // right code
                                                      LLLExps      ")"  // result code
  // -------------------------------------------------------------------------------
-    rule #mkSetterListTLiteral(%listT(T, N), LCODE, LTTOKENCODE, INDEX, $multi(TEXPR TEXPRS), RESULTCODE)
+    rule #mkSetterListTLiteral(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, $multi(TEXPR TEXPRS), RESULTCODE)
         => #mkSetter(#addVarOffset(LTTOKENCODE, @tlll(%num, INDEX, @none)), TEXPR)
-        ~> #mkSetterListTLiteral(%listT(T, N), LCODE, LTTOKENCODE, INDEX, $multi(TEXPRS), RESULTCODE)
+        ~> #mkSetterListTLiteral(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, $multi(TEXPRS), RESULTCODE)
       requires INDEX <Int N
 
-    rule #mkSetterListTLiteral(%listT(T, N), LCODE, _, INDEX, _, RESULTCODE)
+    rule #mkSetterListTLiteral(%listT(SUBTYPE, N), LCODE, _, INDEX, _, RESULTCODE)
         => $with($_L, LCODE, $%seq(RESULTCODE)),.LLLExps
       requires INDEX ==Int N
 
@@ -825,13 +825,13 @@ module VIPER-LLL
                                                  TypedLLLExp ","  // right token
                                                  LLLExps     ")"  // result code
   // --------------------------------------------------------------------------------
-     rule #mkSetterListTVar(%listT(T, N), LCODE, LTTOKENCODE, INDEX, RCODE, RTTOKENCODE, RESULTCODE)
+     rule #mkSetterListTVar(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, RCODE, RTTOKENCODE, RESULTCODE)
          => #mkSetter(#addVarOffset(LTTOKENCODE, @tlll(%num, INDEX, @none)),
                       #addVarOffset(RTTOKENCODE, @tlll(%num, INDEX, @none)))
-         ~> #mkSetterListTVar(%listT(T, N), LCODE, LTTOKENCODE, INDEX, RCODE, RTTOKENCODE, RESULTCODE)
+         ~> #mkSetterListTVar(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, RCODE, RTTOKENCODE, RESULTCODE)
        requires INDEX <Int N
 
-     rule #mkSetterListTVar(%listT(T, N), LCODE, _, INDEX, RCODE, _, RESULTCODE)
+     rule #mkSetterListTVar(%listT(SUBTYPE, N), LCODE, _, INDEX, RCODE, _, RESULTCODE)
          => $with($_L, LCODE, $with($_R, RCODE, $%seq(RESULTCODE))),.LLLExps
        requires INDEX ==Int N
 
@@ -1057,31 +1057,31 @@ module VIPER-LLL
 
     syntax CLLLExps  ::= "#forlistAux" "(" CTypedLLLExp ","  // iter
                                            CTypedLLLExp ","  // index for iter
-                                           Expr         ","  // expr
+                                           Expr         ","  // list expr
                                            TypedLLLExp  ","  // list
                                            Stmts
                                        ")"  [seqstrict(1, 2)]
  // ---------------------------------------------------------
-    rule #forlist(ITER, EXPR, @tlll(%listT(T, N), LOC, LOCATTR), STMTS)
-        => #ifThen(notBool(isBaseType(T)),
+    rule #forlist(ITER, EXPR, @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR), STMTS)
+        => #ifThen(notBool(isBaseType(SUBTYPE)),
                    #exception("For loops allowed only on basetype lists."))
-        ~> #forlistAux(#newLoopVar(ITER, T),
+        ~> #forlistAux(#newLoopVar(ITER, SUBTYPE),
                        #newVar(String2Id("_index_for_" +String Id2String(ITER)), %num),
                        EXPR,
-                       @tlll(%listT(T, N), LOC, LOCATTR),
+                       @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR),
                        STMTS)
 
-    rule #forlistAux(ITERCODE, INDEXCODE, EXPR, @tlll(%listT(T, N), CODE, EXPRATTR), STMTS)
-        => #forlistliteral(ITERCODE, INDEXCODE,
-                           #newPlaceholder(%listT(T, N)),
-                           @tlll(%listT(T, N), CODE, EXPRATTR),
+    rule #forlistAux(TITERCODE, TINDEXCODE, EXPR, @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR), STMTS)
+        => #forlistliteral(TITERCODE, TINDEXCODE,
+                           #newPlaceholder(%listT(SUBTYPE, N)),
+                           @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR),
                            STMTS)
       requires isListExpr(EXPR)
 
-    rule #forlistAux(ITERCODE, INDEXCODE, VAR, @tlll(%listT(T, N), LOC, LOCATTR), STMTS)
+    rule #forlistAux(TITERCODE, TINDEXCODE, VAR, @tlll(%listT(SUBTYPE, N), LOC, LOCATTR), STMTS)
         => #setInLoop(VAR)
-        ~> #forlistvariable(ITERCODE, INDEXCODE,
-                            @tlll(%listT(T, N), LOC, LOCATTR),
+        ~> #forlistvariable(TITERCODE, TINDEXCODE,
+                            @tlll(%listT(SUBTYPE, N), LOC, LOCATTR),
                             #compileStmts(STMTS, .LLLExps))
         ~> #removeInLoop(VAR)
       requires isVar(VAR)
@@ -1101,16 +1101,16 @@ module VIPER-LLL
                                                   CLLLExps         // stmts
                                               ")"   [seqstrict(4, 5)]
  // -----------------------------------------------------------------
-    rule #forlistliteral(ITERCODE, INDEXCODE, TMPLIST, LISTCODE, STMTS)
-        => #forlistliteralAux(ITERCODE,
-                              INDEXCODE,
+    rule #forlistliteral(TITERCODE, TINDEXCODE, TMPLIST, LISTCODE, STMTS)
+        => #forlistliteralAux(TITERCODE,
+                              TINDEXCODE,
                               TMPLIST,
                               #mkSetter(TMPLIST, LISTCODE),
                               #compileStmts(STMTS, .LLLExps))
 
     rule #forlistliteralAux(@tlll(_, ITERLOC, _),
                             @tlll(_, INDEXLOC, _),
-                            @tlll(%listT(T, N), TMPLISTLOC, _),
+                            @tlll(%listT(SUBTYPE, N), TMPLISTLOC, _),
                             SETTERCODE,
                             BODYCODE)
         => $%seq(
@@ -1129,7 +1129,7 @@ module VIPER-LLL
     // List allocated in memory
     rule #forlistvariable(@tlll(_, ITERLOC, _),
                           @tlll(_, INDEXLOC, _),
-                          @tlll(%listT(T, N), LISTLOC, @locattr(@memory, _)),
+                          @tlll(%listT(SUBTYPE, N), LISTLOC, @locattr(@memory, _)),
                           BODYCODE)
         => $repeat(INDEXLOC, 0, N, $%seq(
                                      $mstore(ITERLOC, $mload($add(LISTLOC, $mul($mload(INDEXLOC), 32)))),
@@ -1138,7 +1138,7 @@ module VIPER-LLL
     // List allocated in storage
     rule #forlistvariable(@tlll(_, ITERLOC, _),
                           @tlll(_, INDEXLOC, _),
-                          @tlll(%listT(T, N), LISTLOC, @locattr(@storage, _)),
+                          @tlll(%listT(SUBTYPE, N), LISTLOC, @locattr(@storage, _)),
                           BODYCODE)
         => $%seq(
              $repeat(INDEXLOC, 0, N, $%seq(
@@ -1446,41 +1446,80 @@ module VIPER-LLL
                                               ")"      [strict(1)]
  // --------------------------------------------------------------
     // Base Type
-    rule #packArgBy32(PLACEHOLDER, EXPR, T)
-        => #packArgBy32Base(PLACEHOLDER, #compileExpr(EXPR), T)
+    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T)
+        => #packArgBy32Base(LOC, #compileExpr(EXPR), T)
       requires isBaseType(T)
 
+    // Viper only allows 32-byte byte array as data.
     // String Literal
-    rule #packArgBy32(PLACEHOLDER, STR:String, %bytesT(L))
+    rule #packArgBy32(@tlll(_, LOC:Int, _), STR:String, %bytesT(L))
         => #ifThen(lengthString(STR) >Int L,
                    #exception("Data input bytes are too big."))
         ~> #ifThen(lengthString(STR) >Int 32,
                    #exception("Can only log a maximum of 32 bytes at a time."))
-        ~> #packArgBy32StringLiteral(PLACEHOLDER, #string2Bytes(STR))
+        ~> #packArgBy32StringLiteral(LOC, #string2Bytes(STR))
 
     // TODO: Waiting for fix for the Byte Array Variable.
 
-    // TODO: Add support for List
+    // List Literal
+    rule #packArgBy32(@tlll(_, LOC:Int, _), %list(EXPRS), T)
+        => #ifThen(#numOfExprs(EXPRS) =/=Int #getListTCount(T),
+                   #exception("The length of list doesn't match the expected length."))
+        ~> #packArgBy32ListTLiteral(LOC, EXPRS, T, .LLLExps, 0)
+      requires isListType(T)
+
+    // List Var
+    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T)
+        => #packArgBy32ListTVar(LOC, #compileExpr(EXPR), T, .LLLExps, 0, 0)
+      requires isListType(T) andBool notBool(isListExpr(EXPR))
 
 
-    syntax CPackedArgBy32  ::= "#packArgBy32Base"    "(" TypedLLLExp  ","
+    syntax CPackedArgBy32  ::= "#packArgBy32Base"    "(" Int          ","  // loc
                                                          CTypedLLLExp ","
-                                                         Type         ")"  [strict(2)]
+                                                         Type              // arg type
+                                                     ")"      [strict(2)]
 
     syntax CPackedArgBy32  ::= "#packArgBy32BaseAux" "(" Int          ","
                                                          CTypedLLLExp ")"  [strict(2)]
  // ----------------------------------------------------------------------------------
-    rule #packArgBy32Base(@tlll(_, LOC:Int, _), TCODE, ARGTYPE)
+    rule #packArgBy32Base(LOC, TCODE, ARGTYPE)
         => #packArgBy32BaseAux(LOC, #baseTypeConvert(TCODE, ARGTYPE))
 
     rule #packArgBy32BaseAux(LOC, @tlll(_, CODE, _)) => @argby32($mstore(LOC, CODE),.LLLExps, 32)
 
 
-    syntax CPackedArgBy32  ::= "#packArgBy32StringLiteral" "(" TypedLLLExp ","
-                                                               CBytes      ")"  [strict(2)]
- // ---------------------------------------------------------------------------------------
-    rule #packArgBy32StringLiteral(@tlll(_, LOC, _), BS)
+    syntax CPackedArgBy32  ::= "#packArgBy32StringLiteral" "(" Int    ","  // loc
+                                                               CBytes ")"  [strict(2)]
+ // ----------------------------------------------------------------------------------
+    rule #packArgBy32StringLiteral(LOC, BS)
         => @argby32($mstore(LOC, #bytes2Int(BS, 32, 0)), 32)
+
+
+    syntax CPackedArgBy32  ::= "#packArgBy32ListTLiteral" "(" Int     ","  // loc
+                                                              Exprs   ","
+                                                              Type    ","  // arg type
+                                                              LLLExps ","  // result code
+                                                              Int     ")"  // total size
+ // ---------------------------------------------------------------------
+    rule #packArgBy32ListTLiteral(LOC, .Exprs, T, RESULTCODE, TOTALSIZE)
+        => @argby32(RESULTCODE, TOTALSIZE)
+
+    rule #packArgBy32ListTLiteral(LOC, EXPR EXPRS, %listT(SUBTYPE, N), RESULTCODE, TOTALSIZE)
+        => #packArgBy32(@tlll(SUBTYPE, LOC, @locattr(@memory, true)), EXPR, SUBTYPE)
+        ~> #packArgBy32ListTLiteral(LOC, EXPRS, %listT(SUBTYPE, N), RESULTCODE, TOTALSIZE)
+
+    rule @argby32(CODE, SIZE) ~> #packArgBy32ListTLiteral(LOC, EXPRS, T, RESULTCODE, TOTALSIZE)
+        => #packArgBy32ListTLiteral(LOC +Int SIZE, EXPRS, T, RESULTCODE ++LLL CODE, TOTALSIZE +Int SIZE)
+
+
+    syntax CPackedArgBy32  ::= "#packArgBy32ListTVar" "(" Int          ","  // loc
+                                                          CTypedLLLExp ","
+                                                          Type         ","  // arg type
+                                                          LLLExps      ","  // result code
+                                                          Int          ","  // index
+                                                          Int          ")"  // total size
+ // ----------------------------------------------------------------------
+    //TODO: Add support for ListTVar
 
 
     syntax CTypedLLLExp  ::= "#packLoggingTopic" "(" Expr "," EventParams ")"
@@ -2507,7 +2546,7 @@ module VIPER-LLL
 
     rule #sizeOfType(%bytesT(L)) => #ceil32(L) +Int 64
 
-    rule #sizeOfType(%listT(T, N)) => #sizeOfType(T) *Int N
+    rule #sizeOfType(%listT(SUBTYPE, N)) => #sizeOfType(SUBTYPE) *Int N
 
     rule #sizeOfType(%structT(.AnnVars)) => 0
 
@@ -2521,13 +2560,13 @@ module VIPER-LLL
                        "bytes" +String Int2String(L),
                        "bytes")
 
-    rule #canonicalizeType(%listT(T, N), _)
-        => #canonicalizeListType(#canonicalizeType(T, false), N)
-      requires isBaseType(T) orBool isListType(T)
+    rule #canonicalizeType(%listT(SUBTYPE, N), _)
+        => #canonicalizeListType(#canonicalizeType(SUBTYPE, false), N)
+      requires isBaseType(SUBTYPE) orBool isListType(SUBTYPE)
 
-    rule #canonicalizeType(%listT(T, N), _)
+    rule #canonicalizeType(%listT(SUBTYPE, N), _)
         => #exception("List of byte arrays not allowed.")
-      requires isByteArrayType(T)
+      requires isByteArrayType(SUBTYPE)
 
     rule #canonicalizeType(%num, _) => "int128"
 
@@ -2554,7 +2593,7 @@ module VIPER-LLL
 
     syntax Int  ::= "#getListTCount" "(" ListType ")"    [function]
  // ---------------------------------------------------------------
-    rule #getListTCount(%listT(T, N)) => N
+    rule #getListTCount(%listT(SUBTYPE, N)) => N
 
 
     syntax Int  ::= "#getBytesTLen" "(" ByteArrayType ")"  [function]
@@ -2644,7 +2683,7 @@ module VIPER-LLL
 
     rule #parseType(%bytesT(L), _) => %bytesT(L)
 
-    rule #parseType(%listT(T, N), INMEM) => #parseListType(#parseType(T, INMEM), N)
+    rule #parseType(%listT(SUBTYPE, N), INMEM) => #parseListType(#parseType(SUBTYPE, INMEM), N)
 
     rule #parseType(%mapT(VT, KT), true)
         => #exception("No mappings allowed for in-memory types, only fixed-size arrays")
@@ -2982,8 +3021,8 @@ module VIPER-LLL
                                                  TypedLLLExp ")"  // index
  // ------------------------------------------------------------
     // List
-    rule #addVarOffset(@tlll(%listT(T, N), BASELOC, LOCATTR), TINDEX)
-        => #addListVarOffset(@tlll(%listT(T, N), BASELOC, LOCATTR),
+    rule #addVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, LOCATTR), TINDEX)
+        => #addListVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, LOCATTR),
                              #baseTypeConvert(TINDEX, %num))
 
     // Map, index is not byte array
@@ -3014,17 +3053,17 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#addListVarOffset" "(" TypedLLLExp  ","
                                                      CTypedLLLExp ")"  [strict(2)]
  // ------------------------------------------------------------------------------
-    rule #addListVarOffset(@tlll(%listT(T, N), BASELOC, @locattr(@storage, MUTABLE)),
+    rule #addListVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, @locattr(@storage, MUTABLE)),
                            @tlll(_, INDEX, _))
-        => @tlll(T, $add($sha3_32(BASELOC), $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
+        => @tlll(SUBTYPE, $add($sha3_32(BASELOC), $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
 
-    rule #addListVarOffset(@tlll(%listT(T, N), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
+    rule #addListVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
                           @tlll(_, INDEX, _))
-        => @tlll(T, $add(BASELOC, $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
+        => @tlll(SUBTYPE, $add(BASELOC, $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
 
-    rule #addListVarOffset(@tlll(%listT(T, N), BASELOC, @locattr(@memory, MUTABLE)),
+    rule #addListVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, @locattr(@memory, MUTABLE)),
                            @tlll(_, INDEX, _))
-        => @tlll(T, $add($mul(#sizeOfType(T), $uclamplt(INDEX, N)), BASELOC), @locattr(@memory, MUTABLE))
+        => @tlll(SUBTYPE, $add($mul(#sizeOfType(SUBTYPE), $uclamplt(INDEX, N)), BASELOC), @locattr(@memory, MUTABLE))
 
 
     syntax CTypedLLLExp  ::= "#addMapVarOffset" "(" TypedLLLExp  ","
