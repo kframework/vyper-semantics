@@ -1459,7 +1459,10 @@ module VIPER-LLL
                    #exception("Can only log a maximum of 32 bytes at a time."))
         ~> #packArgBy32StringLiteral(LOC, #string2Bytes(STR))
 
-    // TODO: Waiting for fix for the Byte Array Variable.
+    // Byte Array Variable
+    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, %bytesT(L))
+        => #packArgBy32BytesTVar(L, #compileExpr(EXPR), %bytesT(L))
+
 
     // List Literal
     rule #packArgBy32(@tlll(_, LOC:Int, _), %list(EXPRS), T)
@@ -1495,6 +1498,14 @@ module VIPER-LLL
         => @argby32($mstore(LOC, #bytes2Int(BS, 32, 0)), 32)
 
 
+    syntax CPackedArgBy32  ::= "#packArgBy32BytesTVar" "(" Int          ","  // loc
+                                                           CTypedLLLExp ","
+                                                           Type              // arg type
+                                                       ")"      [strict(2)]
+ // -----------------------------------------------------------------------
+    // TODO: https://github.com/ethereum/viper/issues/551
+
+
     syntax CPackedArgBy32  ::= "#packArgBy32ListTLiteral" "(" Int     ","  // loc
                                                               Exprs   ","
                                                               Type    ","  // arg type
@@ -1519,7 +1530,7 @@ module VIPER-LLL
                                                           Int          ","  // index
                                                           Int          ")"  // total size
  // ----------------------------------------------------------------------
-    //TODO: Add support for ListTVar
+    // TODO: https://github.com/ethereum/viper/issues/551
 
 
     syntax CTypedLLLExp  ::= "#packLoggingTopic" "(" Expr "," EventParams ")"
@@ -1557,7 +1568,7 @@ module VIPER-LLL
 
     syntax CTypedLLLExp  ::= "#packLoggingTopicBytesTVar" "(" CTypedLLLExp "," Type ")"  [strict(1)]
  // ------------------------------------------------------------------------------------------------
-    // TODO: There is something wrong with Byte array variable
+    // TODO: https://github.com/ethereum/viper/issues/546
 
 
 // Send
