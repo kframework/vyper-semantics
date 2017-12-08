@@ -93,6 +93,7 @@ module VIPER-LLL
     syntax CLLLExp             ::= LLLExp
     syntax CLLLExps            ::= LLLExps
     syntax CTypedLLLExp        ::= TypedLLLExp
+    syntax CTypedLLLExps       ::= TypedLLLExps
     syntax CEventParams        ::= EventParams
     syntax CPackedArgBy32      ::= PackedArgBy32
     syntax CPackedArgData      ::= PackedArgData
@@ -107,8 +108,9 @@ module VIPER-LLL
                       | LLLExp
                       | LLLExps
                       | UnitTuple
-                      | TypedLLLExp
                       | EventParams
+                      | TypedLLLExp
+                      | TypedLLLExps
                       | PackedArgBy32
                       | PackedArgData
                       | PackedLoggingData
@@ -1202,25 +1204,25 @@ module VIPER-LLL
 
     syntax CLLLExps  ::= "#return" "(" CTypedLLLExp "," Type /*return type*/ ")"  [strict(1)]
  // -----------------------------------------------------------------------------------------
+    // Base Type
     rule #return(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
         => #ifThen(notBool(isBaseType(RETURNTYPE)),
                    #exception("Trying to return base type but output expecting non base type."))
         ~> #returnBase(#unwrapLoc(@tlll(T, CODE, EXPRATTR)), RETURNTYPE)
       requires isBaseType(T)
 
+    // Byte Array Type
     rule #return(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
         => #ifThen(notBool(isByteArrayType(RETURNTYPE)),
                    #exception("Trying to return byte array type but it not matching the expected return type."))
         ~> #returnBytesT(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
       requires isByteArrayType(T)
 
-    rule #return(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
-        => #ifThenElse(#isInMemory(EXPRATTR) andBool (notBool(isMultiLLLExp(CODE))),
-                       $return(CODE, #sizeOfType(RETURNTYPE)),
-                       #returnListT(#newPlaceholder(RETURNTYPE),
-                                    @tlll(T, CODE, EXPRATTR),
-                                    RETURNTYPE))
-      requires isListType(T)
+    // List Type
+    rule #return(@tlll(%listT(SUBTYPE1, N1), CODE, EXPRATTR), %listT(SUBTYPE2, N2))
+        => #ifThen(N1 =/=Int N2,
+                   #exception("Return list length doesn't match the expected length."))
+        ~> #returnListT(@tlll(%listT(SUBTYPE1, N1), CODE, EXPRATTR), %listT(SUBTYPE2, N2))
 
     // TODO: support return Tuple
 
@@ -1274,21 +1276,34 @@ module VIPER-LLL
          <nextMem> LOC </nextMem>
 
 
-    syntax CLLLExps  ::= "#returnListT"    "(" CTypedLLLExp ","  // placeholder
-                                               TypedLLLExp  ","
-                                               Type
-                                           ")"      [strict(1)]
+    syntax CLLLExps  ::= "#returnListT" "(" TypedLLLExp ","
+                                            Type        ")"
+ // -------------------------------------------------------
+    rule #returnListT(@tlll(%listT(SUBTYPE1, N), CODE, EXPRATTR), %listT(SUBTYPE2, N))
+        => #ifThenElse(#isInMemory(EXPRATTR) andBool
+                       (SUBTYPE1 ==K SUBTYPE2) andBool
+                       (notBool(isMultiLLLExp(CODE))),
+                       $return(CODE, #sizeOfType(%listT(SUBTYPE2, N))),
+                       #returnListTByCopy(#newPlaceholder(%listT(SUBTYPE2, N)),
+                                          @tlll(%listT(SUBTYPE1, N), CODE, EXPRATTR),
+                                          %listT(SUBTYPE2, N)))
 
-    syntax CLLLExps  ::= "#returnListTAux" "(" CLLLExps     ","
-                                               Int          ","
-                                               Type
-                                           ")"      [strict(1)]
- // -----------------------------------------------------------
-    rule #returnListT(@tlll(T, LOC, LOCATTR), TCODE, RETURNTYPE)
-        => #returnListTAux(#mkSetter(@tlll(T, LOC, LOCATTR), TCODE),
-                           LOC, RETURNTYPE)
 
-    rule #returnListTAux(SETTER, LOC, RETURNTYPE)
+    syntax CLLLExps  ::= "#returnListTByCopy" "(" CTypedLLLExp ","  // placeholder
+                                                  TypedLLLExp  ","
+                                                  Type
+                                              ")"      [strict(1)]
+
+    syntax CLLLExps  ::= "#returnListTByCopyAux" "(" CLLLExps     ","
+                                                     Int          ","
+                                                     Type
+                                                 ")"      [strict(1)]
+ // -----------------------------------------------------------------
+    rule #returnListTByCopy(@tlll(T, LOC, LOCATTR), TCODE, RETURNTYPE)
+        => #returnListTByCopyAux(#mkSetter(@tlll(T, LOC, LOCATTR), TCODE),
+                               LOC, RETURNTYPE)
+
+    rule #returnListTByCopyAux(SETTER, LOC, RETURNTYPE)
         => $%seq(SETTER ++LLL ($return(LOC, #sizeOfType(RETURNTYPE)),.LLLExps)),.LLLExps
 
 
@@ -1440,7 +1455,7 @@ module VIPER-LLL
         => #packLoggingDataAux(DARGS, DEPARAMS, CODE ++LLL ARGCODE, TOTALSIZE +Int ARGSIZE)
 
 
-    syntax CPackedArgBy32  ::= "#packArgBy32" "(" CTypedLLLExp ","  // start loc
+    syntax CPackedArgBy32  ::= "#packArgBy32" "(" CTypedLLLExp ","  // placeholder
                                                   Expr         ","  // value
                                                   Type
                                               ")"      [strict(1)]
@@ -1477,7 +1492,7 @@ module VIPER-LLL
       requires isListType(T) andBool notBool(isListExpr(EXPR))
 
 
-    syntax CPackedArgBy32  ::= "#packArgBy32Base"    "(" Int          ","  // loc
+    syntax CPackedArgBy32  ::= "#packArgBy32Base"    "(" Int          ","  // packing loc
                                                          CTypedLLLExp ","
                                                          Type              // arg type
                                                      ")"      [strict(2)]
@@ -1491,14 +1506,14 @@ module VIPER-LLL
     rule #packArgBy32BaseAux(LOC, @tlll(_, CODE, _)) => @argby32($mstore(LOC, CODE),.LLLExps, 32)
 
 
-    syntax CPackedArgBy32  ::= "#packArgBy32StringLiteral" "(" Int    ","  // loc
+    syntax CPackedArgBy32  ::= "#packArgBy32StringLiteral" "(" Int    ","  // packing loc
                                                                CBytes ")"  [strict(2)]
  // ----------------------------------------------------------------------------------
     rule #packArgBy32StringLiteral(LOC, BS)
         => @argby32($mstore(LOC, #bytes2Int(BS, 32, 0)), 32)
 
 
-    syntax CPackedArgBy32  ::= "#packArgBy32BytesTVar" "(" Int          ","  // loc
+    syntax CPackedArgBy32  ::= "#packArgBy32BytesTVar" "(" Int          ","  // packing loc
                                                            CTypedLLLExp ","
                                                            Type              // arg type
                                                        ")"      [strict(2)]
@@ -1506,7 +1521,7 @@ module VIPER-LLL
     // TODO: https://github.com/ethereum/viper/issues/551
 
 
-    syntax CPackedArgBy32  ::= "#packArgBy32ListTLiteral" "(" Int     ","  // loc
+    syntax CPackedArgBy32  ::= "#packArgBy32ListTLiteral" "(" Int     ","  // packing loc
                                                               Exprs   ","
                                                               Type    ","  // arg type
                                                               LLLExps ","  // result code
@@ -1523,7 +1538,7 @@ module VIPER-LLL
         => #packArgBy32ListTLiteral(LOC +Int SIZE, EXPRS, T, RESULTCODE ++LLL CODE, TOTALSIZE +Int SIZE)
 
 
-    syntax CPackedArgBy32  ::= "#packArgBy32ListTVar" "(" Int          ","  // loc
+    syntax CPackedArgBy32  ::= "#packArgBy32ListTVar" "(" Int          ","  // packing loc
                                                           CTypedLLLExp ","
                                                           Type         ","  // arg type
                                                           LLLExps      ","  // result code
@@ -1574,6 +1589,7 @@ module VIPER-LLL
 // Send
 // ====
 
+
     rule <k> #compileStmt(%send(TO, VALUE))
             => #ifThenElse(CONSTANT ==K true,
                            #exception("Cannot send ether inside a constant function"),
@@ -1592,9 +1608,45 @@ module VIPER-LLL
         => $assert($call(0, TOCODE, VALUECODE, 0, 0, 0, 0)),.LLLExps
 
 
+// Selfdestruct
+// ============
+
+
+    rule <k> #compileStmt(%selfdestruct(ADDR))
+            => #exception("Cannot self destruct inside a constant function! ")
+         ... </k>
+         <constant> true </constant>
+
+    rule <k> #compileStmt(%selfdestruct(ADDR))
+            => #selfdestruct(#compileValueExpr(ADDR))
+         ... </k>
+         <constant> false </constant>
+
+
+    syntax CLLLExps  ::= "#selfdestruct" "(" CTypedLLLExp ")"  [strict]
+ // -------------------------------------------------------------------
+    rule #selfdestruct(@tlll(%address, ADDRCODE, _)) => $selfdestruct(ADDRCODE),.LLLExps
+
+
+
 ///////////////////////////////////////////////////////////////////////////////
 // Expressions
 ///////////////////////////////////////////////////////////////////////////////
+
+
+    syntax CTypedLLLExps  ::= "#compileExprs" "(" Exprs ")"
+    syntax CTypedLLLExps  ::= "#compileExprsAux" "(" Exprs "," TypedLLLExps ")"
+ // ---------------------------------------------------------------------------
+    rule #compileExprs(EXPRS) => #compileExprsAux(EXPRS, .TypedLLLExps)
+
+    rule #compileExprsAux(.Exprs, RESULTCODE) => RESULTCODE
+
+    rule #compileExprsAux((EXPR EXPRS), RESULTCODE)
+        => #compileExpr(EXPR)
+        ~> #compileExprsAux(EXPRS, RESULTCODE)
+
+    rule TCODE:TypedLLLExp ~> #compileExprsAux(EXPRS, RESULTCODE)
+        => #compileExprsAux(EXPRS, RESULTCODE ++TLLL (TCODE .TypedLLLExps))
 
 
     // Compile an expression that results in a value
@@ -2119,12 +2171,7 @@ module VIPER-LLL
 
 
     syntax CTypedLLLExp  ::= "#icall"    "(" Exprs "," FuncRecord ")"
-
-    syntax CTypedLLLExp  ::= "#icallAux" "(" CPackedArgData                ","
-                                             CTypedLLLExp /*return start*/ ","
-                                             Int          /*return width*/
-                                         ")"                       [seqstrict]
- // --------------------------------------------------------------------------
+ // -----------------------------------------------------------------
     rule <k> #compileExpr(%icall(FNAME, ARGS)) => #icall(ARGS, FUNCRECORD) ... </k>
          <internalSig> FNAME |-> FUNCRECORD SIGS </internalSig>
 
@@ -2134,60 +2181,126 @@ module VIPER-LLL
       requires notBool FNAME in_keys(SIGS)
 
     // EVM: CALL GASCAP ACCTTO VALUE ARGSTART ARGWIDTH RETSTART RETWIDTH
-    rule <k> #icall(ARGS, @func(FUNCID, FNAME, PARAMS, T, _, _, _))
+    rule <k> #icall(ARGS, @func(FUNCID, FNAME, PARAMS, RETT, _, _, _))
             => #ifThen(#numOfExprs(ARGS) =/=K #numOfParams(PARAMS),
                        #exception("# of args doesn't match # of params in function" +String Id2String(FNAME) +String
                                   " expected: " +String Int2String(#numOfParams(PARAMS)) +String
                                   ", actual: " +String Int2String(#numOfExprs(ARGS))))
-            ~> #icallAux(#packArguments(#newPlaceholder(%bytesT(#sizeOfParams(PARAMS) +Int 32)), FUNCID, ARGS, PARAMS),
-                         #newPlaceholder(T),
-                         #sizeOfType(T))
+            ~> #icallAux(#packArguments(#compileExprs(ARGS), #newPlaceholder(%bytesT(#sizeOfParams(PARAMS) +Int 32)), FUNCID, PARAMS),
+                         #newPlaceholder(RETT),
+                         #sizeOfType(RETT))
          ... </k>
 
-    rule #icallAux(@argdata(CODE, ARGSWIDTH), @tlll(RETT, LOC, _), RETWIDTH)
-        => @tlll(RETT, $%seq(
-                         $assert($call($gas, $address, 0, CODE, ARGSWIDTH, LOC, RETWIDTH)),
-                         LOC,.LLLExps), @locattr(@memory, true))
+
+    syntax CTypedLLLExp  ::= "#icallAux" "(" CPackedArgData ","  // packed args
+                                             CTypedLLLExp   ","  // return start
+                                             Int                 // return width
+                                         ")"  [seqstrict(1, 2)]
+ // -----------------------------------------------------------
+    // Base
+    rule #icallAux(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH)
+        => #icallWithReturner(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH, LOC)
       requires isBaseType(RETT)
 
+    // Byte Array
+    rule #icallAux(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH)
+        => #icallWithReturner(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH, LOC +Int 32)
+      requires isByteArrayType(RETT)
 
-    syntax CPackedArgData  ::= "#packArguments"    "(" CTypedLLLExp      ","
-                                                       Int   /*func id*/ ","
-                                                       Exprs             ","
-                                                       Params
-                                                   ")"           [strict(1)]
 
-    syntax CPackedArgData  ::= "#packArgumentsAux" "(" Int   /*arg loc*/ ","
-                                                       Exprs             ","
-                                                       Params            ","
-                                                       LLLExps           ","
-                                                       Int /*arg start*/ ","
-                                                       Int /*arg width*/ ","
-                                                       Bool /*need pos?*/")"
- // ------------------------------------------------------------------------
-    rule #packArguments(@tlll(T, LOC, _), FUNCID, ARGS, PARAMS)
-        => #packArgumentsAux(LOC +Int 32, ARGS, PARAMS, $mstore(LOC, FUNCID),.LLLExps,
+    // TODO: List?
+
+
+    syntax CTypedLLLExp  ::= "#icallWithReturner" "(" PackedArgData ","  // packed args
+                                                      TypedLLLExp   ","  // return start
+                                                      Int           ","  // return width
+                                                      Int           ")"  // returner
+ // -------------------------------------------------------------------
+    rule #icallWithReturner(@argdata(CODE, ARGSWIDTH), @tlll(RETT, LOC, LOCATTR), RETWIDTH, RETURNER)
+        => @tlll(RETT, $%seq(
+                         $assert($call($gas, $address, 0, CODE, ARGSWIDTH, LOC, RETWIDTH)),
+                         RETURNER,.LLLExps), @locattr(@memory, true))
+
+
+    syntax CPackedArgData  ::= "#packArguments"    "(" CTypedLLLExps ","  // typed args code
+                                                       CTypedLLLExp  ","  // placeholder
+                                                       Int           ","  // func id
+                                                       Params             // params
+                                                   ")"  [seqstrict(1,2)]
+
+    syntax CPackedArgData  ::= "#packArgumentsAux" "(" Int          ","  // packing loc for the first arg
+                                                       TypedLLLExps ","  // typed args code
+                                                       Params       ","  // params
+                                                       LLLExps      ","  // setter code
+                                                       Int          ","  // start of the arg block (including the funcid)
+                                                       Int          ","  // packed args width
+                                                       Bool         ")"  // need pos?
+ // -------------------------------------------------------------------
+    rule #packArguments(TARGS:TypedLLLExps, @tlll(T, LOC, _), FUNCID, PARAMS)
+        => #packArgumentsAux(LOC +Int 32, TARGS, PARAMS, ($mstore(LOC, FUNCID),.LLLExps),
                              LOC +Int 28, #sizeOfParams(PARAMS) +Int 4, false)
 
-    rule #packArgumentsAux(_, .Exprs, .Params, RESULTCODE, ARGSSTART, ARGSWIDTH, false)
-        => @argdata($%seq(RESULTCODE ++LLL (ARGSSTART,.LLLExps)), ARGSWIDTH)
+    rule #packArgumentsAux(_, .TypedLLLExps, .Params, SETTER, ARGSSTART, ARGSWIDTH, false)
+        => @argdata($%seq(SETTER ++LLL (ARGSSTART,.LLLExps)), ARGSWIDTH)
 
-    rule #packArgumentsAux(ARGLOC, (ARG ARGS), (%param(_, T) PARAMS), RESULTCODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
-        => #packArgumentBase(@tlll(T, ARGLOC, @locattr(@memory, true)), #compileExpr(ARG))
-        ~> #packArgumentsAux(ARGLOC, ARGS, PARAMS, RESULTCODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
+    // Base Type
+    rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T) PARAMS), SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+        => #packArgumentBase(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG)
+        ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
       requires isBaseType(T)
 
-    rule CODE:LLLExps ~> #packArgumentsAux(ARGLOC, ARGS, PARAMS, RESULTCODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
-        => #packArgumentsAux(ARGLOC +Int 32, ARGS, PARAMS, RESULTCODE ++LLL CODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
+    // Byte Array Type
+    // TODO: Byte Array packing does not comply with ABI specification?
+    rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T) PARAMS), SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+        => #packArgumentBytesT(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG, ARGSSTART +Int 4)
+        ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, SETTER, ARGSSTART, ARGSWIDTH, true)
+      requires isByteArrayType(T)
 
 
-    syntax CLLLExps  ::= "#packArgumentBase" "(" TypedLLLExp       ","
-                                                 CTypedLLLExp
-                                             ")"           [strict(2)]
- // -------------------------------------------------------------- ---
+    rule CODE:LLLExps ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+        => #packArgumentsAux(ARGLOC +Int 32, TARGS, PARAMS, SETTER ++LLL CODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
 
-    rule #packArgumentBase(@tlll(PARAMT, LOC, LOCATTR), TCODE)
-        => #mkSetter(@tlll(PARAMT, LOC, LOCATTR), TCODE)
+
+    syntax CLLLExps  ::= "#packArgumentBase" "(" TypedLLLExp  ","  // typed arg loc
+                                                 TypedLLLExp  ")"  // typed arg value
+ // -------------------------------------------------------------
+    rule #packArgumentBase(@tlll(PARAMT, LOC, LOCATTR), TARGCODE)
+        => #mkSetter(@tlll(PARAMT, LOC, LOCATTR), TARGCODE)
+
+
+    syntax CLLLExps  ::= "#packArgumentBytesT" "(" TypedLLLExp  ","  // typed arg loc
+                                                   TypedLLLExp  ","  // typed arg value
+                                                   Int          ")"  // start of the arg block (excluding the func id)
+
+    syntax CLLLExps  ::= "#packArgumentBytesTAux" "(" TypedLLLExp ","  // arg copy
+                                                      TypedLLLExp ","  // target
+                                                      LLLExps     ","  // setter
+                                                      LLLExp      ")"  // arg code
+ // ---------------------------------------------------------------
+    rule #packArgumentBytesT(@tlll(PARAMT, LOC, LOCATTR), @tlll(ARGT, ARGCODE, EXPRATTR), ARGBLOCKSTART)
+        => #ifThen(notBool isByteArrayType(ARGT),
+                   #exception("Arg expects byte array type but actual type is not."))
+        ~> #packArgumentBytesTAux(@tlll(ARGT, $_s, EXPRATTR),
+                                  @tlll(PARAMT, $add(ARGBLOCKSTART, $_poz), @locattr(@memory, true)),
+                                  ($mstore(LOC, $_poz),.LLLExps),
+                                  ARGCODE)
+
+    rule #packArgumentBytesTAux(ARGCOPY, TARGET, SETTER, ARGCODE)
+        => #packArgumentBytesTByCopy(#mkByteArrayCopier(TARGET, ARGCOPY),
+                                     #getLength(ARGCOPY),
+                                     SETTER, ARGCODE)
+
+
+    syntax CLLLExps  ::= "#packArgumentBytesTByCopy" "(" CLLLExps     ","  // copier
+                                                         CTypedLLLExp ","  // get length
+                                                         LLLExps      ","  // setter
+                                                         LLLExp            // arg code
+                                                      ")"  [seqstrict(1,2)]
+ // -----------------------------------------------------------------------
+    rule #packArgumentBytesTByCopy(COPIER, @tlll(_, GETLENGTH, _), SETTER, ARGCODE)
+        => SETTER ++LLL ($with($_s, ARGCODE,
+                           $%seq(COPIER ++LLL
+                                 ($set($_poz, $add(32, $add($_poz, GETLENGTH))),.LLLExps))),.LLLExps)
 
 
 // Reserved Expr
@@ -2807,7 +2920,7 @@ module VIPER-LLL
     syntax Int  ::= "#lookupUnitMap" "(" Map      ","
                                          BaseUnit ","
                                          Int           // default value
-                                      ")"   [function]
+                                     ")"   [function]
  // -------------------------------------------------------------------
     rule #lookupUnitMap((KEY |-> VALUE) REST, KEY, DEFAULT) => VALUE
 
@@ -3365,5 +3478,11 @@ module VIPER-LLL
     rule #byteSliceCopyChecker => $if($gt($mul(32, $mload(@freeLoopIndexPos)), $_actual_len),
                                       $break)
 
+
+    syntax TypedLLLExp  ::= "#getLength" "(" TypedLLLExp ")"
+ // --------------------------------------------------------
+    rule #getLength(@tlll(_, LOC, @locattr(@memory, _))) => @tlll(%num, $mload(LOC), @none)
+
+    rule #getLength(@tlll(_, LOC, @locattr(@storage, _))) => @tlll(%num, $mload($sha3_32(LOC)), @none)
 
 endmodule

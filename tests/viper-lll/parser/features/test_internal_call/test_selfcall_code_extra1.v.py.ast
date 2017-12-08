@@ -1,0 +1,6 @@
+%pgm(, ,
+  %fdecl(%@public, foo, %param(x, %num), %num,
+    %return(%binop(+, %var(x), 1)))
+  %fdecl(%@public, bar, %param(x, %num), %void,
+    %assign(%var(a), %icall(foo, %icall(foo, %var(x)))))
+)

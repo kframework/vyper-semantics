@@ -36,6 +36,9 @@ run_tests $TESTS_DIR
 TESTS_DIR=${SCRIPT_DIR}/parser/features/test_conditionals
 run_tests $TESTS_DIR
 
+TESTS_DIR=${SCRIPT_DIR}/parser/features/test_internal_call
+run_tests $TESTS_DIR
+
 TESTS_DIR=${SCRIPT_DIR}/parser/features/test_logging
 run_tests $TESTS_DIR
 
@@ -51,6 +54,9 @@ TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_list
 run_tests $TESTS_DIR
 
 TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_public
+run_tests $TESTS_DIR
+
+TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_selfdestruct
 run_tests $TESTS_DIR
 
 TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_struct
