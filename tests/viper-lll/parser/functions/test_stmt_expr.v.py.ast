@@ -1,0 +1,6 @@
+%pgm(, ,
+  %fdecl(%@public, foo, %param(x, %bytesT(5)) %param(y, %bytesT(5)), %void,
+    %pass)
+  %fdecl(%@public, bar, , %void,
+    %stmtexpr(%icall(foo, "abc" "abc")))
+)

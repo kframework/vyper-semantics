@@ -271,7 +271,9 @@ def parseConst(node):
         raise ParserException("Unsupported Const format: " + str(node))
 
 
-# Only ReservedFunc at the moment
+#    syntax Expr :== ...
+#                    "%icall"     "(" Id        "," Exprs ")"
+#
 #    syntax ReservedFunc  ::= "%as_num128"    "(" Expr ")"
 #                           | "%as_num256"    "(" Expr ")"
 #                           | "%as_wei_value" "(" Expr "," Id   ")"
@@ -286,14 +288,19 @@ def parseConst(node):
 #   %num256_add(%subscript(%svar(balances), %var(_sender)), %var(_value))
 #
 #   %as_wei_value(%as_num128(%var(_value)), wei)
+#
+#   self.raw_call(0x1234567890123456789012345678901234567890, "cow", outsize=4, gas=595757)
 def parseCallExpr(expr: ast.Call):
-    if len(expr.keywords) != 0:
-        raise ParserException("Calls with named parameters not yet supported: " + str(expr.keywords))
-    if expr.func.id == "as_wei_value":
-        return "%as_wei_value({}, {})".format(parseExpr(expr.args[0]),
-                                              expr.args[1].s if type(expr.args[1]) == ast.Str else expr.args[1].id)
+    if type(expr.func) == ast.Name:
+        if expr.func.id == "as_wei_value":
+            return "%as_wei_value({}, {})".format(parseExpr(expr.args[0]),
+                                                  expr.args[1].s if type(expr.args[1]) == ast.Str else expr.args[1].id)
+        else:
+            return "%{}({})".format(expr.func.id, parseExprsOrNamedArgs(expr.args + expr.keywords, ", "))
+    elif type(expr.func) == ast.Attribute and type(expr.func.value) == ast.Name and expr.func.value.id == "self":
+        return "%icall({}, {})".format(expr.func.attr, parseExprsOrNamedArgs(expr.args + expr.keywords))
     else:
-        return "%{}({})".format(expr.func.id, parseExprs(expr.args, ", "))
+        raise ParserException("Unsupported Call Expr format: " + str(expr))
 
 
 # syntax ReservedExpr  ::= "%msg.sender" | "%msg.value" | "%msg.gas"
@@ -443,21 +450,27 @@ def parseExpr(node):
     elif type(node) == ast.Name or type(node) == ast.Subscript or type(node) == ast.Attribute:
         return parseVar(node)
     elif type(node) == ast.List:
-        return "%list({})".format(parseExprs(node.elts))
+        return "%list({})".format(parseExprsOrNamedArgs(node.elts))
     elif type(node) == ast.Dict:
         return "%struct({})".format(parseStructItems(node))
-    elif type(node) == ast.Call and type(node.func) == ast.Name:
+    elif type(node) == ast.Call:
         return parseCallExpr(node)
-    elif type(node) == ast.Call and type(node.func) == ast.Attribute and type(node.func.value) == ast.Name \
-            and node.func.value.id == "self":
-        return "%icall({}, {})".format(node.func.attr, parseExprs(node.args))
     else:
         raise ParserException("Unsupported Expr format: " + str(node))
 
 
+# Named arguments are parsed as:
+#   "%namedArg(" Id "," Expr ")"
+def parseExprOrNamedArg(node):
+    if type(node) == ast.keyword:
+        return "%namedArg({}, {})".format(node.arg, parseExpr(node.value))
+    else:
+        return parseExpr(node)
+
+
 # syntax Exprs    ::= List{Expr, ""}
-def parseExprs(exprs, separator=" "):
-    return parseList(exprs, parseExpr, separator)
+def parseExprsOrNamedArgs(exprs, separator=" "):
+    return parseList(exprs, parseExprOrNamedArg, separator)
 
 
 # syntax AugAssignOp ::= "+=" | "-=" | "*=" | "/=" | "%="
@@ -503,9 +516,11 @@ def parseAnnVars(annVars: ast.Dict):
 #                   | "%assert"    "(" Expr ")"
 #                   | "%throw"
 #                   | "%log"       "(" Id "," Exprs ")"
+#                   | "%stmtexpr"  "(" Expr ")"
 #                   // stmt dispatch table
-#                   | "%send"      "(" Expr  "," Expr ")"
+#                   | "%send"      "(" Expr "," Expr ")"
 #                   | "%selfdestruct" "(" Expr ")"
+#                   | "%rawlog"    "(" Expr "," Expr ")"
 #
 # examples:
 #   _value = as_num256(msg.value)
@@ -565,13 +580,13 @@ def parseStmt(node):
         return "%throw"
     elif type(node) == ast.Expr and type(node.value) == ast.Call:
         if type(node.value.func) == ast.Attribute and node.value.func.value.id == "log":
-            return "%log({}, {})".format(node.value.func.attr, parseExprs(node.value.args))
+            return "%log({}, {})".format(node.value.func.attr, parseExprsOrNamedArgs(node.value.args))
         elif type(node.value.func) == ast.Name and node.value.func.id == "send":
-            return "%send({})".format(parseExprs(node.value.args, ", "))
+            return "%send({})".format(parseExprsOrNamedArgs(node.value.args, ", "))
         elif type(node.value.func) == ast.Name and node.value.func.id == "selfdestruct":
-            return "%selfdestruct({})".format(parseExprs(node.value.args, ", "))
+            return "%selfdestruct({})".format(parseExprsOrNamedArgs(node.value.args, ", "))
         else:
-            raise ParserException("Unsupported Expr Stmt format: " + str(node))
+            return "%stmtexpr({})".format(parseExpr(node.value))
     else:
         raise ParserException("Unsupported Stmt format: " + str(node))
 
