@@ -1,0 +1,16 @@
+%pgm(, ,
+  %fdecl(%@public, log, %param(n, %num), %num,
+    %assign(%var(c), %binop(*, %var(n), %fixed10(1, 1)))
+    %assign(%var(output), 0)
+    %forrange(i, 40,
+      %if(%compareop(%lt, %var(c), 10),
+        %assign(%var(output), %binop(*, %var(i), 10))
+        %break)
+      %assign(%var(c), %binop(/, %var(c), 10)))
+    %forrange(i, 10,
+      %assign(%var(c), %binop(/, %var(c), %fixed10(12589000000, 10000000000)))
+      %if(%compareop(%lt, %var(c), %fixed10(1, 1)),
+        %assign(%var(output), %binop(+, %var(output), %var(i)))
+        %break))
+    %return(%var(output)))
+)

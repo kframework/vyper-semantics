@@ -1,0 +1,4 @@
+%pgm(, ,
+  %fdecl(%@public, convert1, %param(inp, %bytes32), %num256,
+    %return(%as_num256(%var(inp))))
+)

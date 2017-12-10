@@ -27,6 +27,9 @@ kompile ${SEMTANTICS_DIR}/viper-lll.k --syntax-module VIPER-ABSTRACT-SYNTAX --de
 TESTS_DIR=${SCRIPT_DIR}/parser/features/arithmetic/test_modulo
 run_tests $TESTS_DIR
 
+TESTS_DIR=${SCRIPT_DIR}/parser/features/iteration/test_break
+run_tests $TESTS_DIR
+
 TESTS_DIR=${SCRIPT_DIR}/parser/features/iteration/test_for_in_list
 run_tests $TESTS_DIR
 
@@ -47,6 +50,9 @@ TESTS_DIR=${SCRIPT_DIR}/parser/functions/test_send
 run_tests $TESTS_DIR
 
 #parser/syntax
+TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_as_num256
+run_tests $TESTS_DIR
+
 TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_for_range
 run_tests $TESTS_DIR
 

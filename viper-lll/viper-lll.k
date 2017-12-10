@@ -2418,46 +2418,95 @@ module VIPER-LLL
     rule #floor(@tlll(%unitT(%decimal, UNITMAP:Map, POSITIONAL), CODE, EXPRATTR))
         => @tlll(%unitT(%num, UNITMAP, POSITIONAL), $sdiv(CODE, @decimalDivisor), EXPRATTR)
 
-
-    rule #compileExpr(%as_num128(EXPR)) => #asNum128(#compileValueExpr(EXPR))
-
-    rule #compileExpr(%as_num256(EXPR)) => #asNum256(#compileValueExpr(EXPR))
-
     rule #compileExpr(%num256_add(LEFTE, RIGHTE)) => #num256Add(#compileValueExpr(LEFTE), #compileValueExpr(RIGHTE))
 
     rule #compileExpr(%num256_sub(LEFTE, RIGHTE)) => #num256Sub(#compileValueExpr(LEFTE), #compileValueExpr(RIGHTE))
 
 
-    syntax CTypedLLLExp ::= "#asNum128"    "(" CTypedLLLExp ")"    [strict]
-    syntax CTypedLLLExp ::= "#asNum128Aux" "(" LLLExp ")"
- // -----------------------------------------------------------------------
+    // decimal
+    syntax CTypedLLLExp  ::= "#decimal" "(" CTypedLLLExp ")"    [strict]
+ // --------------------------------------------------------------------
+    rule #compileExpr(%decimal(EXPR)) => #decimal(#compileValueExpr(EXPR))
+
+    rule #decimal(@tlll(%num, CODE, _))
+        => @tlll(%decimal, $mul(CODE, @decimalDivisor), @none)
+
+    rule #decimal(@tlll(%unitT(%num, UNITMAP:Map, POSITIONAL), CODE, _))
+        => @tlll(%unitT(%decimal, UNITMAP:Map, POSITIONAL), $mul(CODE, @decimalDivisor), @none)
+
+    rule #decimal(@tlll(%decimal, CODE, _))
+        => @tlll(%decimal, CODE, @none)
+
+    rule #decimal(@tlll(%unitT(%decimal, UNITMAP:Map, POSITIONAL), CODE, _))
+        => @tlll(%unitT(%decimal, UNITMAP:Map, POSITIONAL), CODE, @none)
+
+
+    // as_unitless_number
+    syntax CTypedLLLExp  ::= "#asUnitlessNumber" "(" CTypedLLLExp ")"  [strict]
+ // ---------------------------------------------------------------------------
+    rule #compileExpr(%as_unitless_number(EXPR)) => #asUnitlessNumber(#compileValueExpr(EXPR))
+
+    rule #asUnitlessNumber(@tlll(%num, CODE, _)) => @tlll(%num, CODE, @none)
+
+    rule #asUnitlessNumber(@tlll(%unitT(%num, UNITMAP:Map, POSITIONAL), CODE, _))
+        => @tlll(%num, CODE, @none)
+
+    rule #asUnitlessNumber(@tlll(%decimal, CODE, _)) => @tlll(%decimal, CODE, @none)
+
+    rule #asUnitlessNumber(@tlll(%unitT(%decimal, UNITMAP:Map, POSITIONAL), CODE, _))
+        => @tlll(%decimal, CODE, @none)
+
+
+    // as_num128
+    syntax CTypedLLLExp  ::= "#asNum128"    "(" CTypedLLLExp ")"    [strict]
+    syntax CTypedLLLExp  ::= "#asNum128Aux" "(" LLLExp ")"
+ // ------------------------------------------------------------------------
+    rule #compileExpr(%as_num128(EXPR)) => #asNum128(#compileValueExpr(EXPR))
+
     rule #asNum128(@tlll(T, CODE, _))
-             => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %address),
-                            #asNum128Aux(CODE),
-                            #exception("Function arg type does not match expected type."))
+        => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %address),
+                       #asNum128Aux(CODE),
+                       #exception("Function arg type does not match expected type."))
 
     rule #asNum128Aux(CODE) => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)), @none)
 
 
-    syntax CTypedLLLExp ::= "#asNum256"    "(" CTypedLLLExp ")"    [strict]
-    syntax CTypedLLLExp ::= "#asNum256Aux" "(" TypedLLLExp ")"
-    syntax CTypedLLLExp ::= "#asNum256ForNumber" "(" LLLExp ")"
-    syntax CTypedLLLExp ::= "#asNum256ForLLLExp" "(" LLLExp ")"
- // -----------------------------------------------------------------------
+    // as_num256
+    syntax CTypedLLLExp  ::= "#asNum256"    "(" CTypedLLLExp ")"    [strict]
+    syntax CTypedLLLExp  ::= "#asNum256Aux" "(" TypedLLLExp ")"
+ // ------------------------------------------------------------------------
+    rule #compileExpr(%as_num256(EXPR)) => #asNum256(#compileValueExpr(EXPR))
+
     rule #asNum256(@tlll(T, CODE, EXPRATTR))
-             => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %address),
-                            #asNum256Aux(@tlll(T, CODE, EXPRATTR)),
-                            #exception("Function arg type does not match expected type."))
+        => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %address),
+                       #asNum256Aux(@tlll(T, CODE, EXPRATTR)),
+                       #exception("Function arg type does not match expected type."))
 
-    rule #asNum256Aux(@tlll(T, CODE, EXPRATTR)) => #ifThenElse(isInt(CODE),
-                                                               #asNum256ForNumber(CODE),
-                                                               #asNum256ForLLLExp(CODE))
+    rule #asNum256Aux(@tlll(T, CODE, EXPRATTR))
+        => #ifThenElse(isInt(CODE),
+                       #asNum256Number(CODE),
+                       #asNum256LLLExp(CODE))
 
-    rule #asNum256ForNumber(I:Int) => #ifThenElse((I >=Int 0) andBool (I <=Int 2^Int 256 -Int 1),
-                                                   @tlll(%num256, I, @none),
-                                                   #exception("Number out of range"))
 
-    rule #asNum256ForLLLExp(CODE) => @tlll(%num256, CODE, @none)
+    syntax CTypedLLLExp  ::= "#asNum256Number" "(" LLLExp ")"
+    syntax CTypedLLLExp  ::= "#asNum256LLLExp" "(" LLLExp ")"
+ // ---------------------------------------------------------
+    rule #asNum256Number(I:Int) => #ifThenElse((I >=Int 0) andBool (I <=Int 2^Int 256 -Int 1),
+                                               @tlll(%num256, I, @none),
+                                               #exception("Number out of range"))
+
+    rule #asNum256LLLExp(CODE) => @tlll(%num256, $clampge(CODE, 0), @none)
+
+
+    // as_bytes32
+    syntax CTypedLLLExp  ::= "#asBytes32" "(" CTypedLLLExp ")"    [strict]
+ // ----------------------------------------------------------------------
+    rule #compileExpr(%as_bytes32(EXPR)) => #asBytes32(#compileValueExpr(EXPR))
+
+    rule #asBytes32(@tlll(T, CODE, EXPRATTR))
+        => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %address),
+                       @tlll(%bytes32, CODE, @none),
+                       #exception("Function arg type does not match expected type."))
 
 
     // as_wei_value
@@ -2466,29 +2515,29 @@ module VIPER-LLL
     rule #compileExpr(%as_wei_value(EXPR, UNIT)) => #asWeiValue(EXPR, #convertToWei(UNIT))
 
     rule #asWeiValue(NUM, DENOMINATION)
-        => #asWeiValueForNumber(NUM, DENOMINATION)
+        => #asWeiValueNumber(NUM, DENOMINATION)
       requires isInt(NUM) orBool isFixedPoint(NUM)
 
     rule #asWeiValue(EXPR, DENOMINATION)
-        => #asWeiValueForLLLExp(#compileValueExpr(EXPR), DENOMINATION)
+        => #asWeiValueLLLExp(#compileValueExpr(EXPR), DENOMINATION)
       requires notBool(isInt(EXPR) orBool isFixedPoint(EXPR))
 
 
-    syntax CTypedLLLExp ::= "#asWeiValueForNumber" "(" Expr         "," Int ")"
-    syntax CTypedLLLExp ::= "#asWeiValueForLLLExp" "(" CTypedLLLExp "," Int ")"  [strict(1)]
+    syntax CTypedLLLExp ::= "#asWeiValueNumber" "(" Expr         "," Int ")"
+    syntax CTypedLLLExp ::= "#asWeiValueLLLExp" "(" CTypedLLLExp "," Int ")"  [strict(1)]
  // ----------------------------------------------------------------------------------------
-    rule #asWeiValueForNumber(NUM:Int, DENOMINATION)
+    rule #asWeiValueNumber(NUM:Int, DENOMINATION)
         => @tlll(%unitT(%num, %wei |-> 1, false), NUM, @none)
 
-    rule #asWeiValueForNumber(%fixed10(NUM, DEN), DENOMINATION)
+    rule #asWeiValueNumber(%fixed10(NUM, DEN), DENOMINATION)
         => #ifThen((DENOMINATION modInt DEN) =/=Int 0,
                    #exception("Too many decimal places."))
         ~> @tlll(%unitT(%num, %wei |-> 1, false), (NUM *Int DENOMINATION) /Int DEN, @none)
 
-    rule #asWeiValueForLLLExp(@tlll(%num, CODE, EXPRATTR), DENOMINATION)
+    rule #asWeiValueLLLExp(@tlll(%num, CODE, EXPRATTR), DENOMINATION)
         => @tlll(%unitT(%num, %wei |-> 1, false), $mul(CODE, DENOMINATION), @none)
 
-    rule #asWeiValueForLLLExp(@tlll(%decimal, CODE, EXPRATTR), DENOMINATION)
+    rule #asWeiValueLLLExp(@tlll(%decimal, CODE, EXPRATTR), DENOMINATION)
         => @tlll(%unitT(%num, %wei |-> 1, false), $div($mul(CODE, DENOMINATION), @decimalDivisor), @none)
 
 
