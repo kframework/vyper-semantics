@@ -1586,6 +1586,43 @@ module VIPER-LLL
     // TODO: https://github.com/ethereum/viper/issues/546
 
 
+// Statement Expression
+// ====================
+
+
+    rule #compileStmt(%stmtexpr(EXPR)) => #stmtExpr(EXPR)
+
+
+    syntax CLLLExps  ::= "#stmtExpr" "(" Expr ")"
+ // ---------------------------------------------
+
+
+    syntax CLLLExps  ::= "#icallNoReturn" "(" Exprs "," FuncRecord ")"
+ // ----------------------------------------------------------------------
+    rule <k> #stmtExpr(%icall(FNAME, ARGS)) => #icallNoReturn(ARGS, FUNCRECORD) ... </k>
+         <internalSig> FNAME |-> FUNCRECORD SIGS </internalSig>
+
+    // TODO: Is it necessary to enforce that functions cannot call functions defined later than themselves?
+    rule <k> #stmtExpr(%icall(FNAME, _)) => #exception("Function not declared yet: " +String Id2String(FNAME)) ... </k>
+         <internalSig> SIGS </internalSig>
+      requires notBool FNAME in_keys(SIGS)
+
+    // EVM: CALL GASCAP ACCTTO VALUE ARGSTART ARGWIDTH RETSTART RETWIDTH
+    rule <k> #icallNoReturn(ARGS, @func(FUNCID, FNAME, PARAMS, RETT, _, _, _))
+            => #ifThen(#numOfExprs(ARGS) =/=K #numOfParams(PARAMS),
+                       #exception("# of args doesn't match # of params in function" +String Id2String(FNAME) +String
+                                  " expected: " +String Int2String(#numOfParams(PARAMS)) +String
+                                  ", actual: " +String Int2String(#numOfExprs(ARGS))))
+            ~> #icallNoReturnAux(#packArguments(#compileExprs(ARGS), FUNCID, PARAMS))
+         ... </k>
+
+
+    syntax CLLLExps  ::= "#icallNoReturnAux" "(" CPackedArgData ")"  [strict]
+ // -------------------------------------------------------------------------
+    rule #icallNoReturnAux(@argdata(CODE, ARGSWIDTH))
+        => $assert($call($gas, $address, 0, CODE, ARGSWIDTH, 0, 0)),.LLLExps
+
+
 // Send
 // ====
 
@@ -2170,9 +2207,9 @@ module VIPER-LLL
 // ======================
 
 
-    syntax CTypedLLLExp  ::= "#icall"    "(" Exprs "," FuncRecord ")"
- // -----------------------------------------------------------------
-    rule <k> #compileExpr(%icall(FNAME, ARGS)) => #icall(ARGS, FUNCRECORD) ... </k>
+    syntax CTypedLLLExp  ::= "#icallWithReturn" "(" Exprs "," FuncRecord ")"
+ // ------------------------------------------------------------------------
+    rule <k> #compileExpr(%icall(FNAME, ARGS)) => #icallWithReturn(ARGS, FUNCRECORD) ... </k>
          <internalSig> FNAME |-> FUNCRECORD SIGS </internalSig>
 
     // TODO: Is it necessary to enforce that functions cannot call functions defined later than themselves?
@@ -2181,29 +2218,31 @@ module VIPER-LLL
       requires notBool FNAME in_keys(SIGS)
 
     // EVM: CALL GASCAP ACCTTO VALUE ARGSTART ARGWIDTH RETSTART RETWIDTH
-    rule <k> #icall(ARGS, @func(FUNCID, FNAME, PARAMS, RETT, _, _, _))
+    rule <k> #icallWithReturn(ARGS, @func(FUNCID, FNAME, PARAMS, RETT, _, _, _))
             => #ifThen(#numOfExprs(ARGS) =/=K #numOfParams(PARAMS),
                        #exception("# of args doesn't match # of params in function" +String Id2String(FNAME) +String
                                   " expected: " +String Int2String(#numOfParams(PARAMS)) +String
                                   ", actual: " +String Int2String(#numOfExprs(ARGS))))
-            ~> #icallAux(#packArguments(#compileExprs(ARGS), #newPlaceholder(%bytesT(#sizeOfParams(PARAMS) +Int 32)), FUNCID, PARAMS),
-                         #newPlaceholder(RETT),
-                         #sizeOfType(RETT))
+            ~> #ifThen(RETT ==K %void,
+                       #exception("expect a value, but the function doesn't return a value."))
+            ~> #icallWithReturnAux(#packArguments(#compileExprs(ARGS), FUNCID, PARAMS),
+                                   #newPlaceholder(RETT),
+                                   #sizeOfType(RETT))
          ... </k>
 
 
-    syntax CTypedLLLExp  ::= "#icallAux" "(" CPackedArgData ","  // packed args
-                                             CTypedLLLExp   ","  // return start
-                                             Int                 // return width
-                                         ")"  [seqstrict(1, 2)]
- // -----------------------------------------------------------
+    syntax CTypedLLLExp  ::= "#icallWithReturnAux" "(" CPackedArgData ","  // packed args
+                                                       CTypedLLLExp   ","  // return start
+                                                       Int                 // return width
+                                                   ")"  [seqstrict(1, 2)]
+ // ---------------------------------------------------------------------
     // Base
-    rule #icallAux(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH)
+    rule #icallWithReturnAux(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH)
         => #icallWithReturner(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH, LOC)
       requires isBaseType(RETT)
 
     // Byte Array
-    rule #icallAux(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH)
+    rule #icallWithReturnAux(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH)
         => #icallWithReturner(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH, LOC +Int 32)
       requires isByteArrayType(RETT)
 
@@ -2223,42 +2262,59 @@ module VIPER-LLL
 
 
     syntax CPackedArgData  ::= "#packArguments"    "(" CTypedLLLExps ","  // typed args code
-                                                       CTypedLLLExp  ","  // placeholder
                                                        Int           ","  // func id
                                                        Params             // params
-                                                   ")"  [seqstrict(1,2)]
+                                                   ")"       [strict(1)]
+ // -------------------------------------------------------------------
+    rule #packArguments(TARGS:TypedLLLExps, FUNCID, PARAMS)
+        => #allocMemForPackedArgs(TARGS,
+                                  #newPlaceholder(%bytesT(#sizeOfPackedArgs(TARGS) +Int 32)),
+                                  FUNCID, PARAMS)
+
+
+    syntax CPackedArgData  ::= "#allocMemForPackedArgs" "(" TypedLLLExps ","  // typed args code
+                                                            CTypedLLLExp ","  // placeholder
+                                                            Int          ","  // func id
+                                                            Params            // params
+                                                        ")"      [strict(2)]
+ // ------------------------------------------------------------------------
+    rule #allocMemForPackedArgs(TARGS, @tlll(T, LOC, _), FUNCID, PARAMS)
+        => #packArgumentsAux(LOC +Int 32, TARGS, PARAMS, #numOfTypedLLLExps(TARGS), ($mstore(LOC, FUNCID),.LLLExps),
+                             LOC +Int 28, #sizeOfPackedArgs(TARGS) +Int 4, false)
+
 
     syntax CPackedArgData  ::= "#packArgumentsAux" "(" Int          ","  // packing loc for the first arg
                                                        TypedLLLExps ","  // typed args code
                                                        Params       ","  // params
+                                                       Int          ","  // num of args
                                                        LLLExps      ","  // setter code
                                                        Int          ","  // start of the arg block (including the funcid)
                                                        Int          ","  // packed args width
                                                        Bool         ")"  // need pos?
  // -------------------------------------------------------------------
-    rule #packArguments(TARGS:TypedLLLExps, @tlll(T, LOC, _), FUNCID, PARAMS)
-        => #packArgumentsAux(LOC +Int 32, TARGS, PARAMS, ($mstore(LOC, FUNCID),.LLLExps),
-                             LOC +Int 28, #sizeOfParams(PARAMS) +Int 4, false)
-
-    rule #packArgumentsAux(_, .TypedLLLExps, .Params, SETTER, ARGSSTART, ARGSWIDTH, false)
+    rule #packArgumentsAux(_, .TypedLLLExps, .Params, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, false)
         => @argdata($%seq(SETTER ++LLL (ARGSSTART,.LLLExps)), ARGSWIDTH)
 
+    rule #packArgumentsAux(_, .TypedLLLExps, .Params, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, true)
+        => @argdata($with($_poz, ARGNUM *Int 32,
+                      $%seq(SETTER ++LLL (ARGSSTART,.LLLExps))), ARGSWIDTH)
+
     // Base Type
-    rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T) PARAMS), SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+    rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T) PARAMS), ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
         => #packArgumentBase(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG)
-        ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+        ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
       requires isBaseType(T)
 
     // Byte Array Type
     // TODO: Byte Array packing does not comply with ABI specification?
-    rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T) PARAMS), SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+    rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T) PARAMS), ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
         => #packArgumentBytesT(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG, ARGSSTART +Int 4)
-        ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, SETTER, ARGSSTART, ARGSWIDTH, true)
+        ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, true)
       requires isByteArrayType(T)
 
 
-    rule CODE:LLLExps ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
-        => #packArgumentsAux(ARGLOC +Int 32, TARGS, PARAMS, SETTER ++LLL CODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
+    rule CODE:LLLExps ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+        => #packArgumentsAux(ARGLOC +Int 32, TARGS, PARAMS, ARGNUM, SETTER ++LLL CODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
 
 
     syntax CLLLExps  ::= "#packArgumentBase" "(" TypedLLLExp  ","  // typed arg loc
@@ -2295,8 +2351,8 @@ module VIPER-LLL
                                                          CTypedLLLExp ","  // get length
                                                          LLLExps      ","  // setter
                                                          LLLExp            // arg code
-                                                      ")"  [seqstrict(1,2)]
- // -----------------------------------------------------------------------
+                                                     ")"  [seqstrict(1,2)]
+ // ----------------------------------------------------------------------
     rule #packArgumentBytesTByCopy(COPIER, @tlll(_, GETLENGTH, _), SETTER, ARGCODE)
         => SETTER ++LLL ($with($_s, ARGCODE,
                            $%seq(COPIER ++LLL
@@ -2347,7 +2403,10 @@ module VIPER-LLL
     rule #compileExpr(%tx.origin)        => @tlll(%address, $origin, @none)
 
 
-    // Reserved Func
+// Reserved Function
+// =================
+
+
     rule #compileExpr(%as_num128(EXPR)) => #asNum128(#compileValueExpr(EXPR))
 
     rule #compileExpr(%as_num256(EXPR)) => #asNum256(#compileValueExpr(EXPR))
@@ -2491,7 +2550,6 @@ module VIPER-LLL
  // ---------------------------------------------
 
 
-
 // List Concatenation
 // ==================
 
@@ -2631,7 +2689,7 @@ module VIPER-LLL
     syntax Int  ::= "#numOfTypedLLLExps"    "(" TypedLLLExps ")"          [function]
     syntax Int  ::= "#numOfTypedLLLExpsAux" "(" TypedLLLExps "," Int ")"  [function]
  // --------------------------------------------------------------------------------
-    rule #numOfTypedLLLExps(TLLLS) => numOfTypedLLLExpsAux(TLLLS, 0)
+    rule #numOfTypedLLLExps(TLLLS) => #numOfTypedLLLExpsAux(TLLLS, 0)
 
     rule #numOfTypedLLLExpsAux(.TypedLLLExps, NUM) => NUM
 
@@ -2662,6 +2720,16 @@ module VIPER-LLL
     rule #sizeOfParam(%param(_, %bytesT(_))) => 32
 
     rule #sizeOfParam(%param(_, T)) => #sizeOfType(T)    requires notBool isByteArrayType(T)
+
+
+    syntax Int  ::= "#sizeOfPackedArgs" "(" TypedLLLExps ")"    [function]
+    syntax Int  ::= "#sizeOfPackedArg"  "(" TypedLLLExp  ")"    [function]
+ // ----------------------------------------------------------------------
+    rule #sizeOfPackedArgs(.TypedLLLExps) => 0
+
+    rule #sizeOfPackedArgs(TLLL TLLLS)    => #sizeOfPackedArg(TLLL) +Int #sizeOfPackedArgs(TLLLS)
+
+    rule #sizeOfPackedArg(@tlll(T, _, _)) => #sizeOfType(T)
 
 
     syntax Int  ::= "#sizeOfType" "(" Type ")"     [function]
@@ -3479,7 +3547,7 @@ module VIPER-LLL
                                       $break)
 
 
-    syntax TypedLLLExp  ::= "#getLength" "(" TypedLLLExp ")"
+    syntax CTypedLLLExp  ::= "#getLength" "(" TypedLLLExp ")"
  // --------------------------------------------------------
     rule #getLength(@tlll(_, LOC, @locattr(@memory, _))) => @tlll(%num, $mload(LOC), @none)
 
