@@ -2,5 +2,5 @@
   %fdecl(%@public, raw_call, %param(expr, %void) %param(args, %void) %param(kwargs, %void) %param(context, %void), %void,
     %pass)
   %fdecl(%@public, bar, , %void,
-    %stmtexpr(%icall(raw_call, %hex("1234567890123456789012345678901234567890") "cow" %namedArg(outsize, 4) %namedArg(gas, 595757))))
+    %stmtexpr(%icall(raw_call, %hex("1234567890123456789012345678901234567890") "cow" %kwarg(outsize, 4) %kwarg(gas, 595757))))
 )

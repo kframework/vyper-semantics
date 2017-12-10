@@ -296,9 +296,9 @@ def parseCallExpr(expr: ast.Call):
             return "%as_wei_value({}, {})".format(parseExpr(expr.args[0]),
                                                   expr.args[1].s if type(expr.args[1]) == ast.Str else expr.args[1].id)
         else:
-            return "%{}({})".format(expr.func.id, parseExprsOrNamedArgs(expr.args + expr.keywords, ", "))
+            return "%{}({})".format(expr.func.id, parseArgs(expr.args + expr.keywords, ", "))
     elif type(expr.func) == ast.Attribute and type(expr.func.value) == ast.Name and expr.func.value.id == "self":
-        return "%icall({}, {})".format(expr.func.attr, parseExprsOrNamedArgs(expr.args + expr.keywords))
+        return "%icall({}, {})".format(expr.func.attr, parseArgs(expr.args + expr.keywords))
     else:
         raise ParserException("Unsupported Call Expr format: " + str(expr))
 
@@ -386,8 +386,8 @@ def parseUnaryOp(op: ast.unaryop):
         raise ParserException("Unsupported UnaryOp: " + str(op) + " in " + inputLines[op.lineno][op.col_offset:])
 
 
-# syntax StructItems   ::= List{StructItem, ""}
 # syntax StructItem    ::= "%item" "(" Id "," Expr ")"
+# syntax StructItems   ::= List{StructItem, ""}
 def parseStructItems(node):
     rez = ""
     for i in range(0, len(node.keys)):
@@ -450,7 +450,7 @@ def parseExpr(node):
     elif type(node) == ast.Name or type(node) == ast.Subscript or type(node) == ast.Attribute:
         return parseVar(node)
     elif type(node) == ast.List:
-        return "%list({})".format(parseExprsOrNamedArgs(node.elts))
+        return "%list({})".format(parseExprs(node.elts))
     elif type(node) == ast.Dict:
         return "%struct({})".format(parseStructItems(node))
     elif type(node) == ast.Call:
@@ -459,18 +459,23 @@ def parseExpr(node):
         raise ParserException("Unsupported Expr format: " + str(node))
 
 
-# Named arguments are parsed as:
-#   "%namedArg(" Id "," Expr ")"
-def parseExprOrNamedArg(node):
+# syntax Exprs  ::= List{Expr, ""}
+def parseExprs(exprs, separator=" "):
+    return parseList(exprs, parseExpr, separator)
+
+
+# syntax Argument  ::= Expr
+#                    | "%kwarg" "(" Id "," Expr ")"
+def parseArg(node):
     if type(node) == ast.keyword:
-        return "%namedArg({}, {})".format(node.arg, parseExpr(node.value))
+        return "%kwarg({}, {})".format(node.arg, parseExpr(node.value))
     else:
         return parseExpr(node)
 
 
-# syntax Exprs    ::= List{Expr, ""}
-def parseExprsOrNamedArgs(exprs, separator=" "):
-    return parseList(exprs, parseExprOrNamedArg, separator)
+# syntax Arguments ::= List{Argument, ""}
+def parseArgs(args, separator=" "):
+    return parseList(args, parseArg, separator)
 
 
 # syntax AugAssignOp ::= "+=" | "-=" | "*=" | "/=" | "%="
@@ -580,11 +585,11 @@ def parseStmt(node):
         return "%throw"
     elif type(node) == ast.Expr and type(node.value) == ast.Call:
         if type(node.value.func) == ast.Attribute and node.value.func.value.id == "log":
-            return "%log({}, {})".format(node.value.func.attr, parseExprsOrNamedArgs(node.value.args))
+            return "%log({}, {})".format(node.value.func.attr, parseArgs(node.value.args))
         elif type(node.value.func) == ast.Name and node.value.func.id == "send":
-            return "%send({})".format(parseExprsOrNamedArgs(node.value.args, ", "))
+            return "%send({})".format(parseArgs(node.value.args, ", "))
         elif type(node.value.func) == ast.Name and node.value.func.id == "selfdestruct":
-            return "%selfdestruct({})".format(parseExprsOrNamedArgs(node.value.args, ", "))
+            return "%selfdestruct({})".format(parseArgs(node.value.args, ", "))
         else:
             return "%stmtexpr({})".format(parseExpr(node.value))
     else:
