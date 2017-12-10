@@ -1,0 +1,31 @@
+%pgm(, ,
+  %fdecl(%@public, foo, , %num,
+    %return(%floor(%fixed10(999, 1))))
+  %fdecl(%@public, fop, , %num,
+    %return(%floor(%binop(+, %fixed10(333, 1), %fixed10(666, 1)))))
+  %fdecl(%@public, foq, , %num,
+    %return(%floor(%binop(-, %fixed10(13321, 10), %fixed10(3331, 10)))))
+  %fdecl(%@public, bar, , %num,
+    %return(%floor(%binop(*, %fixed10(27, 1), %fixed10(37, 1)))))
+  %fdecl(%@public, baz, , %num,
+    %assign(%var(x), %fixed10(27, 1))
+    %return(%floor(%binop(*, %var(x), %fixed10(37, 1)))))
+  %fdecl(%@public, baffle, , %num,
+    %return(%floor(%binop(*, %fixed10(27, 1), 37))))
+  %fdecl(%@public, mok, , %num,
+    %return(%floor(%binop(/, %binop(/, %binop(/, %fixed10(999999, 1), %fixed10(7, 1)), %fixed10(11, 1)), %fixed10(13, 1)))))
+  %fdecl(%@public, mol, , %num,
+    %return(%floor(%binop(/, %fixed10(4995, 10), %fixed10(5, 10)))))
+  %fdecl(%@public, mom, , %num,
+    %return(%floor(%binop(/, %fixed10(14985, 10), %fixed10(15, 10)))))
+  %fdecl(%@public, mon, , %num,
+    %return(%floor(%binop(/, %fixed10(2997, 1), 3))))
+  %fdecl(%@public, moo, , %num,
+    %return(%floor(%binop(/, 2997, %fixed10(3, 1)))))
+  %fdecl(%@public, foom, , %num,
+    %return(%floor(%binop(%, %fixed10(1999, 1), %fixed10(1000, 1)))))
+  %fdecl(%@public, foon, , %num,
+    %return(%floor(%binop(%, %fixed10(1999, 1), 1000))))
+  %fdecl(%@public, foop, , %num,
+    %return(%floor(%binop(%, 1999, %fixed10(1000, 1)))))
+)

@@ -93,11 +93,13 @@ module VIPER-ABSTRACT-SYNTAX
     syntax Exprs ::= List{Expr, ""}    [klabel("ExprList")]
 
     syntax Const  ::= Int
+                    | FixedPoint
                     | "%hex"     "(" String ")"
-                    | "%fixed10" "(" Int "," Int ")"  // decimal fixed point value with a precision of 10 decimal places
-                                                      // %fixed10(A, B) = A/B and B is a power of 10.
                     | String
                     | Bool
+
+    syntax FixedPoint  ::= "%fixed10" "(" Int "," Int ")"  // decimal fixed point value with a precision of 10 decimal places
+                                                           // %fixed10(A, B) = A/B and B is a power of 10.
 
     syntax Var  ::= "%var"  "(" Id ")"
                   | "%svar" "(" Id ")"

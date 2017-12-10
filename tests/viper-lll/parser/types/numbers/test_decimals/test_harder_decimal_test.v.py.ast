@@ -1,0 +1,21 @@
+%pgm(, ,
+  %fdecl(%@public, phooey, %param(inp, %decimal), %decimal,
+    %assign(%var(x), %fixed10(10000, 1))
+    %forrange(i, 4,
+      %assign(%var(x), %binop(*, %var(x), %var(inp))))
+    %return(%var(x)))
+  %fdecl(%@public, arg, %param(inp, %decimal), %decimal,
+    %return(%var(inp)))
+  %fdecl(%@public, garg, , %decimal,
+    %assign(%var(x), %fixed10(45, 10))
+    %augassign(*=, %var(x), %fixed10(15, 10))
+    %return(%var(x)))
+  %fdecl(%@public, harg, , %decimal,
+    %assign(%var(x), %fixed10(45, 10))
+    %augassign(*=, %var(x), 2)
+    %return(%var(x)))
+  %fdecl(%@public, iarg, , %wei_value,
+    %assign(%var(x), %as_wei_value(7, wei))
+    %augassign(*=, %var(x), 2)
+    %return(%var(x)))
+)

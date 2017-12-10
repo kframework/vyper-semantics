@@ -2038,27 +2038,27 @@ module VIPER-LLL
         => #ifThenElse(LT ==K RT andBool LT ==K %num,
                        @tlll(%num, $mul(LCODE, RCODE), @none),
              #ifThenElse(LT ==K RT andBool LT ==K %decimal,
-                         @tlll(%decimal, $with($_r, RCODE,
-                                           $with($_l, LCODE,
-                                             $with($_ans, $mul($_l, $_r),
+                         @tlll(%decimal, $with($r, RCODE,
+                                           $with($l, LCODE,
+                                             $with($ans, $mul($l, $r),
                                                $%seq(
-                                                 $assert($or($eq($sdiv($_ans, $_l), $_r), $not($_l))),
-                                                 $sdiv($_ans, @decimalDivisor),.LLLExps)))), @none),
+                                                 $assert($or($eq($sdiv($ans, $l), $r), $not($l))),
+                                                 $sdiv($ans, @decimalDivisor),.LLLExps)))), @none),
                #ifThen((LT ==K %num andBool RT ==K %decimal) orBool (LT ==K %decimal andBool RT ==K %num),
-                       @tlll(%decimal, $with($_r, RCODE,
-                                         $with($_l, LCODE,
-                                           $with($_ans, $mul($_l, $_r),
+                       @tlll(%decimal, $with($r, RCODE,
+                                         $with($l, LCODE,
+                                           $with($ans, $mul($l, $r),
                                              $%seq(
-                                               $assert($or($eq($sdiv($_ans, $_l), $_r), $not($_l))),
-                                               $_ans,.LLLExps)))), @none))))
+                                               $assert($or($eq($sdiv($ans, $l), $r), $not($l))),
+                                               $ans,.LLLExps)))), @none))))
 
     rule #binOpPureAux(/, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
         => #ifThenElse(RT ==K %num,
                        @tlll(LT, $sdiv(LCODE, $clamp_nonzero(RCODE)), @none),
              #ifThenElse(LT ==K RT andBool LT ==K %decimal,
-                         @tlll(%decimal, $with($_l, LCODE,
-                                           $with($_r, $clamp_nonzero(RCODE),
-                                             $sdiv($mul($_l, @decimalDivisor), $_r))), @none),
+                         @tlll(%decimal, $with($l, LCODE,
+                                           $with($r, $clamp_nonzero(RCODE),
+                                             $sdiv($mul($l, @decimalDivisor), $r))), @none),
                #ifThen(LT ==K %num andBool RT ==K %decimal,
                        @tlll(%decimal,
                              $sdiv($mul(LCODE, @decimalDivisor ^Int 2), $clamp_nonzero(RCODE)), @none))))
@@ -2407,11 +2407,21 @@ module VIPER-LLL
 // =================
 
 
+    // floor
+    syntax CTypedLLLExp  ::= "#floor" "(" CTypedLLLExp ")"    [strict]
+ // ------------------------------------------------------------------
+    rule #compileExpr(%floor(EXPR)) => #floor(#compileValueExpr(EXPR))
+
+    rule #floor(@tlll(%decimal, CODE, EXPRATTR))
+        => @tlll(%num, $sdiv(CODE, @decimalDivisor), EXPRATTR)
+
+    rule #floor(@tlll(%unitT(%decimal, UNITMAP:Map, POSITIONAL), CODE, EXPRATTR))
+        => @tlll(%unitT(%num, UNITMAP, POSITIONAL), $sdiv(CODE, @decimalDivisor), EXPRATTR)
+
+
     rule #compileExpr(%as_num128(EXPR)) => #asNum128(#compileValueExpr(EXPR))
 
     rule #compileExpr(%as_num256(EXPR)) => #asNum256(#compileValueExpr(EXPR))
-
-    rule #compileExpr(%as_wei_value(EXPR, UNIT)) => #asWeiValue(#compileValueExpr(EXPR), UNIT)
 
     rule #compileExpr(%num256_add(LEFTE, RIGHTE)) => #num256Add(#compileValueExpr(LEFTE), #compileValueExpr(RIGHTE))
 
@@ -2450,26 +2460,36 @@ module VIPER-LLL
     rule #asNum256ForLLLExp(CODE) => @tlll(%num256, CODE, @none)
 
 
-    syntax CTypedLLLExp ::= "#asWeiValue"    "(" CTypedLLLExp "," Id  ")"                [strict(1)]
-    syntax CTypedLLLExp ::= "#asWeiValueAux" "(" TypedLLLExp  "," Int ")"
-    syntax CTypedLLLExp ::= "#asWeiValueForNumber" "(" LLLExp      "," Int ")"
-    syntax CTypedLLLExp ::= "#asWeiValueForLLLExp" "(" TypedLLLExp "," Int ")"
+    // as_wei_value
+    syntax CTypedLLLExp ::= "#asWeiValue"    "(" Expr "," K ")"    [strict(2)]
  // ------------------------------------------------------------------------------------------------
-    rule #asWeiValue(@tlll(T, CODE, EXPRATTR), UNIT)
-             => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %decimal),
-                            #asWeiValueAux(@tlll(T, CODE, EXPRATTR), #convertToWei(UNIT)),
-                            #exception("Function arg type does not match expected type."))
+    rule #compileExpr(%as_wei_value(EXPR, UNIT)) => #asWeiValue(EXPR, #convertToWei(UNIT))
 
-    rule #asWeiValueAux(@tlll(T, CODE, EXPRATTR), DENOMINATION)
-             => #ifThenElse(isInt(CODE),
-                            #asWeiValueForNumber(CODE, DENOMINATION),
-                            #asWeiValueForLLLExp(@tlll(T, CODE, EXPRATTR), DENOMINATION))
+    rule #asWeiValue(NUM, DENOMINATION)
+        => #asWeiValueForNumber(NUM, DENOMINATION)
+      requires isInt(NUM) orBool isFixedPoint(NUM)
+
+    rule #asWeiValue(EXPR, DENOMINATION)
+        => #asWeiValueForLLLExp(#compileValueExpr(EXPR), DENOMINATION)
+      requires notBool(isInt(EXPR) orBool isFixedPoint(EXPR))
+
+
+    syntax CTypedLLLExp ::= "#asWeiValueForNumber" "(" Expr         "," Int ")"
+    syntax CTypedLLLExp ::= "#asWeiValueForLLLExp" "(" CTypedLLLExp "," Int ")"  [strict(1)]
+ // ----------------------------------------------------------------------------------------
+    rule #asWeiValueForNumber(NUM:Int, DENOMINATION)
+        => @tlll(%unitT(%num, %wei |-> 1, false), NUM, @none)
+
+    rule #asWeiValueForNumber(%fixed10(NUM, DEN), DENOMINATION)
+        => #ifThen((DENOMINATION modInt DEN) =/=Int 0,
+                   #exception("Too many decimal places."))
+        ~> @tlll(%unitT(%num, %wei |-> 1, false), (NUM *Int DENOMINATION) /Int DEN, @none)
 
     rule #asWeiValueForLLLExp(@tlll(%num, CODE, EXPRATTR), DENOMINATION)
         => @tlll(%unitT(%num, %wei |-> 1, false), $mul(CODE, DENOMINATION), @none)
 
     rule #asWeiValueForLLLExp(@tlll(%decimal, CODE, EXPRATTR), DENOMINATION)
-             => @tlll(%unitT(%num, %wei |-> 1, false), $div($mul(CODE, DENOMINATION), @decimalDivisor), @none)
+        => @tlll(%unitT(%num, %wei |-> 1, false), $div($mul(CODE, DENOMINATION), @decimalDivisor), @none)
 
 
     syntax CTypedLLLExp ::= "#num256Add"    "(" CTypedLLLExp "," CTypedLLLExp ")"        [seqstrict]
@@ -3381,8 +3401,8 @@ module VIPER-LLL
     rule #unwrapLoc(@tlll(T, CODE, @none))                 => @tlll(T, CODE, @none)
 
 
-    syntax Int    ::= "#convertToWei" "(" Id ")"  [function]
- // --------------------------------------------------------
+    syntax KItem  ::= "#convertToWei" "(" Id ")"
+ // --------------------------------------------
     rule #convertToWei(wei)      => 1
 
     rule #convertToWei(kwei)     => 10 ^Int 3

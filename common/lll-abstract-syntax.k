@@ -107,12 +107,19 @@ module LLL-ABSTRACT-SYNTAX
                     | "$suicide"       "(" LLLExp ")"
                     | "$selfdestruct"  "(" LLLExp ")"
 
-    syntax Id     ::= "$_stloc"  [token] | "$_mloc" [token] | "$_loc" [token]
-                    | "$_l"      [token] | "$_r"    [token] | "$_ans" [token]
+    syntax Id     ::= "$_stloc"  [token] | "$_mloc" [token]  // augassign
+                    // return
+                    | "$_loc" [token]
+                    // arithmetic
+                    | "$l"       [token] | "$r"     [token] | "$ans"  [token]
+                    // mkSetter
                     | "$_L"      [token] | "$_R"    [token]
+                    // mkByteArrayCopier
                     | "$_source" [token] | "$_sz"   [token] | "$_pos" [token]
-                    | "$_opos"   [token] | "$_actual_len" [token]
-                    | "$_sub"    [token] | "$_len"  [token] | "$_el1" [token]
+                    | "$_l"      [token] | "$_opos" [token] | "$_actual_len" [token]
+                    // packArguments
                     | "$_poz"    [token] | "$_s"    [token]
+                    // byteArray2Num
+                    | "$_sub"    [token] | "$_len"  [token] | "$_el1" [token]
 
 endmodule
