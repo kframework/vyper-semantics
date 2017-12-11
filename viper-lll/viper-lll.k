@@ -1231,14 +1231,14 @@ module VIPER-LLL
     syntax CLLLExps  ::= "#returnBaseAux" "(" TypedLLLExp "," Type ")"
  // ------------------------------------------------------------------
     rule #returnBase(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
-        => #ifThenElse(#areUnitsCompatible(T, RETURNTYPE),
+        => #ifThenElse(#areUnitsCompatible(T, RETURNTYPE, #isNumLiteral(CODE)),
                        #returnBaseAux(@tlll(#dropUnit(T), CODE, EXPRATTR), #dropUnit(RETURNTYPE)),
                        #exception("Return type units mismatch"))
 
     rule #returnBaseAux(@tlll(T, CODE, _), RETURNTYPE)
         => #ifThenElse((T ==K RETURNTYPE) orBool (T ==K %num andBool RETURNTYPE ==K %signed256),
-                        $%seq($mstore(0, CODE), $return(0, 32),.LLLExps),.LLLExps,
-                        #exception("Unsupported type conversion."))
+                       $%seq($mstore(0, CODE), $return(0, 32),.LLLExps),.LLLExps,
+                       #exception("Unsupported type conversion."))
 
 
     syntax CLLLExps  ::= "#returnBytesT"    "(" TypedLLLExp "," Type ")"
@@ -2091,24 +2091,34 @@ module VIPER-LLL
 
 
     rule #compileExpr(%compareop(COP, LEXP, REXP))
-        => #compareOp(COP, #compileValueExpr(LEXP), #compileValueExpr(REXP))
+        => #compareOp(COP, #compileExpr(LEXP), #compileExpr(REXP))
 
 
-    syntax CTypedLLLExp  ::= "#compareOp"    "(" CompareOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
-    syntax CTypedLLLExp  ::= "#compareOpAux" "(" CompareOp "," TypedLLLExp  "," TypedLLLExp ")"
- // --------------------------------------------------------------------------------------------------------------
-    //TODO: support `in` operator
+    syntax CTypedLLLExp  ::= "#compareOp" "(" CompareOp    ","
+                                              CTypedLLLExp ","
+                                              CTypedLLLExp
+                                          ")"  [seqstrict(2,3)]
+ // -----------------------------------------------------------
+    rule #compareOp(%in, @tlll(LT, LCODE, LEXPRATTR), @tlll(%listT(SUBTYPE, N), RCODE, REXPRATTR))
+        => #ifThen(notBool(#areUnitsCompatible(LT, SUBTYPE, #isNumLiteral(LCODE))) andBool
+                   notBool(#areUnitsCompatible(SUBTYPE, LT, #isNumLiteral(RCODE))),
+                   #exception("Can't use IN comparison with different types!"))
 
     rule #compareOp(COP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
-        => #ifThen(notBool(#areUnitsCompatible(LT, RT)) andBool notBool(#areUnitsCompatible(RT, LT)),
+        => #ifThen(notBool(#areUnitsCompatible(LT, RT, #isNumLiteral(LCODE))) andBool
+                   notBool(#areUnitsCompatible(RT, LT, #isNumLiteral(RCODE))),
                    #exception("Can't compare values with different units!"))
         ~> #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
              #ifThen(COP =/=K %eq andBool COP =/=K %ne,
                      #exception("Invalid type for comparison op")))
-        ~> #compareOpAux(COP, @tlll(#dropUnit(LT), LCODE, LEXPRATTR), @tlll(#dropUnit(RT), RCODE, REXPRATTR))
+        ~> #compareOpAux(COP,
+                         #unwrapLoc(@tlll(#dropUnit(LT), LCODE, LEXPRATTR)),
+                         #unwrapLoc(@tlll(#dropUnit(RT), RCODE, REXPRATTR)))
       requires COP =/=K %in
 
 
+    syntax CTypedLLLExp  ::= "#compareOpAux" "(" CompareOp "," TypedLLLExp  "," TypedLLLExp ")"
+ // -------------------------------------------------------------------------------------------
     rule #compareOpAux(%gt, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
         => #ifThenElse(LT ==K RT,
                        @tlll(%bool, $sgt(LCODE, RCODE), @none),
@@ -2709,7 +2719,8 @@ module VIPER-LLL
         => #ifThen(notBool(#isTypeOf(LT, %num) orBool #isTypeOf(LT, %decimal) orBool #isTypeOf(LT, %num256)) orBool
                    notBool(#isTypeOf(RT, %num) orBool #isTypeOf(RT, %decimal) orBool #isTypeOf(RT, %num256)),
                    #exception("Function arg type does not match expected type."))
-        ~> #ifThen(notBool(#areUnitsCompatible(LT, RT)) andBool notBool(#areUnitsCompatible(RT, LT)),
+        ~> #ifThen(notBool(#areUnitsCompatible(LT, RT, #isNumLiteral(LCODE))) andBool
+                   notBool(#areUnitsCompatible(RT, LT, #isNumLiteral(RCODE))),
                    #exception("Units must be compatible."))
         ~> #ifThenElse(LT ==K %num256,
                        #minAux(@tlll(#dropUnit(LT), LCODE, LEXPRATTR),
@@ -2753,8 +2764,8 @@ module VIPER-LLL
     rule #isTopic(%eparam(_, _, ISTOPIC)) => ISTOPIC
 
 
-    syntax Bool  ::= "#isInMemory" "(" LLLExpAttr ")"   [function]
- // --------------------------------------------------------------
+    syntax Bool  ::= "#isInMemory" "(" LLLExpAttr ")"    [function]
+ // ---------------------------------------------------------------
     rule #isInMemory(@locattr(@memory, _)) => true
 
     rule #isInMemory(@locattr(@storage, _)) => false
@@ -2762,6 +2773,15 @@ module VIPER-LLL
     rule #isInMemory(@locattr(@storage_prehashed, _)) => false
 
     rule #isInMemory(@none) => false
+
+
+    syntax Bool  ::= "#isNumLiteral" "(" LLLExp ")"  [function]
+ // -----------------------------------------------------------
+    rule #isNumLiteral(CODE) => true
+      requires isInt(CODE) orBool isFixedPoint(CODE)
+
+    rule #isNumLiteral(CODE) => false
+      requires notBool(isInt(CODE) orBool isFixedPoint(CODE))
 
 
 // Exception
@@ -3025,7 +3045,7 @@ module VIPER-LLL
         => #baseTypeConvertAux(#unwrapLoc(@tlll(FROMT, CODE, EXPRATTR)), TOT)
 
     rule #baseTypeConvertAux(@tlll(FROMT, CODE, _), TOT)
-        => #ifThenElse(#areUnitsCompatible(FROMT, TOT),
+        => #ifThenElse(#areUnitsCompatible(FROMT, TOT, #isNumLiteral(CODE)),
                        #baseTypeConvertNoUnit(CODE, #dropUnit(FROMT), #dropUnit(TOT)),
                        #exception("Typecasting unavailable due to incompatible units"))
 
@@ -3247,19 +3267,28 @@ module VIPER-LLL
         => %unitT(%decimal, UNITMAP, POSITIONAL)
 
 
-    syntax Bool  ::= "#areUnitsCompatible" "(" Type "," Type ")"  [function]
- // -----------------------------------------------------------------------
-    rule #areUnitsCompatible(FROM, TO) => true
-      requires notBool isUnitType(FROM)
+    syntax Bool  ::= "#areUnitsCompatible" "(" Type ","  // from type
+                                               Type ","  // to type
+                                               Bool      // is from a number literal?
+                                           ")"  [function]
+ // ------------------------------------------------------
+    rule #areUnitsCompatible(FROM, TO, _) => true
+      requires notBool(isUnitType(FROM)) andBool notBool(isUnitType(TO))
 
-    rule #areUnitsCompatible(FROM:UnitType, TO) => false
-      requires notBool isUnitType(TO)
+    rule #areUnitsCompatible(FROM, TO, true) => true
+      requires notBool(isUnitType(FROM)) andBool isUnitType(TO)
 
-    rule #areUnitsCompatible(%unitT(_, FROMMAP:Map, FROMPOSITIONAL), %unitT(_, TOMAP:Map, TOPOSITIONAL))
+    rule #areUnitsCompatible(FROM, TO, false) => false
+      requires notBool(isUnitType(FROM)) andBool isUnitType(TO)
+
+    rule #areUnitsCompatible(FROM, TO, _) => false
+      requires isUnitType(FROM) andBool notBool(isUnitType(TO))
+
+    rule #areUnitsCompatible(%unitT(_, FROMMAP:Map, FROMPOSITIONAL), %unitT(_, TOMAP:Map, TOPOSITIONAL), _)
         => true
       requires FROMMAP ==K TOMAP andBool FROMPOSITIONAL ==K TOPOSITIONAL
 
-    rule #areUnitsCompatible(%unitT(_, FROMMAP:Map, FROMPOSITIONAL), %unitT(_, TOMAP:Map, TOPOSITIONAL))
+    rule #areUnitsCompatible(%unitT(_, FROMMAP:Map, FROMPOSITIONAL), %unitT(_, TOMAP:Map, TOPOSITIONAL), _)
         => false
       requires FROMMAP =/=K TOMAP orBool FROMPOSITIONAL =/=K TOPOSITIONAL
 
