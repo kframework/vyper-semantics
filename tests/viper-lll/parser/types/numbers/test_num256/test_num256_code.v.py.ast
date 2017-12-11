@@ -1,0 +1,18 @@
+%pgm(, ,
+  %fdecl(%@public, _num256_add, %param(x, %num256) %param(y, %num256), %num256,
+    %return(%num256_add(%var(x), %var(y))))
+  %fdecl(%@public, _num256_sub, %param(x, %num256) %param(y, %num256), %num256,
+    %return(%num256_sub(%var(x), %var(y))))
+  %fdecl(%@public, _num256_mul, %param(x, %num256) %param(y, %num256), %num256,
+    %return(%num256_mul(%var(x), %var(y))))
+  %fdecl(%@public, _num256_div, %param(x, %num256) %param(y, %num256), %num256,
+    %return(%num256_div(%var(x), %var(y))))
+  %fdecl(%@public, _num256_gt, %param(x, %num256) %param(y, %num256), %bool,
+    %return(%num256_gt(%var(x), %var(y))))
+  %fdecl(%@public, _num256_ge, %param(x, %num256) %param(y, %num256), %bool,
+    %return(%num256_ge(%var(x), %var(y))))
+  %fdecl(%@public, _num256_lt, %param(x, %num256) %param(y, %num256), %bool,
+    %return(%num256_lt(%var(x), %var(y))))
+  %fdecl(%@public, _num256_le, %param(x, %num256) %param(y, %num256), %bool,
+    %return(%num256_le(%var(x), %var(y))))
+)

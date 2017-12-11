@@ -2418,10 +2418,6 @@ module VIPER-LLL
     rule #floor(@tlll(%unitT(%decimal, UNITMAP:Map, POSITIONAL), CODE, EXPRATTR))
         => @tlll(%unitT(%num, UNITMAP, POSITIONAL), $sdiv(CODE, @decimalDivisor), EXPRATTR)
 
-    rule #compileExpr(%num256_add(LEFTE, RIGHTE)) => #num256Add(#compileValueExpr(LEFTE), #compileValueExpr(RIGHTE))
-
-    rule #compileExpr(%num256_sub(LEFTE, RIGHTE)) => #num256Sub(#compileValueExpr(LEFTE), #compileValueExpr(RIGHTE))
-
 
     // decimal
     syntax CTypedLLLExp  ::= "#decimal" "(" CTypedLLLExp ")"    [strict]
@@ -2581,8 +2577,8 @@ module VIPER-LLL
 
 
     // as_wei_value
-    syntax CTypedLLLExp ::= "#asWeiValue"    "(" Expr "," K ")"    [strict(2)]
- // --------------------------------------------------------------------------
+    syntax CTypedLLLExp  ::= "#asWeiValue" "(" Expr "," K ")"    [strict(2)]
+ // ------------------------------------------------------------------------
     rule #compileExpr(%as_wei_value(EXPR, UNIT)) => #asWeiValue(EXPR, #convertToWei(UNIT))
 
     rule #asWeiValue(NUM, DENOMINATION)
@@ -2594,9 +2590,9 @@ module VIPER-LLL
       requires notBool(isInt(EXPR) orBool isFixedPoint(EXPR))
 
 
-    syntax CTypedLLLExp ::= "#asWeiValueNumber" "(" Expr         "," Int ")"
-    syntax CTypedLLLExp ::= "#asWeiValueLLLExp" "(" CTypedLLLExp "," Int ")"  [strict(1)]
- // ----------------------------------------------------------------------------------------
+    syntax CTypedLLLExp  ::= "#asWeiValueNumber" "(" Expr         "," Int ")"
+    syntax CTypedLLLExp  ::= "#asWeiValueLLLExp" "(" CTypedLLLExp "," Int ")"  [strict(1)]
+ // --------------------------------------------------------------------------------------
     rule #asWeiValueNumber(NUM:Int, DENOMINATION)
         => @tlll(%unitT(%num, %wei |-> 1, false), NUM, @none)
 
@@ -2612,32 +2608,97 @@ module VIPER-LLL
         => @tlll(%unitT(%num, %wei |-> 1, false), $div($mul(CODE, DENOMINATION), @decimalDivisor), @none)
 
 
-    syntax CTypedLLLExp ::= "#num256Add"    "(" CTypedLLLExp "," CTypedLLLExp ")"        [seqstrict]
-    syntax CTypedLLLExp ::= "#num256AddAux" "(" LLLExp "," LLLExp ")"
- // ------------------------------------------------------------------------------------------------
-    rule #num256Add(@tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
-            => #ifThenElse(#isTypeOf(LT, %num256) andBool #isTypeOf(RT, %num256),
-                           #num256AddAux(LCODE, RCODE),
-                           #exception("Function arg type does not match expected type."))
+    // num256_add
+    syntax CTypedLLLExp  ::= "#num256Add" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #compileExpr(%num256_add(EXPR1, EXPR2)) => #num256Add(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
 
-    rule #num256AddAux(LCODE, RCODE)
-             => @tlll(%num256, $%seq(
-                                 $assert($or($iszero(RCODE), $gt($add(LCODE, RCODE), LCODE))),
-                                 $add(LCODE, RCODE),.LLLExps), @none)
+    rule #num256Add(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
+        => @tlll(%num256, $%seq(
+                            $assert($or($iszero(CODE2), $gt($add(CODE1, CODE2), CODE1))),
+                            $add(CODE1, CODE2),.LLLExps), @none)
 
 
-    syntax CTypedLLLExp ::= "#num256Sub"    "(" CTypedLLLExp "," CTypedLLLExp ")"        [seqstrict]
-    syntax CTypedLLLExp ::= "#num256SubAux" "(" LLLExp "," LLLExp ")"
- // ------------------------------------------------------------------------------------------------
-    rule #num256Sub(@tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
-            => #ifThenElse(#isTypeOf(LT, %num256) andBool #isTypeOf(RT, %num256),
-                           #num256SubAux(LCODE, RCODE),
-                           #exception("Function arg type does not match expected type."))
+    // num256_sub
+    syntax CTypedLLLExp  ::= "#num256Sub" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #compileExpr(%num256_sub(EXPR1, EXPR2)) => #num256Sub(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
 
-    rule #num256SubAux(LCODE, RCODE)
-             => @tlll(%num256, $%seq(
-                                 $assert($ge(LCODE, RCODE)),
-                                 $sub(LCODE, RCODE),.LLLExps), @none)
+    rule #num256Sub(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
+        => @tlll(%num256, $%seq(
+                            $assert($ge(CODE1, CODE2)),
+                            $sub(CODE1, CODE2),.LLLExps), @none)
+
+
+    // num256_mul
+    syntax CTypedLLLExp  ::= "#num256Mul" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #compileExpr(%num256_mul(EXPR1, EXPR2)) => #num256Mul(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+
+    rule #num256Mul(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
+        => @tlll(%num256, $%seq(
+                            $assert($or($iszero(CODE1), $eq($div($mul(CODE1, CODE2), CODE1), CODE2))),
+                            $mul(CODE1, CODE2),.LLLExps), @none)
+
+
+    // num256_div
+    syntax CTypedLLLExp  ::= "#num256Div" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #compileExpr(%num256_div(EXPR1, EXPR2)) => #num256Div(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+
+    rule #num256Div(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
+        => @tlll(%num256, $%seq(
+                            $assert(CODE2),
+                            $div(CODE1, CODE2),.LLLExps), @none)
+
+
+    // num256_exp
+    syntax CTypedLLLExp  ::= "#num256Exp" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #compileExpr(%num256_exp(EXPR1, EXPR2)) => #num256Exp(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+
+    rule #num256Exp(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
+        => @tlll(%num256, $%seq(
+                            $assert($or($or($eq(CODE2, 1), $iszero(CODE2)), $lt(CODE1, $exp(CODE1, CODE2)))),
+                            $exp(CODE1, CODE2),.LLLExps), @none)
+
+
+    // num256_gt
+    syntax CTypedLLLExp  ::= "#num256Gt" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // -----------------------------------------------------------------------------------------
+    rule #compileExpr(%num256_gt(EXPR1, EXPR2)) => #num256Gt(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+
+    rule #num256Gt(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
+        => @tlll(%bool, $gt(CODE1, CODE2), @none)
+
+
+    // num256_ge
+    syntax CTypedLLLExp  ::= "#num256Ge" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // -----------------------------------------------------------------------------------------
+    rule #compileExpr(%num256_ge(EXPR1, EXPR2)) => #num256Ge(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+
+    rule #num256Ge(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
+        => @tlll(%bool, $ge(CODE1, CODE2), @none)
+
+
+    // num256_lt
+    syntax CTypedLLLExp  ::= "#num256Lt" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // -----------------------------------------------------------------------------------------
+    rule #compileExpr(%num256_lt(EXPR1, EXPR2)) => #num256Lt(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+
+    rule #num256Lt(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
+        => @tlll(%bool, $lt(CODE1, CODE2), @none)
+
+
+    // num256_le
+    syntax CTypedLLLExp  ::= "#num256Le" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // -----------------------------------------------------------------------------------------
+    rule #compileExpr(%num256_le(EXPR1, EXPR2)) => #num256Le(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+
+    rule #num256Le(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
+        => @tlll(%bool, $le(CODE1, CODE2), @none)
+
+
 
 
 //////////////////////////////////////////////////////////////////////////////
