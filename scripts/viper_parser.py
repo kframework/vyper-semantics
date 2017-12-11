@@ -292,7 +292,12 @@ def parseConst(node):
 #   self.raw_call(0x1234567890123456789012345678901234567890, "cow", outsize=4, gas=595757)
 def parseCallExpr(expr: ast.Call):
     if type(expr.func) == ast.Name:
-        if expr.func.id == "as_wei_value":
+        if expr.func.id == "slice":
+            arg0 = parseExpr(expr.args[0])
+            start = parseExpr(expr.keywords[0].value)
+            length = parseExpr(expr.keywords[1].value)
+            return "%slice({}, {}, {})".format(arg0, start, length)
+        elif expr.func.id == "as_wei_value":
             return "%as_wei_value({}, {})".format(parseExpr(expr.args[0]),
                                                   expr.args[1].s if type(expr.args[1]) == ast.Str else expr.args[1].id)
         else:

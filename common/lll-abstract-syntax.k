@@ -121,5 +121,7 @@ module LLL-ABSTRACT-SYNTAX
                     | "$_poz"    [token] | "$_s"    [token]
                     // byteArray2Num
                     | "$_sub"    [token] | "$_len"  [token] | "$_el1" [token]
+                    // slice
+                    | "$_start"  [token] | "$_length" [token]
 
 endmodule

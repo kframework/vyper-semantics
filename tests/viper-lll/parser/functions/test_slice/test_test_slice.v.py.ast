@@ -1,0 +1,12 @@
+%pgm(, ,
+  %fdecl(%@public, foo, %param(inp1, %bytesT(10)), %bytesT(3),
+    %assign(%var(x), 5)
+    %assign(%var(s), %slice(%var(inp1), 3, 3))
+    %assign(%var(y), 7)
+    %return(%var(s)))
+  %fdecl(%@public, bar, %param(inp1, %bytesT(10)), %num,
+    %assign(%var(x), 5)
+    %assign(%var(s), %slice(%var(inp1), 3, 3))
+    %assign(%var(y), 7)
+    %return(%binop(*, %var(x), %var(y))))
+)

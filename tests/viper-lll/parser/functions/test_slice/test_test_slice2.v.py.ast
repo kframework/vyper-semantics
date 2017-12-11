@@ -1,0 +1,7 @@
+%pgm(, ,
+  %fdecl(%@public, slice_tower_test, %param(inp1, %bytesT(50)), %bytesT(50),
+    %assign(%var(inp), %var(inp1))
+    %forrange(i, 1, 11,
+      %assign(%var(inp), %slice(%var(inp), 1, %binop(-, 30, %binop(*, %var(i), 2)))))
+    %return(%var(inp)))
+)

@@ -1,0 +1,15 @@
+%pgm(,
+  %svdecl(x, %num, %private)
+  %svdecl(s, %bytesT(50), %private)
+  %svdecl(y, %num, %private),
+  %fdecl(%@public, foo, %param(inp1, %bytesT(50)), %bytesT(50),
+    %assign(%svar(x), 5)
+    %assign(%svar(s), %slice(%var(inp1), 3, 3))
+    %assign(%svar(y), 7)
+    %return(%svar(s)))
+  %fdecl(%@public, bar, %param(inp1, %bytesT(50)), %num,
+    %assign(%svar(x), 5)
+    %assign(%svar(s), %slice(%var(inp1), 3, 3))
+    %assign(%svar(y), 7)
+    %return(%binop(*, %svar(x), %svar(y))))
+)

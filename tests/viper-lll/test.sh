@@ -49,6 +49,9 @@ run_tests $TESTS_DIR
 TESTS_DIR=${SCRIPT_DIR}/parser/functions/test_send
 run_tests $TESTS_DIR
 
+TESTS_DIR=${SCRIPT_DIR}/parser/functions/test_slice
+run_tests $TESTS_DIR
+
 #parser/syntax
 TESTS_DIR=${SCRIPT_DIR}/parser/syntax/test_as_num256
 run_tests $TESTS_DIR

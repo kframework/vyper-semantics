@@ -2509,9 +2509,80 @@ module VIPER-LLL
                        #exception("Function arg type does not match expected type."))
 
 
+    // slice
+    syntax CTypedLLLExp  ::= "#slice" "(" CTypedLLLExp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict]
+    syntax CTypedLLLExp  ::= "#sliceAux" "(" TypedLLLExp  ","  // bytes
+                                             LLLExp       ","  // start
+                                             LLLExp       ","  // length
+                                             CTypedLLLExp      // placeholder
+                                         ")"      [strict(4)]
+ // -----------------------------------------------------------------------------------------------------
+    rule #compileExpr(%slice(EXPR, STARTEXPR, LENEXPR))
+        => #slice(#compileExpr(EXPR), #compileValueExpr(STARTEXPR), #compileValueExpr(LENEXPR))
+
+    rule #slice(@tlll(%bytesT(L), BYTESCODE, EXPRATTR), @tlll(%num, START, _), @tlll(%num, LEN, _))
+        => #sliceAux(@tlll(%bytesT(L), BYTESCODE, EXPRATTR), START, LEN,
+                           #newPlaceholder(%bytesT(L +Int 32)))
+
+    rule #sliceAux(@tlll(%bytesT(L), BYTESLOC, @locattr(@storage, MUTABLE)), START, LEN, PLACEHOLDER)
+        => #sliceBytesByCopy(@tlll(%bytesT(L),
+                                   $add($sha3_32(BYTESLOC), $add($div($_start, 32), 1)),  // first pos is the byte array length
+                                   @locattr(@storage, MUTABLE)),
+                             L, START, LEN, PLACEHOLDER)
+
+    rule #sliceAux(@tlll(%bytesT(L), BYTESLOC, @locattr(TARGET, MUTABLE)), START, LEN, PLACEHOLDER)
+        => #sliceBytesByCopy(@tlll(%bytesT(L),
+                                  $add(BYTESLOC, $add($sub($_start, $mod($_start, 32)),32)),  // make sure the byte arrary after copy is still 32-byte aligned.
+                                  @locattr(TARGET, MUTABLE)),
+                             L, START, LEN, PLACEHOLDER)
+      requires TARGET =/=K @storage
+
+
+    syntax CTypedLLLExp  ::= "#sliceBytesByCopy" "(" TypedLLLExp ","  // source
+                                                     Int         ","  // old max length
+                                                     LLLExp      ","  // start
+                                                     LLLExp      ","  // length
+                                                     TypedLLLExp ")"  // placeholder (destination)
+
+
+    syntax CTypedLLLExp  ::= "#sliceBytesByCopyAux" "(" CLLLExp  ","  // copier
+                                                        Int      ","  // placeholder loc
+                                                        LLLExp   ","  // start
+                                                        LLLExp   ","  // length
+                                                        Int      ","  // old max length
+                                                        Int           // new max length
+                                                     ")"  [strict(1)]
+ // -----------------------------------------------------------------
+    rule #sliceBytesByCopy(SOURCE, OLDMAXLEN, START, LEN, @tlll(T, PLACEHOLDERLOC, LOCATTR))
+        => #sliceBytesByCopyAux(#mkByteSliceCopier(@tlll(T, PLACEHOLDERLOC +Int 32, LOCATTR),
+                                                   SOURCE,
+                                                   $add($_length, 32),
+                                                   OLDMAXLEN),
+                                PLACEHOLDERLOC, START, LEN, OLDMAXLEN, LEN)
+      requires isInt(LEN)
+
+    rule #sliceBytesByCopy(SOURCE, OLDMAXLEN, START, LEN, @tlll(T, PLACEHOLDERLOC, LOCATTR))
+        => #sliceBytesByCopyAux(#mkByteSliceCopier(@tlll(T, PLACEHOLDERLOC +Int 32, LOCATTR),
+                                                   SOURCE,
+                                                   $add($_length, 32),
+                                                   OLDMAXLEN),
+                                PLACEHOLDERLOC, START, LEN, OLDMAXLEN, OLDMAXLEN)
+      requires notBool isInt(LEN)
+
+    rule #sliceBytesByCopyAux(COPIER, PLACEHOLDERLOC, START, LEN, OLDMAXLEN, NEWMAXLEN)
+        => @tlll(%bytesT(NEWMAXLEN), $with($_start, START,
+                                      $with($_length, LEN,
+                                        $with($_opos, $add(PLACEHOLDERLOC, $mod($_start, 32)),
+                                          $%seq(
+                                            $assert($lt($add($_start, $_length), OLDMAXLEN)),
+                                            COPIER,
+                                            $mstore($_opos, $_length),
+                                            $_opos,.LLLExps)))), @locattr(@memory, true))
+
+
     // as_wei_value
     syntax CTypedLLLExp ::= "#asWeiValue"    "(" Expr "," K ")"    [strict(2)]
- // ------------------------------------------------------------------------------------------------
+ // --------------------------------------------------------------------------
     rule #compileExpr(%as_wei_value(EXPR, UNIT)) => #asWeiValue(EXPR, #convertToWei(UNIT))
 
     rule #asWeiValue(NUM, DENOMINATION)

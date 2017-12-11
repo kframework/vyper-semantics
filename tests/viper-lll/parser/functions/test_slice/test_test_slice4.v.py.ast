@@ -1,0 +1,4 @@
+%pgm(, ,
+  %fdecl(%@public, foo, %param(inp, %bytesT(10)) %param(start, %num) %param(len, %num), %bytesT(10),
+    %return(%slice(%var(inp), %var(start), %var(len))))
+)

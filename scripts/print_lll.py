@@ -6,6 +6,7 @@ lll_opcodes = ['if', 'repeat', 'break', 'with', 'set', 'seq', 'pass', 'assert',
                'clamp_nonzero', 'ceil32', 'sha3_32', '~codelen', 'codeload', 'lll',
                '_stloc', '_mloc', '_loc', 'l', 'r', 'ans', '_L', '_R', '_source', '_sz',
                '_pos', '_l', '_opos', '_actual_len', '_poz', '_s', '_sub', '_len', '_el1',
+               '_start', '_length',
                # EVM Opcodes
                'stop', 'add', 'mul', 'sub', 'div', 'sdiv', 'mod', 'smod', 'addmod', 'mulmod',
                'exp', 'signextend', 'lt', 'gt', 'slt', 'sgt', 'eq', 'iszero', 'and', 'or',
