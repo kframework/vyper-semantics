@@ -116,12 +116,14 @@ module LLL-ABSTRACT-SYNTAX
                     | "$_L"      [token] | "$_R"    [token]
                     // mkByteArrayCopier
                     | "$_source" [token] | "$_sz"   [token] | "$_pos" [token]
-                    | "$_l"      [token] | "$_opos" [token] | "$_actual_len" [token]
+                    | "$_opos" [token] | "$_actual_len" [token]
                     // packArguments
                     | "$_poz"    [token] | "$_s"    [token]
                     // byteArray2Num
                     | "$_sub"    [token] | "$_len"  [token] | "$_el1" [token]
                     // slice
                     | "$_start"  [token] | "$_length" [token]
+                    // minmax
+                    | "$_l"      [token] | "$_r"    [token]
 
 endmodule

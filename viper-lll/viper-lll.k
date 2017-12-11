@@ -2699,6 +2699,26 @@ module VIPER-LLL
         => @tlll(%bool, $le(CODE1, CODE2), @none)
 
 
+    // min
+    syntax CTypedLLLExp  ::= "#min" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+    syntax CTypedLLLExp  ::= "#minAux" "(" TypedLLLExp "," TypedLLLExp "," Bool /*num256?*/ ")"
+ // -------------------------------------------------------------------------------------------
+    rule #compileExpr(%min(EXPR1, EXPR2)) => #min(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+
+    rule #min(@tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
+        => #ifThen(notBool(#isTypeOf(LT, %num) orBool #isTypeOf(LT, %decimal) orBool #isTypeOf(LT, %num256)) orBool
+                   notBool(#isTypeOf(RT, %num) orBool #isTypeOf(RT, %decimal) orBool #isTypeOf(RT, %num256)),
+                   #exception("Function arg type does not match expected type."))
+        ~> #ifThen(notBool(#areUnitsCompatible(LT, RT)) andBool notBool(#areUnitsCompatible(RT, LT)),
+                   #exception("Units must be compatible."))
+        ~> #ifThenElse(LT ==K %num256,
+                       #minAux(@tlll(#dropUnit(LT), LCODE, LEXPRATTR),
+                               @tlll(#dropUnit(RT), RCODE, REXPRATTR), true),
+                       #minAux(@tlll(#dropUnit(LT), LCODE, LEXPRATTR),
+                               @tlll(#dropUnit(RT), RCODE, REXPRATTR), false))
+
+    // TODO: figure out the result type containing unit or not.
+
 
 
 //////////////////////////////////////////////////////////////////////////////
