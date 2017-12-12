@@ -1,0 +1,8 @@
+%pgm(, ,
+  %fdecl(%@public, testin, %param(x, %num), %bool,
+    %assign(%var(y), 1)
+    %assign(%var(s), %list(1 2 3 4))
+    %if(%compareop(%in, %binop(+, %var(x), 1), %var(s)),
+      %return(true))
+    %return(false))
+)

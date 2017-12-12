@@ -2103,6 +2103,9 @@ module VIPER-LLL
         => #ifThen(notBool(#areUnitsCompatible(LT, SUBTYPE, #isNumLiteral(LCODE))) andBool
                    notBool(#areUnitsCompatible(SUBTYPE, LT, #isNumLiteral(RCODE))),
                    #exception("Can't use IN comparison with different types!"))
+        ~> #buildInComparator(@tlll(LT, LCODE, LEXPRATTR),
+                              @tlll(%listT(SUBTYPE, N), RCODE, REXPRATTR),
+                              #newPlaceholder(%bool))
 
     rule #compareOp(COP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
         => #ifThen(notBool(#areUnitsCompatible(LT, RT, #isNumLiteral(LCODE))) andBool
@@ -2117,6 +2120,65 @@ module VIPER-LLL
       requires COP =/=K %in
 
 
+    // in comparator
+    // TODO: https://github.com/ethereum/viper/issues/581
+    //       https://github.com/ethereum/viper/issues/582
+    //       Need to think carefully how to implement list and type casting.
+    syntax CTypedLLLExp  ::= "#buildInComparator" "(" TypedLLLExp  ","  // left
+                                                      TypedLLLExp  ","  // right
+                                                      CTypedLLLExp      // result placeholder
+                                                  ")"      [strict(3)]
+
+    syntax CTypedLLLExp  ::= "#buildInComparatorAux" "(" CLLLExps ")"  [strict]
+ // ---------------------------------------------------------------------------
+    rule #buildInComparator(TLCODE, TRCODE, @tlll(_, RESULTLOC, _))
+        => #buildInComparatorAux(#compareSeq(TLCODE, TRCODE, RESULTLOC))
+
+    rule #buildInComparatorAux(COMPARESEQ) => @tlll(%bool, $eq(1, COMPARESEQ), @none)
+
+
+    syntax CLLLExps  ::= "#compareSeq" "(" TypedLLLExp "," TypedLLLExp "," Int ")"
+
+    syntax CLLLExps  ::= "#compareSeqAux" "(" LLLExps  ","  // setter
+                                              CLLLExps      // for_loop_seq
+                                          ")"  [strict(2)]
+ // --------------------------------------------------------------------------------------
+    rule #compareSeq(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC)
+        => #compareSeqListTLiteral(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC,
+                                   #newPlaceholder(RT))
+      requires isMultiLLLExp(RCODE)
+
+    rule #compareSeq(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC)
+        => #compareSeqListTVar(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC)
+      requires notBool isMultiLLLExp(RCODE)
+
+    rule #compareSeqAux(SETTER, FORLOOPSEQ) => $%seq(SETTER ++LLL FORLOOPSEQ),.LLLExps
+
+
+    syntax CLLLExps  ::= "#compareSeqListTLiteral" "(" TypedLLLExp  ","
+                                                       TypedLLLExp  ","
+                                                       Int          ","  // result loc
+                                                       CTypedLLLExp      // tmp_list
+                                                   ")"      [strict(3)]
+
+    syntax CLLLExps  ::= "#compareSeqListTLiteralAux" "(" TypedLLLExp ","
+                                                          TypedLLLExp ","
+                                                          Int         ","  // result loc
+                                                          CLLLExps    ","  // setter
+                                                          LLLExp           // load_i_from_list
+                                                      ")"      [strict(4)]
+ // ----------------------------------------------------------------------
+    rule #compareSeqListLiteral(TLCODE, TRCODE, RESULTLOC, @tlll(T, TMPLISTLOC, LOCATTR))
+        => #compareSeqListTLiteralAux(TLCODE, TRCODE, RESULTLOC,
+                                      #mkSetter(@tlll(T, TMPLISTLOC, LOCATTR), TRCODE),
+                                      $mload(add(TMPLISTLOC, $mul(32, $mload(@freeLoopIndexPos)))))
+
+    rule #compareSeqListTLiteralAux(TLCODE, TRCODE, RESULTLOC, SETTER, LODEFROMLIST)
+        => #compareSeqAux(SETTER, .LLLExps)
+
+
+
+    // normal compare operator
     syntax CTypedLLLExp  ::= "#compareOpAux" "(" CompareOp "," TypedLLLExp  "," TypedLLLExp ")"
  // -------------------------------------------------------------------------------------------
     rule #compareOpAux(%gt, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
