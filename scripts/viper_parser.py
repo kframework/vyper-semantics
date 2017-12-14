@@ -99,7 +99,7 @@ def parseUnit(node):
 #                           | StructType
 #
 # syntax ListType      ::= "%listT"   "(" Type "," Int ")"
-# syntax MappingType   ::= "%mapT"    "(" Type "," BaseType ")"
+# syntax MappingType   ::= "%mapT"    "(" Type "," Type ")"
 # syntax ByteArrayType ::= "%bytesT"  "(" Int ")"
 # syntax UnitType      ::= "%unitT" "(" PureNumType "," Unit "," Bool /*positional*/ ")"
 # syntax StructType    ::= "%structT" "(" AnnVars ")"
@@ -119,10 +119,10 @@ def parseType(node):
         if type(node.slice.value) == ast.Num:
             return "%listT({}, {})".format(parseType(node.value), parseConst(node.slice.value))
         else:
-            return "%mapT({}, {})".format(parseType(node.value), parseType(node.slice.value))
+            return "%mapT({}, {})".format(parseType(node.slice.value), parseType(node.value))
     elif type(node) == ast.Dict:
         return "%structT({})".format(parseAnnVars(node))
-    elif type(node) == ast.Call:  # part of BaseType
+    elif type(node) == ast.Call:  # part of UnitType
         if isinstance(node.args[-1], ast.Name) and node.args[-1].id == "positional":
             positional = "true"
         else:

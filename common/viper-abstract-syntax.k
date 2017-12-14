@@ -167,7 +167,7 @@ module VIPER-ABSTRACT-SYNTAX
 
     syntax ListType  ::= "%listT" "(" Type "," Int ")"
 
-    syntax MappingType  ::= "%mapT" "(" Type "," Type ")"
+    syntax MappingType  ::= "%mapT" "(" Type "," Type ")" // keyType, valueType
 
     syntax StructType  ::= "%structT" "(" AnnVars ")"
 

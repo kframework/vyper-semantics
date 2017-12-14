@@ -406,7 +406,7 @@ module VIPER-LLL
                            %subscript(VAR, %var(String2Id("arg" +String Int2String(DEPTH)))),
                            DEPTH +Int 1)
 
-    rule #mkPublicGetterMapT(NAME, PARAMS, %mapT(VT, KT), VAR, DEPTH)
+    rule #mkPublicGetterMapT(NAME, PARAMS, %mapT(KT, VT), VAR, DEPTH)
         => #mkPublicGetter(NAME,
                            PARAMS ++Param (%param(String2Id("arg" +String Int2String(DEPTH)), KT) .Params),
                            VT,
@@ -3180,12 +3180,12 @@ module VIPER-LLL
 
     rule #parseType(%listT(SUBTYPE, N), INMEM) => #parseListType(#parseType(SUBTYPE, INMEM), N)
 
-    rule #parseType(%mapT(VT, KT), true)
+    rule #parseType(%mapT(KT, VT), true)
         => #exception("No mappings allowed for in-memory types, only fixed-size arrays")
 
-    rule #parseType(%mapT(VT, KT), false)
+    rule #parseType(%mapT(KT, VT), false)
         => #ifThenElse(isBaseType(KT) orBool isByteArrayType(KT),
-                       #parseMapType(#parseType(VT, false), #parseType(KT, false)),
+                       #parseMapType(#parseType(KT, false), #parseType(VT, false)),
                        #exception("Mapping keys must be base or bytes types"))
 
     rule #parseType(%structT(ANNVARS), INMEM) => #parseStructType(ANNVARS, INMEM, .Ids, .AnnVars)
@@ -3213,7 +3213,7 @@ module VIPER-LLL
 
     syntax CType  ::= "#parseMapType" "(" CType "," CType ")"    [seqstrict]
  // ------------------------------------------------------------------------
-    rule #parseMapType(VT, KT) => %mapT(VT, KT)
+    rule #parseMapType(KT, VT) => %mapT(KT, VT)
 
 
     syntax CType  ::= "#parseStructType" "(" AnnVars "," Bool "," Ids "," AnnVars ")"
@@ -3530,16 +3530,16 @@ module VIPER-LLL
                              #baseTypeConvert(TINDEX, %num))
 
     // Map, index is not byte array
-    rule #addVarOffset(@tlll(%mapT(VT, KT), BASELOC, LOCATTR),
+    rule #addVarOffset(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
                        @tlll(INDEXT, INDEX, EXPRATTR))
-        => #addMapVarOffset(@tlll(%mapT(VT, KT), BASELOC, LOCATTR),
+        => #addMapVarOffset(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
                             #baseTypeConvert(@tlll(INDEXT, INDEX, EXPRATTR), KT))
       requires notBool(isByteArrayType(INDEXT))
 
     // Map, index is byte array
-    rule #addVarOffset(@tlll(%mapT(VT, KT), BASELOC, LOCATTR),
+    rule #addVarOffset(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
                        @tlll(INDEXT, INDEX, EXPRATTR))
-        => #addMapVarOffset(@tlll(%mapT(VT, KT), BASELOC, LOCATTR),
+        => #addMapVarOffset(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
                             #mapKeyByteArrayConvert(@tlll(INDEXT, INDEX, EXPRATTR), KT))
       requires isByteArrayType(INDEXT)
 
@@ -3573,15 +3573,15 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#addMapVarOffset" "(" TypedLLLExp  ","
                                                     CTypedLLLExp ")"  [strict(2)]
  // -----------------------------------------------------------------------------
-    rule #addMapVarOffset(@tlll(%mapT(VT, KT), BASELOC, @locattr(@storage, MUTABLE)),
+    rule #addMapVarOffset(@tlll(%mapT(KT, VT), BASELOC, @locattr(@storage, MUTABLE)),
                           @tlll(_, INDEX, _))
         => @tlll(VT, $add($sha3_32(BASELOC), INDEX), @locattr(@storage, MUTABLE))
 
-    rule #addMapVarOffset(@tlll(%mapT(VT, KT), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
+    rule #addMapVarOffset(@tlll(%mapT(KT, VT), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
                           @tlll(_, INDEX, _))
         => @tlll(VT, $add(BASELOC, INDEX), @locattr(@storage, MUTABLE))
 
-    rule #addMapVarOffset(@tlll(%mapT(VT, KT), _, @locattr(@memory, _)), _)
+    rule #addMapVarOffset(@tlll(%mapT(KT, VT), _, @locattr(@memory, _)), _)
         => #exception("Can only have fixed-side arrays in memory, not mappings")
 
 

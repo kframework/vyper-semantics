@@ -1,5 +1,5 @@
 %pgm(,
-  %svdecl(nom, %structT(%annvar(a, %mapT(%structT(%annvar(c, %num)), %num)) %annvar(b, %num)), %private),
+  %svdecl(nom, %structT(%annvar(a, %mapT(%num, %structT(%annvar(c, %num)))) %annvar(b, %num)), %private),
   %fdecl(%@public, foo, , %void,
     %assign(%subscript(%attribute(%svar(nom), a), 135), %struct(%item(c, 6)))
     %assign(%attribute(%svar(nom), b), 9))
