@@ -11,7 +11,13 @@ from scripts.op2byte import encode as op2byte # string list -> bytes
 path = os.path.dirname(os.path.realpath(__file__))
 
 def krun(kdir, pgm): # string * string -> string
-    p = subprocess.run(['krun', '-d', os.path.join(path, kdir), '-cPGM=' + pgm, '-pPGM=kast -e'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
+    try:
+        p = subprocess.run(['krun', '-d', os.path.join(path, kdir), '-cPGM=' + pgm, '-pPGM=kast -e'],
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
+    except FileNotFoundError as e:
+        print("Error: subprocess.run() ended with FileNotFoundError for file: " + str(e.filename), file=sys.stderr)
+        raise e
+
     if p.returncode == 0:
         return p.stdout
     else:
@@ -20,6 +26,9 @@ def krun(kdir, pgm): # string * string -> string
 def viper2lll(ast): # string -> string
     out = krun('viper-lll', ast)
     lll = re.search(r'<lll> (.*) </lll>', out).group(1)
+    if lll == ".":
+        raise RuntimeError("viper-lll computation got stuck:\n\n" + out + "\n\n")
+
     return lll
 
 def lll2evm(lll): # string -> string list
