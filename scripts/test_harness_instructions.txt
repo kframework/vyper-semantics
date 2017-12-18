@@ -1,0 +1,7 @@
+How to run tests from viper repository with kviper:
+
+- install viper: https://viper.readthedocs.io/en/latest/installing-viper.html
+- switch to viper virtual env
+- run scripts/kpytest.py <test file or dir from viper repository>
+    Example:
+    python scripts/kpytest.py ../viper/tests/parser/types/numbers/test_num.py
