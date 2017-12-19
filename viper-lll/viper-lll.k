@@ -314,27 +314,14 @@ module VIPER-LLL
                                              PRIVATE)] </internalSig>
 
 
-    syntax KItem  ::= "#checkFuncParams"       "(" Params "," Ids ")"
- // -----------------------------------------------------------------
+    syntax KItem  ::= "#checkFuncParams" "(" Params "," Ids ")"
+ // -----------------------------------------------------------
     rule #checkFuncParams(.Params, NAMES) => .
 
     rule #checkFuncParams(%param(NAME, _) PARAMS, NAMES)
         => #ifThen(#inIds(NAME, NAMES),
                    #exception("Duplicate function argument name: " +String Id2String(NAME)))
-        ~> #checkNameIsInGlobals(NAME)
-
-
-    syntax KItem  ::= "#checkNameIsInGlobals" "(" Id ")"
- // ----------------------------------------------------
-    rule <k> #checkNameIsInGlobals(NAME) => . ... </k>
-         <global> GLOBALS </global>
-      requires notBool %svar(NAME) in_keys(GLOBALS)
-
-    rule <k> #checkNameIsInGlobals(NAME)
-            => #exception("Variable name duplicated between function arguments and globals: +String Id2String(NAME)")
-         ... </k>
-         <global> GLOBALS </global>
-      requires %svar(NAME) in_keys(GLOBALS)
+        ~> #checkFuncParams(PARAMS, NAMES ++Id (NAME .Ids))
 
 
     syntax KItem  ::= "#checkPrivatePublicMECE" "(" Bool /*private?*/ "," Bool /*public?*/ ")"
@@ -346,14 +333,14 @@ module VIPER-LLL
                    #exception("Function visibility must be declared."))
 
 
-    syntax Defs  ::= "#mkPublicGetters"         "(" Globals "," Defs ")"            [function]
+    syntax Defs  ::= "#mkPublicGetters" "(" Globals "," Defs ")"      [function]
 
-    syntax Defs  ::= "#mkPublicGetter"          "(" String /*func name*/       ","
-                                                    Params                     ","
-                                                    Type                       ","
-                                                    Var                        ","
-                                                    Int     /*depth*/          ")"  [function]
- // ------------------------------------------------------------------------------------------
+    syntax Defs  ::= "#mkPublicGetter"  "(" String /*func name*/ ","
+                                            Params               ","
+                                            Type                 ","
+                                            Var                  ","
+                                            Int     /*depth*/    ")"  [function]
+ // ----------------------------------------------------------------------------
     rule #mkPublicGetters(.Globals, DEFS) => DEFS
 
     rule #mkPublicGetters(%svdecl(NAME, T, %public) GS, DEFS)
@@ -399,7 +386,7 @@ module VIPER-LLL
                   %bytesT(L),
                   %return(VAR) .Stmts) .Defs
 
-    rule #mkPublicGetterListT(NAME, PARAMS, %listT(SUBTYPE, L), VAR, DEPTH)
+    rule #mkPublicGetterListT(NAME, PARAMS, %listT(SUBTYPE, N), VAR, DEPTH)
         => #mkPublicGetter(NAME,
                            PARAMS ++Param (%param(String2Id("arg" +String Int2String(DEPTH)), %num) .Params),
                            SUBTYPE,
@@ -414,7 +401,7 @@ module VIPER-LLL
                            DEPTH +Int 1)
 
     rule #mkPublicGetterStructT(NAME, PARAMS, %structT(%annvar(VNAME, T) ANNVARS), VAR, DEPTH)
-        => #mkPublicGetter(NAME +String "___" +String Id2String(VNAME),
+        => #mkPublicGetter(NAME +String "__" +String Id2String(VNAME),
                            PARAMS,
                            T,
                            %attribute(VAR, VNAME),
@@ -2861,7 +2848,7 @@ module VIPER-LLL
  // -------------------------------------------------------
     rule .Defs ++Def DEFS:Defs => DEFS
 
-    rule (DEF DEFS1) ++Def DEFS2:Defs => DEF (DEFS1 ++Def DEFS2)
+    rule (DEF DEFS1) ++Def DEFS2 => DEF (DEFS1 ++Def DEFS2)
 
 
     syntax Params  ::= Params "++Param" Params    [right, function]
