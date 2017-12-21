@@ -85,8 +85,8 @@ module VIPER-ABSTRACT-SYNTAX
                    | "%compareop" "(" CompareOp "," Expr "," Expr ")"
                    | "%boolop"    "(" BoolOp    "," Expr "," Expr ")"
                    | "%unaryop"   "(" UnaryOp   "," Expr ")"
-                   | "%icall"     "(" Id        "," Exprs ")"  // internal contract call
-                   | "%ecall"     "(" Id        "," Exprs ")"  // external contract call
+                   | "%icall"     "(" Id /*func name*/ "," Exprs ")"  // internal contract call
+                   | "%ecall"     "(" Expr /*address*/ "," Id /*func name*/ "," Exprs ")"  // external contract call
                    | ReservedExpr
                    | ReservedFunc  // expr dispatch table
 

@@ -24,16 +24,12 @@ module VIPER-CORE-SEMANTICS
         <xStack>        .List </xStack>  // exception stack
         <interimStates> .List </interimStates>
 
-        <global>   .Map  </global>
         <env>      .Map  </env>
         <envStack> .List </envStack>  // for block scoping
         <forLoop>
           <forvar> .Set  </forvar>  // Variables defined in for loops, eg. for i in range(6):...
           <inLoop> .Set  </inLoop>  // In Loop status. Whether body is currently evaluating within a for-loop or not.
         </forLoop>
-        <fun>      .Map  </fun>
-        <event>    .Map  </event>
-        <external> .Map  </external>
         <constant> false </constant>  // Is the current function constant?
         <payable>  false </payable>   // Is the current function payable?
         <return>   %void </return>
@@ -59,11 +55,9 @@ module VIPER-CORE-SEMANTICS
           <account multiplicity="*" type="Bag">
             <acctID>   0   </acctID>
             <balance>  0   </balance>
-            <code>
-              <funDef>      .Map </funDef>
-              <eventSig>    .Map </eventSig>
-              <externalSig> .Map </externalSig>
-            </code>
+            <fun>      .Map </fun>
+            <event>    .Map </event>
+            <external> .Map </external>
             <storage> .Map </storage>
           </account>
         </accounts>
@@ -127,12 +121,17 @@ module VIPER-CORE-SEMANTICS
 //////////////////////////////////////////////////////////////////////////////
 
 
-    syntax KItem ::= "#loadCode" "(" Pgm "," Exprs ")"
- // --------------------------------------------------
-    rule #loadCode(%pgm(ES, GS, DEFS), _)
-        => ES ~> GS ~> (DEFS ++Def #mkPublicGetters(GS, .Defs))
+    syntax KItem ::= "#loadCode" "(" Int "," Pgm ")"
+ // ------------------------------------------------
+    rule <k> #loadCode(ACCTID, %pgm(ES, GS, DEFS))
+            => ES ~> GS ~> (DEFS ++Def #mkPublicGetters(GS, .Defs)) ~> #clearTX
+         ... </k>
+         <id> _ => ACCTID </id>
+
 
     // TODO: loadCode with init function
+    syntax KItem ::= "#loadCodeAndExecInit" "(" Int "," Pgm "," Exprs ")"
+ // ---------------------------------------------------------------------
 
 
 // Event Declarations
@@ -148,13 +147,23 @@ module VIPER-CORE-SEMANTICS
                          EVENTNAME,
                          #parseTypeForEventParams(EPARAMS, .EventParams))
          ... </k>
-         <event> EVENTS </event>
+         <id> ACCTID </id>
+         <account>
+           <acctID> ACCTID </acctID>
+           <event> EVENTS </event>
+           ...
+         </account>
       requires notBool EVENTNAME in_keys(EVENTS)
 
     rule <k> %event(EVENTNAME, EPARAMS)
             => @exception("Duplicate event name: " +String Id2String(EVENTNAME))
          ... </k>
-         <event> EVENTS </event>
+         <id> ACCTID </id>
+         <account>
+           <acctID> ACCTID </acctID>
+           <event> EVENTS </event>
+           ...
+         </account>
       requires EVENTNAME in_keys(EVENTS)
 
 
@@ -204,7 +213,12 @@ module VIPER-CORE-SEMANTICS
     syntax KItem ::= "#addEvent" "(" K /*event id*/ "," Id "," SEventParams ")"  [seqstrict(1, 3)]
  // ----------------------------------------------------------------------------------------------
     rule <k> #addEvent(EID:Int, EVENTNAME, EPARAMS) => . ... </k>
-         <event> EVENTS => EVENTS[EVENTNAME <- @event(EID, EVENTNAME, EPARAMS)] </event>
+         <id> ACCTID </id>
+         <account>
+           <acctID> ACCTID </acctID>
+           <event> EVENTS => EVENTS[EVENTNAME <- @event(EID, EVENTNAME, EPARAMS)] </event>
+           ...
+         </account>
 
 
     syntax SEventParams ::= "#parseTypeForEventParams" "(" EventParams "," EventParams ")"
@@ -237,22 +251,37 @@ module VIPER-CORE-SEMANTICS
                 #then @exception("Variable name invalid or reserved: " +String Id2String(VARNAME)) #fi
             ~> #addGlobal(VARNAME, #parseType(T, false))
          ... </k>
-         <global> GLOBALS </global>
-      requires notBool VARNAME in_keys(GLOBALS)
+         <id> ACCTID </id>
+         <account>
+           <acctID> ACCTID </acctID>
+           <storage> STORAGE </storage>
+           ...
+         </account>
+      requires notBool VARNAME in_keys(STORAGE)
 
     rule <k> %svdecl(VARNAME, T, _)
             => @exception("Cannot declare a persistent variable twice! " +String Id2String(VARNAME))
          ... </k>
-         <global> GLOBALS </global>
-      requires VARNAME in_keys(GLOBALS)
+         <id> ACCTID </id>
+         <account>
+           <acctID> ACCTID </acctID>
+           <storage> STORAGE </storage>
+           ...
+         </account>
+      requires VARNAME in_keys(STORAGE)
 
 
     syntax KItem ::= "#addGlobal" "(" Id "," SType ")"  [strict(2)]
  // ---------------------------------------------------------------
     rule <k> #addGlobal(VARNAME, T:Type) => . ... </k>
-         <global> GLOBALS
-                 => GLOBALS[VARNAME <- @val(@tv(T, #initialize(T), false), true)] </global>
-      requires notBool VARNAME in_keys(GLOBALS)
+         <id> ACCTID </id>
+         <account>
+           <acctID> ACCTID </acctID>
+           <storage> STORAGE
+                    => STORAGE[VARNAME <- @val(@tv(T, #initialize(T), false), true)] </storage>
+           ...
+         </account>
+      requires notBool VARNAME in_keys(STORAGE)
 
 
 // Function Declarations
@@ -296,15 +325,25 @@ module VIPER-CORE-SEMANTICS
                            FUNCBODY,
                            ISCONSTANT, ISPAYABLE, ISPRIVATE, ORDER)
          ... </k>
-         <fun> FUNCS </fun>
-         <event> EVENTS </event>
+         <id> ACCTID </id>
+         <account>
+           <acctID> ACCTID </acctID>
+           <fun> FUNCS </fun>
+           <event> EVENTS </event>
+           ...
+         </account>
       requires notBool(FUNCNAME in_keys(FUNCS)) andBool notBool(FUNCNAME in_keys(EVENTS))
 
     rule <k> #addFunc(FUNCNAME, PARAMS, T, FUNCBODY, ISCONSTANT, ISPAYABLE, ISPRIVATE, ISPUBLIC, ORDER)
             => @exception("Duplicate event or function name: " +String Id2String(FUNCNAME))
          ... </k>
-         <fun> FUNCS </fun>
-         <event> EVENTS </event>
+         <id> ACCTID </id>
+         <account>
+           <acctID> ACCTID </acctID>
+           <fun> FUNCS </fun>
+           <event> EVENTS </event>
+           ...
+         </account>
       requires (FUNCNAME in_keys(FUNCS)) orBool (FUNCNAME in_keys(EVENTS))
 
 
@@ -348,7 +387,13 @@ module VIPER-CORE-SEMANTICS
  // --------------------------------------------------------
     rule <k> #addFuncAux(FID:Int, FUNCNAME, PARAMS, T, FUNCBODY, ISCONSTANT, ISPAYABLE, ISPRIVATE, ORDER)
             => . ... </k>
-         <fun> FUNCS => FUNCS[FUNCNAME <- @func(FID, FUNCNAME, PARAMS, T, FUNCBODY, ISCONSTANT, ISPAYABLE, ISPRIVATE, ORDER)] </fun>
+         <id> ACCTID </id>
+         <account>
+           <acctID> ACCTID </acctID>
+           <fun> FUNCS
+                => FUNCS[FUNCNAME <- @func(FID, FUNCNAME, PARAMS, T, FUNCBODY, ISCONSTANT, ISPAYABLE, ISPRIVATE, ORDER)] </fun>
+           ...
+         </account>
 
 
     syntax SParams ::= "#parseTypeForParams" "(" Params "," Params ")"
@@ -366,6 +411,33 @@ module VIPER-CORE-SEMANTICS
     syntax KItem   ::= "#parseTypeForParam"  "(" Id "," SType  ")"  [strict(2)]
  // ---------------------------------------------------------------------------
     rule #parseTypeForParam(NAME, T:Type) => %param(NAME, T)
+
+
+
+// Clearing State
+// ==============
+
+
+    syntax KItem ::= "#clearTX"
+ // ---------------------------
+    rule <k> #clearTX => . ... </k>
+         <out>           _ => .List </out>
+         <callStack>     _ => .List </callStack>
+         <xStack>        _ => .List </xStack>
+         <interimStates> _ => .List </interimStates>
+         <env>           _ => .Map  </env>
+         <envStack>      _ => .List </envStack>
+         <forvar>        _ => .Set  </forvar>
+         <inLoop>        _ => .Set  </inLoop>
+         <constant>      _ => false </constant>
+         <payable>       _ => false </payable>
+         <return>        _ => %void </return>
+         <id>            _ => 0     </id>
+         <caller>        _ => 0     </caller>
+         <callValue>     _ => 0     </callValue>
+         <selfDestruct>  _ => .Set  </selfDestruct>
+         <log>           _ => .List </log>
+
 
 
 //////////////////////////////////////////////////////////////////////////////

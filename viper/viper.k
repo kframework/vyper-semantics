@@ -55,14 +55,12 @@ module VIPER
          <accounts>
            (.Bag
           => <account>
-               <acctID>  ACCTID </acctID>
-               <balance> 0    </balance>
-               <code>
-                 <funDef>      .Map </funDef>
-                 <eventSig>    .Map </eventSig>
-                 <externalSig> .Map </externalSig>
-               </code>
-               <storage> .Map </storage>
+               <acctID>   ACCTID </acctID>
+               <balance>  0      </balance>
+               <fun>      .Map   </fun>
+               <event>    .Map   </event>
+               <external> .Map   </external>
+               <storage>  .Map   </storage>
              </account> )
            ...
          </accounts>
@@ -72,14 +70,17 @@ module VIPER
 // ====
 
 
-    syntax JSONList ::= List{JSON,","}
+    syntax JSONList ::= List{JSON,","}  [klabel(JSONList)]
     syntax JSONKey  ::= String | Int
     syntax JSON     ::= String
                       | JSONKey ":" JSON
                       | "{" JSONList "}"
                       | "[" JSONList "]"
 
-    syntax JSON ::= Pgm | Expr
+    // extend JSONKey and JSON to provide a "pretti-fication" to the nicer input form
+    syntax JSONKey ::= Id
+
+    syntax JSON ::= Pgm | Expr | ValRecord | Map
 
     syntax JSONList ::= #sortJSONList ( JSONList )            [function]
                       | #sortJSONList ( JSONList , JSONList ) [function, klabel(#sortJSONListAux)]
@@ -110,8 +111,9 @@ module VIPER
     rule #isSorted( (KEY : _) , (KEY' : VAL) , REST ) => KEY <=String KEY' andThenBool #isSorted((KEY' : VAL) , REST)
 
 
+//////////////////////////////////////////////////////////////////////////////
 // Simulation
-// ==========
+//////////////////////////////////////////////////////////////////////////////
 
 
     syntax Simulation ::= ".Simulation"
@@ -122,69 +124,91 @@ module VIPER
     rule SC:SimulationCommand SIM:Simulation => SC ~> SIM
 
 
-    syntax SimulationCommand ::= "load" "account" ":" JSON
- // ------------------------------------------------------
-    rule load account : { (ACCTID:String) : CONTENT }
-        => #newAccount(#parseAddr(ACCTID))
-        ~> load account : { #parseAddr(ACCTID) : CONTENT }
+// Command - Load
+// ==============
 
-    rule load account : { (ACCTID:Int) : { KEY : VALUE , REST } }
-        => load account : { ACCTID : { KEY : VALUE } }
-        ~> load account : { ACCTID : { REST } }
+
+    syntax SimulationCommand ::= "load" JSON
+ // ----------------------------------------
+    rule load DATA : { .JSONList } => .
+
+    rule load DATA : { KEY : VALUE , REST }
+        => load DATA : { KEY : VALUE } ~> load DATA : { REST }
       requires REST =/=K .JSONList
 
-    rule load account : { (ACCTID:Int) : { "balance" : ((VAL:String) => #parseWord(VAL)) } }
 
-    rule <k> load account : { (ACCTID:Int) : { "balance" : (BAL:Int) } } => . ... </k>
+    // Load account
+    // CONTENT is sorted here so that key "storage" comes after key "code"
+    syntax KItem ::= "#loadAccount" JSON
+ // ---------------------------------------------
+    rule load "account" : { (ACCTSTR:String) : { CONTENT } }
+        => #newAccount(#parseAddr(ACCTSTR))
+        ~> #loadAccount { #parseAddr(ACCTSTR) : { #sortJSONList(CONTENT) } }
+
+    rule #loadAccount { (ACCTID:Int) : { KEY : VALUE , REST } }
+        => #loadAccount { ACCTID : { KEY : VALUE } }
+        ~> #loadAccount { ACCTID : { REST } }
+      requires REST =/=K .JSONList
+
+    // Load account - balance
+    rule #loadAccount { (ACCTID:Int) : { "balance" : ((VAL:String) => #parseWord(VAL)) } }
+
+    rule <k> #loadAccount { (ACCTID:Int) : { "balance" : (BAL:Int) } } => . ... </k>
          <account>
            <acctID> ACCTID </acctID>
            <balance> _ => BAL </balance>
            ...
          </account>
 
+    // Load account - code
+    rule #loadAccount { (ACCTID:Int) : { "code" : { CONTENT } } }
+        => #loadAccount { ACCTID : { "code" : { #sortJSONList(CONTENT) } } }
+      requires notBool #isSorted(CONTENT)
 
-    syntax SimulationCommand ::= "load" "code" ":" JSON
- // ---------------------------------------------------
-    rule load code : { (ACCTID:String) : { CONTENT } }
-        => load code : { #parseAddr(ACCTID) : { #sortJSONList(CONTENT) } }
+    rule #loadAccount { (ACCTID:Int) : { "code" : { "arguments" : [ ARGS ], "source" : (CODE:Pgm) } } }
+        => #loadCodeAndExecInit(ACCTID, CODE, #toExprs(ARGS))
 
-    rule load code : { (ACCTID:Int) : { "arguments" : [ ARGS ], "code" : (CODE:Pgm) } }
-        => #loadCode(CODE, #toExprs(ARGS)) ~> #storeCode(ACCTID)
-
-    rule load code : { (ACCTID:Int) : { "code" : (CODE:Pgm) } }
-        => #loadCode(CODE, .Exprs) ~> #storeCode(ACCTID)
-
-
-    syntax Exprs ::= "#toExprs" "(" JSONList ")"  [function]
- // -----------------------------------------------------------
-    rule #toExprs(.JSONList) => .Exprs
-
-    rule #toExprs(EXPR:Expr , EXPRS) => EXPR #toExprs(EXPRS)
+    rule #loadAccount { (ACCTID:Int) : { "code" : { "source" : (CODE:Pgm) } } }
+        => #loadCode(ACCTID, CODE)
 
 
-    syntax KItem  ::= "#storeCode" "(" Int ")"
- // ------------------------------------------
-    rule <k> #storeCode(ACCTID) => . ... </k>
-         <viper>
-           <global>   GLOBALS   => .Map </global>
-           <fun>      FUNCS     => .Map </fun>
-           <event>    EVENTS    => .Map </event>
-           <external> EXTERNALS => .Map </external>
-           ...
-         </viper>
+    // Load account - storage
+    syntax KItem ::= "#loadAccountStorage" "(" Int "," JSONList ")"
+ // ---------------------------------------------------------------
+    rule #loadAccount { (ACCTID:Int) : { "storage" : { STORAGE:JSONList } } }
+        => #loadAccountStorage(ACCTID, STORAGE)
+
+
+    rule #loadAccountStorage(ACCTID, .JSONList) => .
+
+    rule <k> #loadAccountStorage(ACCTID, ((KEY : VALUE), REST))
+            => #loadAccountStorage(ACCTID, REST)
+         ... </k>
          <accounts>
            <account>
              <acctID> ACCTID </acctID>
-             <code>
-               <funDef>      _ => FUNCS     </funDef>
-               <eventSig>    _ => EVENTS    </eventSig>
-               <externalSig> _ => EXTERNALS </externalSig>
-             </code>
-             <storage> _ => GLOBALS </storage>
+             <storage> ... (KEY |-> (OLD => VALUE)) ... </storage>
              ...
            </account>
            ...
          </accounts>
+
+
+// Command - exec
+// ==============
+
+
+
+//////////////////////////////////////////////////////////////////////////////
+// Utils
+//////////////////////////////////////////////////////////////////////////////
+
+
+    syntax Exprs ::= "#toExprs" "(" JSONList ")"  [function]
+ // --------------------------------------------------------
+    rule #toExprs(.JSONList) => .Exprs
+
+    rule #toExprs(EXPR:Expr , EXPRS) => EXPR #toExprs(EXPRS)
 
 
 endmodule
