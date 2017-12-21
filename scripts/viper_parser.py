@@ -257,7 +257,7 @@ def parseFixed10Const(node):
 #
 # additional: None
 def parseConst(node):
-    nameCosntantMap = {True: "true", False: "false", None: "None"}
+    nameCosntantMap = {True: "true", False: "false", None: "%None"}
     if type(node) == ast.Num and type(node.n) == int:
         hexFormat = get_original_if_0x_prefixed(node)
         if hexFormat is None:

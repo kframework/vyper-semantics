@@ -120,7 +120,7 @@
     %if(%compareop(%gt, %attribute(%subscript(%svar(validators), %var(validator_index)), end_dynasty), %binop(+, %svar(dynasty), 2)),
       %augassign(-=, %svar(next_dynasty_wei_delta), %attribute(%subscript(%svar(validators), %var(validator_index)), deposit)))
     %assign(%subscript(%svar(validator_indexes), %attribute(%subscript(%svar(validators), %var(validator_index)), withdrawal_addr)), 0)
-    %assign(%subscript(%svar(validators), %var(validator_index)), %struct(%item(deposit, 0) %item(start_dynasty, 0) %item(end_dynasty, 0) %item(addr, None) %item(withdrawal_addr, None))))
+    %assign(%subscript(%svar(validators), %var(validator_index)), %struct(%item(deposit, 0) %item(start_dynasty, 0) %item(end_dynasty, 0) %item(addr, %None) %item(withdrawal_addr, %None))))
   %fdecl(%@public, withdraw, %param(validator_index, %num), %void,
     %assert(%compareop(%ge, %svar(dynasty), %binop(+, %attribute(%subscript(%svar(validators), %var(validator_index)), end_dynasty), 1)))
     %assign(%var(end_epoch), %subscript(%svar(dynasty_start_epoch), %binop(+, %attribute(%subscript(%svar(validators), %var(validator_index)), end_dynasty), 1)))
