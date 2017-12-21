@@ -120,6 +120,75 @@ module VIPER-UTILS
     rule #computeFuncSig(SIG, .Params) => SIG +String ")"
 
 
+// Make public getters
+// ===================
+
+
+    syntax Defs ::= "#mkPublicGetters" "(" Globals "," Defs /*result*/ ")"  [function]
+ // ----------------------------------------------------------------------------------
+    rule #mkPublicGetters(.Globals, RESULTDEFS) => RESULTDEFS
+
+    rule #mkPublicGetters(%svdecl(VARNAME, T, %public) GS, RESULTDEFS)
+        => #mkPublicGetters(GS,
+                            RESULTDEFS ++Def #mkPublicGetter(Id2String(VARNAME), .Params, T, %svar(VARNAME), 0))
+
+    rule #mkPublicGetters(%svdecl(_, _, %private) GS, RESULTDEFS)
+        => #mkPublicGetters(GS, RESULTDEFS)
+
+
+    // Struct type and Map will generate multiple getter functions
+    syntax Defs ::= "#mkPublicGetter" "(" String ","  // getter function name
+                                          Params ","  // getter function params
+                                          Type   ","  // getter function return type (if it is base type)
+                                          Var    ","  // return variable
+                                          Int         // depth
+                                      ")"  [function]
+ // -------------------------------------------------
+    // Base Type
+    rule #mkPublicGetter(VARNAME, PARAMS, T:BaseType, VAR, DEPTH)
+        => %fdecl(%@public %@constant .Decorators,
+                  String2Id("get_" +String VARNAME),
+                  PARAMS,
+                  T,
+                  %return(VAR) .Stmts) .Defs
+
+    // Byte Array
+    rule #mkPublicGetter(VARNAME, PARAMS, %bytesT(L), VAR, DEPTH)
+        => %fdecl(%@public %@constant .Decorators,
+                  String2Id("get_" +String VARNAME),
+                  PARAMS,
+                  %bytesT(L),
+                  %return(VAR) .Stmts) .Defs
+
+    // List
+    rule #mkPublicGetter(VARNAME, PARAMS, %listT(SUBTYPE, N), VAR, DEPTH)
+        => #mkPublicGetter(VARNAME,
+                           PARAMS ++Param (%param(String2Id("arg" +String Int2String(DEPTH)), %num) .Params),
+                           SUBTYPE,
+                           %subscript(VAR, %var(String2Id("arg" +String Int2String(DEPTH)))),
+                           DEPTH +Int 1)
+
+    // Map
+    rule #mkPublicGetter(VARNAME, PARAMS, %mapT(KT, VT), VAR, DEPTH)
+        => #mkPublicGetter(VARNAME,
+                           PARAMS ++Param (%param(String2Id("arg" +String Int2String(DEPTH)), KT) .Params),
+                           VT,
+                           %subscript(VAR, %var(String2Id("arg" +String Int2String(DEPTH)))),
+                           DEPTH +Int 1)
+
+    // Struct
+    rule #mkPublicGetter(VARNAME, PARAMS, %structT(%annvar(FIELDNAME, FIELDTYPE) ANNVARS), VAR, DEPTH)
+        => #mkPublicGetter(VARNAME +String "__" +String Id2String(FIELDNAME),
+                           PARAMS,
+                           FIELDTYPE,
+                           %attribute(VAR, FIELDNAME),
+                           DEPTH)
+           ++Def #mkPublicGetter(VARNAME, PARAMS, %structT(ANNVARS), VAR, DEPTH)
+
+    rule #mkPublicGetter(VARNAME, PARAMS, %structT(.AnnVars), VAR, DEPTH)
+        => .Defs
+
+
 ///////////////////////////////////////////////////////////////////////////////
 // Types
 ///////////////////////////////////////////////////////////////////////////////
@@ -138,7 +207,7 @@ module VIPER-UTILS
       requires isBaseType(SUBTYPE) orBool isListType(SUBTYPE)
 
     rule #canonicalizeType(%listT(SUBTYPE, N), _)
-        => #exception("List of byte arrays not allowed.")
+        => @exception("List of byte arrays not allowed.")
       requires isByteArrayType(SUBTYPE)
 
     rule #canonicalizeType(%num, _) => "int128"
@@ -165,7 +234,6 @@ module VIPER-UTILS
 
 
 
-
 ///////////////////////////////////////////////////////////////////////////////
 // Lists
 ///////////////////////////////////////////////////////////////////////////////
@@ -184,6 +252,15 @@ module VIPER-UTILS
     rule #isInIds(ID, ID1 IDS) => #isInIds(ID, IDS)  requires ID =/=K ID1
 
 
+    syntax Bool  ::= "#isInDecorators" "(" Decorator "," Decorators ")"  [function]
+ // -------------------------------------------------------------------------------
+    rule #isInDecorators(DEC, .Decorators) => false
+
+    rule #isInDecorators(DEC, DEC1 DECS) => true                        requires DEC ==K DEC1
+
+    rule #isInDecorators(DEC, DEC1 DECS) => #isInDecorators(DEC, DECS)  requires DEC =/=K DEC1
+
+
 // List Concatenation
 // ==================
 
@@ -196,25 +273,41 @@ module VIPER-UTILS
     rule (ID IDS1) ++Id IDS2 => ID (IDS1 ++Id IDS2)
 
 
-    syntax AnnVars  ::= AnnVars "++Annvar" AnnVars  [right, function]
- // -----------------------------------------------------------------
+    syntax AnnVars ::= AnnVars "++Annvar" AnnVars  [right, function]
+ // ----------------------------------------------------------------
     rule .AnnVars ++Annvar ANNVARS:AnnVars => ANNVARS
 
     rule (ANNVAR ANNVARS1) ++Annvar ANNVARS2 => ANNVAR (ANNVARS1 ++Annvar ANNVARS2)
 
 
-    syntax EventParams  ::= EventParams "++Eparam" EventParams    [right, function]
- // -------------------------------------------------------------------------------
+    syntax EventParams ::= EventParams "++Eparam" EventParams  [right, function]
+ // ----------------------------------------------------------------------------
     rule .EventParams ++Eparam EPARAMS:EventParams => EPARAMS
 
     rule (EPARAM EPARAMS1) ++Eparam EPARAMS2 => EPARAM (EPARAMS1 ++Eparam EPARAMS2)
 
 
-    syntax Params  ::= Params "++Param" Params    [right, function]
- // ---------------------------------------------------------------
+    syntax Params ::= Params "++Param" Params  [right, function]
+ // ------------------------------------------------------------
     rule .Params ++Param PARAMS:Params => PARAMS
 
     rule (PARAM PARAMS1) ++Param PARAMS2 => PARAM (PARAMS1 ++Param PARAMS2)
+
+
+    syntax Defs ::= Defs "++Def" Defs  [right, function]
+ // ----------------------------------------------------
+    rule .Defs ++Def DEFS:Defs => DEFS
+
+    rule (DEF DEFS1) ++Def DEFS2 => DEF (DEFS1 ++Def DEFS2)
+
+
+//////////////////////////////////////////////////////////////////////////////
+// Exception
+//////////////////////////////////////////////////////////////////////////////
+
+
+    syntax KItem ::= "@exception" "(" String ")"
+ // -------------------------------------------
 
 
 endmodule

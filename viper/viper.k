@@ -51,11 +51,11 @@ module VIPER
 
     syntax KItem ::= "#newAccount" "(" Int ")"
  // ------------------------------------------
-    rule <k> #newAccount(ACCT) => . ... </k>
+    rule <k> #newAccount(ACCTID) => . ... </k>
          <accounts>
            (.Bag
           => <account>
-               <acctID>  ACCT </acctID>
+               <acctID>  ACCTID </acctID>
                <balance> 0    </balance>
                <code>
                  <funDef>      .Map </funDef>
@@ -137,7 +137,7 @@ module VIPER
 
     rule <k> load account : { (ACCTID:Int) : { "balance" : (BAL:Int) } } => . ... </k>
          <account>
-           <acctID> ACCT </acctID>
+           <acctID> ACCTID </acctID>
            <balance> _ => BAL </balance>
            ...
          </account>
@@ -164,6 +164,27 @@ module VIPER
 
     syntax KItem  ::= "#storeCode" "(" Int ")"
  // ------------------------------------------
+    rule <k> #storeCode(ACCTID) => . ... </k>
+         <viper>
+           <global>   GLOBALS   => .Map </global>
+           <fun>      FUNCS     => .Map </fun>
+           <event>    EVENTS    => .Map </event>
+           <external> EXTERNALS => .Map </external>
+           ...
+         </viper>
+         <accounts>
+           <account>
+             <acctID> ACCTID </acctID>
+             <code>
+               <funDef>      _ => FUNCS     </funDef>
+               <eventSig>    _ => EVENTS    </eventSig>
+               <externalSig> _ => EXTERNALS </externalSig>
+             </code>
+             <storage> _ => GLOBALS </storage>
+             ...
+           </account>
+           ...
+         </accounts>
 
 
 endmodule

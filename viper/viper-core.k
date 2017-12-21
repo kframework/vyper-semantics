@@ -23,7 +23,6 @@ module VIPER-CORE-SEMANTICS
         <callStack>     .List </callStack>
         <xStack>        .List </xStack>  // exception stack
         <interimStates> .List </interimStates>
-        <return>        %void </return>
 
         <global>   .Map  </global>
         <env>      .Map  </env>
@@ -32,9 +31,12 @@ module VIPER-CORE-SEMANTICS
           <forvar> .Set  </forvar>  // Variables defined in for loops, eg. for i in range(6):...
           <inLoop> .Set  </inLoop>  // In Loop status. Whether body is currently evaluating within a for-loop or not.
         </forLoop>
-        <fun>      .Map </fun>
-        <event>    .Map </event>
-        <external> .Map </external>
+        <fun>      .Map  </fun>
+        <event>    .Map  </event>
+        <external> .Map  </external>
+        <constant> false </constant>  // Is the current function constant?
+        <payable>  false </payable>   // Is the current function payable?
+        <return>   %void </return>
 
         // transaction
         <id>        0 </id>
@@ -76,8 +78,8 @@ module VIPER-CORE-SEMANTICS
 //////////////////////////////////////////////////////////////////////////////
 
 
-    syntax EventRecord ::= "@event" "(" Int         ","  // event_id
-                                        Id          ","  // name
+    syntax EventRecord ::= "@event" "(" Int         ","  // event id
+                                        Id          ","  // event name
                                         EventParams ")"
 
 
@@ -88,11 +90,18 @@ module VIPER-CORE-SEMANTICS
     syntax Value ::= Int
                    | Decimal
                    | Map
-                   | UndefinedValue
-
-    syntax UndefinedValue ::= "undef"
 
     syntax Decimal ::= "@d" "(" Int ")"  // value = acutal_value * @decimalDivisor
+
+    syntax FuncRecord ::= "@func" "(" Int    ","  // func id
+                                      Id     ","  // func name
+                                      Params ","
+                                      Type   ","  // return type
+                                      Stmts  ","  // func body
+                                      Bool   ","  // constant ?
+                                      Bool   ","  // payable ?
+                                      Bool   ","  // private ?
+                                      Int    ")"  // order (to prevent recursive call, i.e., a function A can only call other function whose order is less than A)
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -104,11 +113,13 @@ module VIPER-CORE-SEMANTICS
     //             requires for evaluation (i.e. not KResult).
     syntax SType ::= Type
     syntax SEventParams ::= EventParams
+    syntax SParams ::= Params
 
     syntax KResult ::= Int | String
                      | TypedValue
                      | Type
                      | EventParams
+                     | Params
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -118,7 +129,10 @@ module VIPER-CORE-SEMANTICS
 
     syntax KItem ::= "#loadCode" "(" Pgm "," Exprs ")"
  // --------------------------------------------------
-    rule #loadCode(%pgm(ES, GS, DEFS), _) => ES ~> GS ~> DEFS
+    rule #loadCode(%pgm(ES, GS, DEFS), _)
+        => ES ~> GS ~> (DEFS ++Def #mkPublicGetters(GS, .Defs))
+
+    // TODO: loadCode with init function
 
 
 // Event Declarations
@@ -187,8 +201,8 @@ module VIPER-CORE-SEMANTICS
       requires notBool isByteArrayType(T)
 
 
-    syntax KItem ::= "#addEvent" "(" K "," Id "," SEventParams ")"  [seqstrict(1, 3)]
- // ---------------------------------------------------------------------------------
+    syntax KItem ::= "#addEvent" "(" K /*event id*/ "," Id "," SEventParams ")"  [seqstrict(1, 3)]
+ // ----------------------------------------------------------------------------------------------
     rule <k> #addEvent(EID:Int, EVENTNAME, EPARAMS) => . ... </k>
          <event> EVENTS => EVENTS[EVENTNAME <- @event(EID, EVENTNAME, EPARAMS)] </event>
 
@@ -207,7 +221,7 @@ module VIPER-CORE-SEMANTICS
 
     syntax KItem ::= "#parseTypeForEventParam" "(" Id "," SType "," Bool ")"  [strict(2)]
  // -------------------------------------------------------------------------------------
-    rule #parseTypeForEventParam(NAME, T:Type, TOPIC) => %eparam(NAME, T, TOPIC)
+    rule #parseTypeForEventParam(NAME, T:Type, ISTOPIC) => %eparam(NAME, T, ISTOPIC)
 
 
 // Global Declarations
@@ -240,6 +254,118 @@ module VIPER-CORE-SEMANTICS
                  => GLOBALS[VARNAME <- @val(@tv(T, #initialize(T), false), true)] </global>
       requires notBool VARNAME in_keys(GLOBALS)
 
+
+// Function Declarations
+// =====================
+
+
+    rule FUNCDEFS:Defs => #addFuncs(FUNCDEFS, 0)
+
+
+    syntax KItem ::= "#addFuncs" "(" Defs "," Int /*order*/ ")"
+ // -----------------------------------------------------------
+    rule #addFuncs(.Defs, _) => .
+
+    rule #addFuncs(%fdecl(DECS, FUNCNAME, PARAMS, T, FUNCBODY) DEFS, ORDER)
+        => #addFunc(FUNCNAME, PARAMS, T, FUNCBODY,
+                    #isInDecorators(%@constant, DECS),
+                    #isInDecorators(%@payable , DECS),
+                    #isInDecorators(%@private , DECS),
+                    #isInDecorators(%@public  , DECS),
+                    ORDER)
+        ~> #addFuncs(DEFS, ORDER +Int 1)
+
+
+    syntax KItem ::= "#addFunc" "(" Id     ","  // func name
+                                    Params ","
+                                    Type   ","  // return type
+                                    Stmts  ","  // func body
+                                    Bool   ","  // constant?
+                                    Bool   ","  // payable?
+                                    Bool   ","  // private?
+                                    Bool   ","  // public?
+                                    Int    ")"  // order
+ // ------------------------------------------
+    rule <k> #addFunc(FUNCNAME, PARAMS, T, FUNCBODY, ISCONSTANT, ISPAYABLE, ISPRIVATE, ISPUBLIC, ORDER)
+            => #checkFuncParams(PARAMS, .Ids)
+            ~> #checkPrivatePublicMECE(ISPRIVATE, ISPUBLIC)
+            ~> #addFuncAux(#computeFuncId(FUNCNAME, PARAMS),
+                           FUNCNAME,
+                           #parseTypeForParams(PARAMS, .Params),
+                           #parseType(T, true),
+                           FUNCBODY,
+                           ISCONSTANT, ISPAYABLE, ISPRIVATE, ORDER)
+         ... </k>
+         <fun> FUNCS </fun>
+         <event> EVENTS </event>
+      requires notBool(FUNCNAME in_keys(FUNCS)) andBool notBool(FUNCNAME in_keys(EVENTS))
+
+    rule <k> #addFunc(FUNCNAME, PARAMS, T, FUNCBODY, ISCONSTANT, ISPAYABLE, ISPRIVATE, ISPUBLIC, ORDER)
+            => @exception("Duplicate event or function name: " +String Id2String(FUNCNAME))
+         ... </k>
+         <fun> FUNCS </fun>
+         <event> EVENTS </event>
+      requires (FUNCNAME in_keys(FUNCS)) orBool (FUNCNAME in_keys(EVENTS))
+
+
+    syntax KItem ::= "#checkFuncParams" "(" Params "," Ids ")"
+ // ----------------------------------------------------------
+    rule #checkFuncParams(.Params, NAMES) => .
+
+    rule #checkFuncParams(%param(NAME, T) PARAMS, NAMES)
+        => #checkFuncParam(%param(NAME, T), NAMES)
+        ~> #checkFuncParams(PARAMS, NAMES ++Id (NAME .Ids))
+
+
+    syntax KItem ::= "#checkFuncParam" "(" Param "," Ids ")"
+ // --------------------------------------------------------
+     rule #checkFuncParam(%param(NAME, _), NAMES)
+        => #if notBool #isVarNameValid(NAME)
+             #then @exception("Argument name invalid or reserved: " +String Id2String(NAME)) #fi
+        ~> #if #isInIds(NAME, NAMES)
+             #then @exception("Duplicate function argument name: " +String Id2String(NAME)) #fi
+
+
+    syntax KItem ::= "#checkPrivatePublicMECE" "(" Bool /*private?*/ "," Bool /*public?*/ ")"
+ // -----------------------------------------------------------------------------------------
+    rule #checkPrivatePublicMECE(ISPRIVATE, ISPUBLIC)
+        => #if ISPRIVATE ==K true andBool ISPUBLIC ==K true
+             #then @exception("Cannot use public and private decorators on the same function.") #fi
+        ~> #if ISPRIVATE ==K false andBool ISPUBLIC ==K false
+             #then @exception("Function visibility must be declared (@public or @private).") #fi
+
+
+    syntax KItem ::= "#addFuncAux" "(" K       ","  // func id
+                                       Id      ","  // func name
+                                       SParams ","
+                                       SType   ","  // return type
+                                       Stmts   ","  // func body
+                                       Bool    ","  // constant?
+                                       Bool    ","  // payable?
+                                       Bool    ","  // private?
+                                       Int
+                                   ")"  [strict(1, 3, 4)]
+ // --------------------------------------------------------
+    rule <k> #addFuncAux(FID:Int, FUNCNAME, PARAMS, T, FUNCBODY, ISCONSTANT, ISPAYABLE, ISPRIVATE, ORDER)
+            => . ... </k>
+         <fun> FUNCS => FUNCS[FUNCNAME <- @func(FID, FUNCNAME, PARAMS, T, FUNCBODY, ISCONSTANT, ISPAYABLE, ISPRIVATE, ORDER)] </fun>
+
+
+    syntax SParams ::= "#parseTypeForParams" "(" Params "," Params ")"
+ // ------------------------------------------------------------------
+    rule #parseTypeForParams(.Params, RESULT) => RESULT
+
+    rule #parseTypeForParams(%param(NAME, T) PARAMS, RESULT)
+        => #parseTypeForParam(NAME, #parseType(T, true))
+        ~> #parseTypeForParams(PARAMS, RESULT)
+
+    rule PARAM:Param ~> #parseTypeForParams(PARAMS, RESULT)
+        => #parseTypeForParams(PARAMS, RESULT ++Param (PARAM .Params))
+
+
+    syntax KItem   ::= "#parseTypeForParam"  "(" Id "," SType  ")"  [strict(2)]
+ // ---------------------------------------------------------------------------
+    rule #parseTypeForParam(NAME, T:Type) => %param(NAME, T)
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -290,15 +416,6 @@ module VIPER-CORE-SEMANTICS
 
     rule #initializeStruct(%annvar(FIELDNAME, FIELDTYPE) ANNVARS)
         => (FIELDNAME |-> #initialize(FIELDTYPE)) #initializeStruct(ANNVARS)
-
-
-//////////////////////////////////////////////////////////////////////////////
-// Exception
-//////////////////////////////////////////////////////////////////////////////
-
-
-    syntax KItem ::= "@exception" "(" String ")"
- // -------------------------------------------
 
 
 ///////////////////////////////////////////////////////////////////////////////
