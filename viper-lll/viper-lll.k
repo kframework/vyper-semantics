@@ -2873,7 +2873,7 @@ module VIPER-LLL
 
 
     syntax LLLExp   ::= "$%seq" "(" LLLExps ")"
-    syntax LLLExps  ::= List{LLLExp, ","}          [klabel("LLLExpList")]
+    syntax LLLExps  ::= List{LLLExp, ","}          [klabel(LLLExps)]
     syntax LLLExps  ::= LLLExps "++LLL" LLLExps    [right, function]
  // ---------------------------------------------------------------
     rule .LLLExps    ++LLL LES:LLLExps => LES

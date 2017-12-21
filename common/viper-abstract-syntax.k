@@ -9,10 +9,10 @@ module VIPER-ABSTRACT-SYNTAX
 
 
     syntax Event  ::= "%event" "(" Id "," EventParams ")"
-    syntax Events ::= List{Event, ""}
+    syntax Events ::= List{Event, ""}  [klabel(Events)]
 
     syntax EventParam  ::= "%eparam" "(" Id "," Type "," Bool /*indexed?*/ ")"
-    syntax EventParams ::= List{EventParam, ""}
+    syntax EventParams ::= List{EventParam, ""}  [klabel(EventParams)]
 
 
 // Global
@@ -20,7 +20,7 @@ module VIPER-ABSTRACT-SYNTAX
 
 
     syntax Global  ::= "%svdecl" "(" Id "," Type "," Visibility ")"
-    syntax Globals ::= List{Global, ""}
+    syntax Globals ::= List{Global, ""}  [klabel(Globals)]
 
     syntax Visibility  ::= "%public" | "%private"
 
@@ -30,13 +30,13 @@ module VIPER-ABSTRACT-SYNTAX
 
 
     syntax Def  ::= "%fdecl" "(" Decorators "," Id "," Params "," Type "," Stmts ")"
-    syntax Defs ::= List{Def, ""}
+    syntax Defs ::= List{Def, ""}  [klabel(Defs)]
 
     syntax Decorator  ::= "%@constant" | "%@payable" | "%@private" | "%@public"
-    syntax Decorators ::= List{Decorator, ""}
+    syntax Decorators ::= List{Decorator, ""}  [klabel(Decorators)]
 
     syntax Param  ::= "%param" "(" Id "," Type ")"
-    syntax Params ::= List{Param, ""}
+    syntax Params ::= List{Param, ""}  [klabel(Params)]
 
 
 // Statement
@@ -64,10 +64,10 @@ module VIPER-ABSTRACT-SYNTAX
                    | "%selfdestruct" "(" Expr ")"
                    | "%rawlog"    "(" Expr "," Expr ")"
 
-    syntax Stmts    ::= List{Stmt, ""}
+    syntax Stmts    ::= List{Stmt, ""}  [klabel(Stmts)]
 
     syntax AnnVar   ::= "%annvar" "(" Id "," Type ")"
-    syntax AnnVars  ::= List{AnnVar, ""}
+    syntax AnnVars  ::= List{AnnVar, ""}  [klabel(AnnVars)]
 
     syntax AugAssignOp ::= "+=" | "-=" | "*=" | "/=" | "%="
 
@@ -90,7 +90,7 @@ module VIPER-ABSTRACT-SYNTAX
                    | ReservedExpr
                    | ReservedFunc  // expr dispatch table
 
-    syntax Exprs ::= List{Expr, ""}    [klabel("ExprList")]
+    syntax Exprs ::= List{Expr, ""}    [klabel(Exprs)]
 
     syntax Const  ::= Int
                     | FixedPoint
