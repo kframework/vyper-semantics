@@ -173,11 +173,13 @@ def parseEvent(node):  # node.annotation is ast.Call
 # x: public(num(wei / sec))
 #   => %svdecl(x, %unitT(%num, %udiv(%wei, %sec), false), %public)
 def parseGlobal(node):
-    if type(node.annotation) == ast.Call:
-        return "  %svdecl({}, {}, %{})" \
-            .format(node.target.id, parseType(node.annotation.args[0]), node.annotation.func.id)
+    if type(node.annotation) == ast.Call and node.annotation.func.id in {"public", "private"}:
+        n_type = parseType(node.annotation.args[0])
+        visibility = node.annotation.func.id
     else:
-        return "  %svdecl({}, {}, %private)".format(node.target.id, parseType(node.annotation))
+        n_type = parseType(node.annotation)
+        visibility = "private"
+    return "  %svdecl({}, {}, %{})".format(node.target.id, n_type, visibility)
 
 
 #    syntax Decorator  ::= "%@constant" | "%@payable" | "%@private" | "%@public"
@@ -253,8 +255,9 @@ def parseFixed10Const(node):
 #                   | String
 #                   | Bool
 #
+# additional: None
 def parseConst(node):
-    boolMap = {True: "true", False: "false"}
+    nameCosntantMap = {True: "true", False: "false", None: "None"}
     if type(node) == ast.Num and type(node.n) == int:
         hexFormat = get_original_if_0x_prefixed(node)
         if hexFormat is None:
@@ -266,7 +269,7 @@ def parseConst(node):
     elif type(node) == ast.Str:
         return "\"{}\"".format(node.s)
     elif type(node) == ast.NameConstant:
-        return boolMap[node.value]
+        return nameCosntantMap[node.value]
     else:
         raise ParserException("Unsupported Const format: " + str(node))
 
