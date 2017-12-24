@@ -1303,7 +1303,7 @@ module VIPER-LLL
 
     syntax CLLLExps  ::= "#assert" "(" CTypedLLLExp ")"  [strict]
  // -------------------------------------------------------------
-    rule #assert(@tlll(_, CODE, _)) => $assert(CODE)
+    rule #assert(@tlll(_, CODE, _)) => $assert(CODE),.LLLExps
 
 
 // Throw
