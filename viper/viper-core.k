@@ -72,14 +72,21 @@ module VIPER-CORE-SEMANTICS
 //////////////////////////////////////////////////////////////////////////////
 
 
-    syntax EventRecord ::= "@event" "(" Int         ","  // event id
-                                        Id          ","  // event name
-                                        EventParams ")"
+// Typed Value
+// ===========
 
-
-    syntax ValRecord ::= "@val" "(" TypedValue "," Bool ")"  // typed_value, mutable?
 
     syntax TypedValue ::= "@tv" "(" Type "," Value "," Bool ")"  // type, value, literal?
+
+    syntax TypedValues ::= List{TypedValue, ""}  [klabel(TypedValues)]
+
+
+    syntax TypedValues ::= "#revTypedValues" "(" TypedValues "," TypedValues ")"  [function]
+ // ----------------------------------------------------------------------------------------
+    rule #revTypedValues(.TypedValues, RESULT) => RESULT
+
+    rule #revTypedValues(TV TVS, RESULT) => #revTypedValues(TVS, TV RESULT)
+
 
     syntax Value ::= Int
                    | Decimal
@@ -87,8 +94,16 @@ module VIPER-CORE-SEMANTICS
 
     syntax Decimal ::= "@d" "(" Int ")"  // value = acutal_value * @decimalDivisor
 
-    syntax FuncRecord ::= "@func" "(" Int    ","  // func id
-                                      Id     ","  // func name
+
+// Record
+// ======
+
+    syntax ValRecord ::= "@val" "(" TypedValue "," Bool ")"  // typed_value, mutable?
+
+    syntax EventRecord ::= "@event" "(" Id          ","  // event name
+                                        EventParams ")"
+
+    syntax FuncRecord ::= "@func" "(" Id     ","  // func name
                                       Params ","
                                       Type   ","  // return type
                                       Stmts  ","  // func body
@@ -109,8 +124,8 @@ module VIPER-CORE-SEMANTICS
     syntax SEventParams ::= EventParams
     syntax SParams ::= Params
 
-    syntax KResult ::= Int | String
-                     | TypedValue
+    syntax KResult ::= TypedValue
+                     | TypedValues
                      | Type
                      | EventParams
                      | Params
@@ -143,8 +158,7 @@ module VIPER-CORE-SEMANTICS
 
     rule <k> %event(EVENTNAME, EPARAMS)
             => #checkEventParams(EPARAMS, 0, .Ids)
-            ~> #addEvent(#computeEventId(EVENTNAME, EPARAMS),
-                         EVENTNAME,
+            ~> #addEvent(EVENTNAME,
                          #parseTypeForEventParams(EPARAMS, .EventParams))
          ... </k>
          <id> ACCTID </id>
@@ -210,13 +224,13 @@ module VIPER-CORE-SEMANTICS
       requires notBool isByteArrayType(T)
 
 
-    syntax KItem ::= "#addEvent" "(" K /*event id*/ "," Id "," SEventParams ")"  [seqstrict(1, 3)]
- // ----------------------------------------------------------------------------------------------
-    rule <k> #addEvent(EID:Int, EVENTNAME, EPARAMS) => . ... </k>
+    syntax KItem ::= "#addEvent" "(" Id "," SEventParams ")"  [strict(2)]
+ // ---------------------------------------------------------------------
+    rule <k> #addEvent(EVENTNAME, EPARAMS) => . ... </k>
          <id> ACCTID </id>
          <account>
            <acctID> ACCTID </acctID>
-           <event> EVENTS => EVENTS[EVENTNAME <- @event(EID, EVENTNAME, EPARAMS)] </event>
+           <event> EVENTS => EVENTS[EVENTNAME <- @event(EVENTNAME, EPARAMS)] </event>
            ...
          </account>
 
@@ -318,8 +332,7 @@ module VIPER-CORE-SEMANTICS
     rule <k> #addFunc(FUNCNAME, PARAMS, T, FUNCBODY, ISCONSTANT, ISPAYABLE, ISPRIVATE, ISPUBLIC, ORDER)
             => #checkFuncParams(PARAMS, .Ids)
             ~> #checkPrivatePublicMECE(ISPRIVATE, ISPUBLIC)
-            ~> #addFuncAux(#computeFuncId(FUNCNAME, PARAMS),
-                           FUNCNAME,
+            ~> #addFuncAux(FUNCNAME,
                            #parseTypeForParams(PARAMS, .Params),
                            #parseType(T, true),
                            FUNCBODY,
@@ -374,8 +387,7 @@ module VIPER-CORE-SEMANTICS
              #then @exception("Function visibility must be declared (@public or @private).") #fi
 
 
-    syntax KItem ::= "#addFuncAux" "(" K       ","  // func id
-                                       Id      ","  // func name
+    syntax KItem ::= "#addFuncAux" "(" Id      ","  // func name
                                        SParams ","
                                        SType   ","  // return type
                                        Stmts   ","  // func body
@@ -383,15 +395,15 @@ module VIPER-CORE-SEMANTICS
                                        Bool    ","  // payable?
                                        Bool    ","  // private?
                                        Int
-                                   ")"  [strict(1, 3, 4)]
- // --------------------------------------------------------
-    rule <k> #addFuncAux(FID:Int, FUNCNAME, PARAMS, T, FUNCBODY, ISCONSTANT, ISPAYABLE, ISPRIVATE, ORDER)
+                                   ")"  [strict(2, 3)]
+ // --------------------------------------------------
+    rule <k> #addFuncAux(FUNCNAME, PARAMS, T, FUNCBODY, ISCONSTANT, ISPAYABLE, ISPRIVATE, ORDER)
             => . ... </k>
          <id> ACCTID </id>
          <account>
            <acctID> ACCTID </acctID>
            <fun> FUNCS
-                => FUNCS[FUNCNAME <- @func(FID, FUNCNAME, PARAMS, T, FUNCBODY, ISCONSTANT, ISPAYABLE, ISPRIVATE, ORDER)] </fun>
+                => FUNCS[FUNCNAME <- @func(FUNCNAME, PARAMS, T, FUNCBODY, ISCONSTANT, ISPAYABLE, ISPRIVATE, ORDER)] </fun>
            ...
          </account>
 
@@ -488,6 +500,40 @@ module VIPER-CORE-SEMANTICS
 
     rule #initializeStruct(%annvar(FIELDNAME, FIELDTYPE) ANNVARS)
         => (FIELDNAME |-> #initialize(FIELDTYPE)) #initializeStruct(ANNVARS)
+
+
+//////////////////////////////////////////////////////////////////////////////
+// Expressions
+//////////////////////////////////////////////////////////////////////////////
+
+
+// Constants
+// =========
+
+
+    rule I:Int => @tv(%num, I, true)
+
+    rule %hex(STR:String) => @tv(%address, #parseHexWord(STR), true)
+
+
+
+// External Call
+// =============
+
+
+    syntax KItem ::= "#ecall" "(" K /*TypedValue*/ "," Id "," K /*TypedValues*/ ")"  [seqstrict(1, 3)]
+ // --------------------------------------------------------------------------------------------------
+    rule %ecall(ADDR, FUNCNAME, EXPRS) => #ecall(ADDR, FUNCNAME, #evalArgs(EXPRS, .TypedValues))
+
+
+    syntax KItem /*TypedValues*/ ::= "#evalArgs" "(" Exprs "," TypedValues ")"
+ // --------------------------------------------------------------------------
+    rule #evalArgs(.Exprs, RESULT) => #revTypedValues(RESULT, .TypedValues)
+
+    rule #evalArgs((ARG:Expr ARGS:Exprs), RESULT) => ARG ~> #evalArgs(ARGS, RESULT)
+
+    rule ARG:TypedValue ~> #evalArgs(ARGS:Exprs, RESULT) => #evalArgs(ARGS, ARG RESULT)
+
 
 
 ///////////////////////////////////////////////////////////////////////////////

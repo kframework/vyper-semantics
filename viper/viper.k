@@ -22,24 +22,6 @@ module VIPER
     rule #addr(W) => W modInt pow160
 
 
-    syntax Int ::= #parseHexWord ( String ) [function]
-                 | #parseWord    ( String ) [function]
- // --------------------------------------------------
-    rule #parseHexWord("")   => 0
-
-    rule #parseHexWord("0x") => 0
-
-    rule #parseHexWord(S)    => String2Base(replaceAll(S, "0x", ""), 16)
-      requires (S =/=String "") andBool (S =/=String "0x")
-
-    rule #parseWord("") => 0
-
-    rule #parseWord(S)  => #parseHexWord(S)
-      requires lengthString(S) >=Int 2 andBool substrString(S, 0, 2) ==String "0x"
-
-    rule #parseWord(S)  => String2Int(S)  [owise]
-
-
     syntax Int ::= "#parseAddr" "(" String ")"  [function]
  // ------------------------------------------------------
     rule #parseAddr(S) => #addr(#parseHexWord(S))
@@ -140,7 +122,7 @@ module VIPER
     // Load account
     // CONTENT is sorted here so that key "storage" comes after key "code"
     syntax KItem ::= "#loadAccount" JSON
- // ---------------------------------------------
+ // ------------------------------------
     rule load "account" : { (ACCTSTR:String) : { CONTENT } }
         => #newAccount(#parseAddr(ACCTSTR))
         ~> #loadAccount { #parseAddr(ACCTSTR) : { #sortJSONList(CONTENT) } }
@@ -173,16 +155,16 @@ module VIPER
 
 
     // Load account - storage
-    syntax KItem ::= "#loadAccountStorage" "(" Int "," JSONList ")"
+    syntax KItem ::= "#loadStorage" "(" Int "," JSONList ")"
  // ---------------------------------------------------------------
     rule #loadAccount { (ACCTID:Int) : { "storage" : { STORAGE:JSONList } } }
-        => #loadAccountStorage(ACCTID, STORAGE)
+        => #loadStorage(ACCTID, STORAGE)
 
 
-    rule #loadAccountStorage(ACCTID, .JSONList) => .
+    rule #loadStorage(ACCTID, .JSONList) => .
 
-    rule <k> #loadAccountStorage(ACCTID, ((KEY : VALUE), REST))
-            => #loadAccountStorage(ACCTID, REST)
+    rule <k> #loadStorage(ACCTID, ((KEY : VALUE), REST))
+            => #loadStorage(ACCTID, REST)
          ... </k>
          <accounts>
            <account>
@@ -194,9 +176,19 @@ module VIPER
          </accounts>
 
 
-// Command - exec
+// Command - Exec
 // ==============
 
+
+    syntax SimulationCommand ::= "exec" JSON
+ // ----------------------------------------
+    rule exec { CONTENT } => exec { #sortJSONList(CONTENT) }
+      requires notBool #isSorted(CONTENT)
+
+    rule <k> exec { "caller" : (CALLER:String), "data" : (CALLEXPR:Expr), "value" : (VALUE:String) }
+            => CALLEXPR ... </k>
+         <caller>    _ => #parseHexWord(CALLER) </caller>
+         <callValue> _ => #parseWord(VALUE)  </callValue>
 
 
 //////////////////////////////////////////////////////////////////////////////
