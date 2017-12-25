@@ -2780,6 +2780,13 @@ module VIPER-LLL
     // TODO: figure out the result type containing unit or not.
 
 
+    // sha3
+    syntax CTypedLLLExp  ::= "#sha3" "(" CTypedLLLExp ")"    [strict]
+ // -----------------------------------------------------------------------------------------
+    rule #compileExpr(%sha3(EXPR)) => #sha3(#compileValueExpr(EXPR))
+
+    rule #sha3(@tlll(%bytes32, CODE, _))
+        => @tlll(%bytes32, $sha3_32(CODE), @none)
 
 //////////////////////////////////////////////////////////////////////////////
 // Utils

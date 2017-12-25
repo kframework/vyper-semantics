@@ -232,6 +232,7 @@ module VIPER-ABSTRACT-SYNTAX
                         // | "%create_with_code_of" "(" Expr "," Expr ")"
                            | "%min"                 "(" Expr "," Expr ")"
                            | "%max"                 "(" Expr "," Expr ")"
+                           | "%sha3"                "(" Expr ")"
 
 
 endmodule
