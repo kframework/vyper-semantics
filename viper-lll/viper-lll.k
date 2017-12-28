@@ -2803,14 +2803,18 @@ module VIPER-LLL
 
 
     // shift
-    // shift by positive value is to left, by negative value is to right. Always padded with zeroes.
+    // If second argument is positive, left-shift so multiply by a power of two
+    // If it is negative, divide by a power of two
     syntax CTypedLLLExp  ::= "#shift" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
     rule #compileExpr(%shift(EXPR1, EXPR2)) => #shift(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
 
-    //fixme support shift to right when CODE2 is negative.
-    rule #shift(@tlll(_, CODE1, _), @tlll(_, CODE2, _))
-        =>  @tlll(%num256, $shl(CODE1, CODE2), @none)
+    rule #shift(@tlll(%num256, CODE1, _), @tlll(%num, CODE2, _))
+        => @tlll(%num256,
+            $if($sle(CODE2, 0),
+                $div(CODE1, $exp(2, $sub(0, CODE2))),
+                $mul(CODE1, $exp(2, CODE2))
+        ), @none)
 
 
     // min

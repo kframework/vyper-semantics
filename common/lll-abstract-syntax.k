@@ -1,7 +1,6 @@
 module LLL-ABSTRACT-SYNTAX
 
     syntax LLLExp ::= LLLEVM
-                    | LLLMACRO
                     | Int
                     | Id
                     | "$if"            "(" LLLExp "," LLLExp ")"
@@ -126,8 +125,5 @@ module LLL-ABSTRACT-SYNTAX
                     | "$_start"  [token] | "$_length" [token]
                     // minmax
                     | "$_l"      [token] | "$_r"    [token]
-
-    syntax LLLMACRO ::= "$shl"        "(" LLLExp "," LLLExp ")" //todo implement
-                     |  "$shr"        "(" LLLExp "," LLLExp ")"
 
 endmodule
