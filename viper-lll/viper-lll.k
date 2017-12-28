@@ -2817,26 +2817,50 @@ module VIPER-LLL
         ), @none)
 
 
-    // min
-    syntax CTypedLLLExp  ::= "#min" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
-    syntax CTypedLLLExp  ::= "#minAux" "(" TypedLLLExp "," TypedLLLExp "," Bool /*num256?*/ ")"
+    // min, max
+    //type compatibility: num with decimal, num256 only with num256.
+    syntax CTypedLLLExp  ::= "#minMax"    "(" CompareOp "," CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict(2,3)]
+    syntax CTypedLLLExp  ::= "#minMaxAux" "(" CompareOp ","  TypedLLLExp ","  TypedLLLExp ")"
  // -------------------------------------------------------------------------------------------
-    rule #compileExpr(%min(EXPR1, EXPR2)) => #min(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileExpr(%min(EXPR1, EXPR2)) => #minMax(%le, #compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileExpr(%max(EXPR1, EXPR2)) => #minMax(%ge, #compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
 
-    rule #min(@tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
+    rule #minMax(OP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
         => #ifThen(notBool(#isTypeOf(LT, %num) orBool #isTypeOf(LT, %decimal) orBool #isTypeOf(LT, %num256)) orBool
                    notBool(#isTypeOf(RT, %num) orBool #isTypeOf(RT, %decimal) orBool #isTypeOf(RT, %num256)),
                    #exception("Function arg type does not match expected type."))
         ~> #ifThen(notBool(#areUnitsCompatible(LT, RT, #isNumLiteral(LCODE))) andBool
                    notBool(#areUnitsCompatible(RT, LT, #isNumLiteral(RCODE))),
                    #exception("Units must be compatible."))
-        ~> #ifThenElse(LT ==K %num256,
-                       #minAux(@tlll(#dropUnit(LT), LCODE, LEXPRATTR),
-                               @tlll(#dropUnit(RT), RCODE, REXPRATTR), true),
-                       #minAux(@tlll(#dropUnit(LT), LCODE, LEXPRATTR),
-                               @tlll(#dropUnit(RT), RCODE, REXPRATTR), false))
+        ~> #minMaxAux(OP, @tlll(#dropUnit(LT), LCODE, LEXPRATTR),
+                          @tlll(#dropUnit(RT), RCODE, REXPRATTR))
+
+    rule #minMaxAux(OP, @tlll(T1, CODE1, A1), @tlll(T2, CODE2, A2))
+        => #ifThen(notBool(
+                    (isPureNumType(T1) andBool isPureNumType(T2))
+                    orBool (T1 ==K %num256 andBool T2 ==K %num256)),
+                    #exception("Minmax types incompatible."))
+        ~> #ifThenElse(T1 ==K %num256,
+                       @tlll(%num256, $if( #ifLLLExp(OP ==K %le, $le(CODE1, CODE2), $ge(CODE1, CODE2)),
+                                            CODE1, CODE2), @none),
+                       #tlllAux(#joinType(T1, T2),
+                                #ifstmt(#compareOp(OP, @tlll(T1, CODE1, A1), @tlll(T2, CODE2, A2)),
+                                        CODE1,.LLLExps, CODE2,.LLLExps),
+                                @none)
+                       )
 
     // TODO: figure out the result type containing unit or not.
+
+    syntax CTypedLLLExp  ::= "#tlllAux"  "(" Type              ","
+                                             CLLLExps          ","  //have to make it Exps, not Exp, to support #ifstmt
+                                             LLLExpAttr        ")"  [strict(2)]
+
+    rule #tlllAux(T, (Exp:LLLExp, .LLLExps), A) => @tlll(T, Exp, A)
+
+    //Wrapper over builtin #if, of sort LLLExp
+    syntax LLLExp ::= "#ifLLLExp" "(" K "," K "," K ")"             [function]
+
+    rule #ifLLLExp(K1, K2, K3) => #if K1 #then K2 #else K3 #fi
 
 
     // sha3
@@ -2897,6 +2921,14 @@ module VIPER-LLL
 
     rule #isNumLiteral(CODE) => false
       requires notBool(isInt(CODE) orBool isFixedPoint(CODE))
+
+
+    syntax Type ::= "#joinType" "(" Type "," Type ")"              [function]
+ // -----------------------------------------------------------
+
+    rule #joinType(_:PureNumType, %decimal) => %decimal
+    rule #joinType(%decimal, _:PureNumType) => %decimal
+    rule #joinType(%num, %num)              => %num
 
 
 // Exception
