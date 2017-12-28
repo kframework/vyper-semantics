@@ -36,6 +36,7 @@ module VIPER-LLL
         <payable> false </payable>  // Is the function payable?
         <placeholder> 1 </placeholder>  // Number of placeholders generated (used to generate random names)
         <inLoop> .Set </inLoop>  // In Loop status. Whether body is currently evaluating within a for-loop or not.
+        <debug> .List </debug>   // Used for debugging
     </T>
 
 
@@ -2130,6 +2131,7 @@ module VIPER-LLL
                                               CLLLExps      // for_loop_seq
                                           ")"  [strict(2)]
  // --------------------------------------------------------------------------------------
+    //todo figure out which one is in list and which is in range.
     rule #compareSeq(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC)
         => #compareSeqListTLiteral(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC,
                                    #newPlaceholder(RT))
@@ -2138,6 +2140,12 @@ module VIPER-LLL
     rule #compareSeq(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC)
         => #compareSeqListTVar(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC)
       requires notBool isMultiLLLExp(RCODE)
+
+    syntax CLLLExps  ::= "#compareSeqListTVar" "(" TypedLLLExp  ","
+                                                   TypedLLLExp  ","
+                                                   Int               // result loc
+                                               ")"      [strict(3)]
+
 
     rule #compareSeqAux(SETTER, FORLOOPSEQ) => $%seq(SETTER ++LLL FORLOOPSEQ),.LLLExps
 
@@ -2667,6 +2675,42 @@ module VIPER-LLL
         => @tlll(%unitT(%num, %wei |-> 1, false), $div($mul(CODE, DENOMINATION), @decimalDivisor), @none)
 
 
+    // bitwise_and
+    syntax CTypedLLLExp  ::= "#bitwise_and" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #compileExpr(%bitwise_and(EXPR1, EXPR2)) => #bitwise_and(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+
+    rule #bitwise_and(@tlll(_, CODE1, _), @tlll(_, CODE2, _))
+        => @tlll(%num256, $and(CODE1, CODE2), @none)
+
+
+    // bitwise_or
+    syntax CTypedLLLExp  ::= "#bitwise_or" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #compileExpr(%bitwise_or(EXPR1, EXPR2)) => #bitwise_or(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+
+    rule #bitwise_or(@tlll(_, CODE1, _), @tlll(_, CODE2, _))
+        => @tlll(%num256, $or(CODE1, CODE2), @none)
+
+
+    // bitwise_xor
+    syntax CTypedLLLExp  ::= "#bitwise_xor" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #compileExpr(%bitwise_xor(EXPR1, EXPR2)) => #bitwise_xor(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+
+    rule #bitwise_xor(@tlll(_, CODE1, _), @tlll(_, CODE2, _))
+        => @tlll(%num256, $xor(CODE1, CODE2), @none)
+
+
+    // bitwise_not
+    syntax CTypedLLLExp  ::= "#bitwise_not" "(" CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #compileExpr(%bitwise_not(EXPR1)) => #bitwise_not(#compileValueExpr(EXPR1))
+
+    rule #bitwise_not(@tlll(_, CODE1, _))
+        => @tlll(%num256, $not(CODE1), @none)
+
+
     // num256_add
     syntax CTypedLLLExp  ::= "#num256Add" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
@@ -2674,7 +2718,7 @@ module VIPER-LLL
 
     rule #num256Add(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq(
-                            $assert($or($iszero(CODE2), $gt($add(CODE1, CODE2), CODE1))),
+                            $assert($ge($add(CODE1, CODE2), CODE1)),
                             $add(CODE1, CODE2),.LLLExps), @none)
 
 
@@ -2756,6 +2800,17 @@ module VIPER-LLL
 
     rule #num256Le(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%bool, $le(CODE1, CODE2), @none)
+
+
+    // shift
+    // shift by positive value is to left, by negative value is to right. Always padded with zeroes.
+    syntax CTypedLLLExp  ::= "#shift" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #compileExpr(%shift(EXPR1, EXPR2)) => #shift(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+
+    //fixme support shift to right when CODE2 is negative.
+    rule #shift(@tlll(_, CODE1, _), @tlll(_, CODE2, _))
+        =>  @tlll(%num256, $shl(CODE1, CODE2), @none)
 
 
     // min
