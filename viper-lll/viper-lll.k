@@ -2970,7 +2970,7 @@ module VIPER-LLL
     rule (EXPR EXPRS1) ++Expr EXPRS2 => EXPR (EXPRS1 ++Expr EXPRS2)
 
 
-    syntax LLLExp   ::= "$%seq" "(" LLLExps ")"
+    syntax LLLExp   ::= "$%seq" "(" LLLExps ")"    [function]
     syntax LLLExps  ::= List{LLLExp, ","}          [klabel(LLLExps)]
     syntax LLLExps  ::= LLLExps "++LLL" LLLExps    [right, function]
  // ---------------------------------------------------------------
