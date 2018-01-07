@@ -663,16 +663,10 @@ module VIPER-LLL
     syntax CLLLExps  ::= "#assign"    "(" Var                             ","
                                           CTypedLLLExp  /*compiled Expr*/
                                       ")"                         [strict(2)]
-
-    syntax CLLLExps  ::= "#assignAux" "(" CTypedLLLExp /*variable address*/ ","
-                                          TypedLLLExp
-                                      ")"                           [strict(1)]
  // ---------------------------------------------------------------------------
     rule #assign(V, @tlll(T, CODE, EXPRATTR))
-        => #assignAux(#getTarget(V, #lookupOrNewVar(V, T)),
+        => #mkSetter(#getTarget(V, #lookupOrNewVar(V, T)),
                       @tlll(T, CODE, EXPRATTR))
-
-    rule #assignAux(LTCODE, RTCODE) => #mkSetter(LTCODE, RTCODE)
 
 
     syntax CTypedLLLExp  ::= "#getTarget" "(" Var "," CTypedLLLExp ")"  [strict(2)]
@@ -710,6 +704,7 @@ module VIPER-LLL
          <constant> CONSTANT </constant>
 
 
+    // Assignment expression: V = E.
     syntax CLLLExps  ::= "#mkSetter" "(" CTypedLLLExp  /*left variable loc*/  ","
                                          CTypedLLLExp /*right compiled Expr*/ ")"  [seqstrict]
  // ------------------------------------------------------------------------------------------
@@ -1006,11 +1001,11 @@ module VIPER-LLL
 // For Loop
 // ========
 
+// for in range
+//-------------------------
 
     // e.g. for i in range(10): ...
-    rule #compileStmt(%forrange(ITER, ROUNDS, STMTS))
-        => #forrange(#newLoopVar(ITER, %num), @tlll(%num, 0, @none), ROUNDS, #compileStmts(STMTS, .LLLExps))
-        ~> #clearIter(ITER)
+    rule #compileStmt(%forrange(ITER, ROUNDS, STMTS) => %forrange(ITER, 0, ROUNDS, STMTS))
 
     // e.g. for i in range(100, 110): ...
     rule #compileStmt(%forrange(ITER, START:Int, END:Int, STMTS))
@@ -1021,12 +1016,6 @@ module VIPER-LLL
     rule #compileStmt(%forrange(ITER, %var(V), %binop(+, %var(V), ROUNDS:Int), STMTS))
         => #forrange(#newLoopVar(ITER, %num), #compileValueExpr(%var(V)), ROUNDS, #compileStmts(STMTS, .LLLExps))
         ~> #clearIter(ITER)
-
-    // e.g. for i in list(): ...
-    rule #compileStmt(%forlist(ITER, EXPR, STMTS))
-        => #forlist(ITER, EXPR, #compileExpr(EXPR), STMTS)
-        ~> #clearIter(ITER)
-        ~> #clearVar(String2Id("_index_for_" +String Id2String(ITER)))
 
 
     syntax CLLLExps  ::= "#forrange" "(" CTypedLLLExp ","
@@ -1039,18 +1028,19 @@ module VIPER-LLL
         => $repeat(LOC, STARTCODE, ROUNDS, $%seq(BODYCODE)),.LLLExps
 
 
-    syntax CLLLExps  ::= "#forlist" "(" Id           ","
-                                        Expr         ","
-                                        CTypedLLLExp ","
-                                        Stmts
+// for in list
+//-------------------------
+
+    // e.g. for i in list(): ...
+    rule #compileStmt(%forlist(ITER, EXPR, STMTS))
+        => #forlist(ITER, EXPR, #compileExpr(EXPR), STMTS)
+
+    syntax CLLLExps  ::= "#forlist" "(" Id           "," // loop iterator
+                                        Expr         "," // list expr
+                                        CTypedLLLExp "," // list expr, compiled
+                                        Stmts            // loop statements
                                     ")"    [strict(3)]
 
-    syntax CLLLExps  ::= "#forlistAux" "(" CTypedLLLExp ","  // iter
-                                           CTypedLLLExp ","  // index for iter
-                                           Expr         ","  // list expr
-                                           TypedLLLExp  ","  // list
-                                           Stmts
-                                       ")"  [seqstrict(1, 2)]
  // ---------------------------------------------------------
     rule #forlist(ITER, EXPR, @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR), STMTS)
         => #ifThen(notBool(isBaseType(SUBTYPE)),
@@ -1060,64 +1050,53 @@ module VIPER-LLL
                        EXPR,
                        @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR),
                        STMTS)
+        ~> #clearIter(ITER)
+        ~> #clearVar(String2Id("_index_for_" +String Id2String(ITER)))
 
+
+    syntax CLLLExps  ::= "#forlistAux" "(" CTypedLLLExp ","  // iter - value in list
+                                           CTypedLLLExp ","  // index var - position in list
+                                           Expr         ","  // list expr
+                                           TypedLLLExp  ","  // list expr, compiled
+                                           Stmts
+                                       ")"  [seqstrict(1, 2)]
+ // ---------------------------------------------------------
     rule #forlistAux(TITERCODE, TINDEXCODE, EXPR, @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR), STMTS)
-        => #forlistliteral(TITERCODE, TINDEXCODE,
+        => #forlistLiteral(TITERCODE, TINDEXCODE,
                            #newPlaceholder(%listT(SUBTYPE, N)),
                            @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR),
-                           STMTS)
+                           #compileStmts(STMTS, .LLLExps))
       requires isListExpr(EXPR)
 
-    rule #forlistAux(TITERCODE, TINDEXCODE, VAR, @tlll(%listT(SUBTYPE, N), LOC, LOCATTR), STMTS)
+    rule #forlistAux(TITERCODE, TINDEXCODE, VAR, LISTVAR:TypedLLLExp, STMTS)
         => #setInLoop(VAR)
-        ~> #forlistvariable(TITERCODE, TINDEXCODE,
-                            @tlll(%listT(SUBTYPE, N), LOC, LOCATTR),
-                            #compileStmts(STMTS, .LLLExps))
+        ~> #forlistVar(TITERCODE, TINDEXCODE, LISTVAR, #compileStmts(STMTS, .LLLExps))
         ~> #removeInLoop(VAR)
       requires isVar(VAR)
 
 
-    syntax CLLLExps  ::= "#forlistliteral" "(" TypedLLLExp  ","  // iter
-                                               TypedLLLExp  ","  // index
-                                               CTypedLLLExp ","  // tmp list
-                                               TypedLLLExp  ","  // list
-                                               Stmts
+    // for over a list literal
+    syntax CLLLExps  ::= "#forlistLiteral" "(" TypedLLLExp  ","  // iterator var - value in list
+                                               TypedLLLExp  ","  // index var - position in list
+                                               CTypedLLLExp ","  // variable storing the list literal
+                                               TypedLLLExp  ","  // list expr, compiled
+                                               CLLLExps          // for body
                                            ")"      [strict(3)]
-
-    syntax CLLLExps  ::= "#forlistliteralAux" "(" TypedLLLExp ","  // iter
-                                                  TypedLLLExp ","  // index for iter
-                                                  TypedLLLExp ","  // tmp list
-                                                  CLLLExps    ","  // setter
-                                                  CLLLExps         // stmts
-                                              ")"   [seqstrict(4, 5)]
  // -----------------------------------------------------------------
-    rule #forlistliteral(TITERCODE, TINDEXCODE, TMPLIST, LISTCODE, STMTS)
-        => #forlistliteralAux(TITERCODE,
-                              TINDEXCODE,
-                              TMPLIST,
-                              #mkSetter(TMPLIST, LISTCODE),
-                              #compileStmts(STMTS, .LLLExps))
-
-    rule #forlistliteralAux(@tlll(_, ITERLOC, _),
-                            @tlll(_, INDEXLOC, _),
-                            @tlll(%listT(SUBTYPE, N), TMPLISTLOC, _),
-                            SETTERCODE,
-                            BODYCODE)
-        => $%seq(
-             SETTERCODE ++LLL
-             ($repeat(INDEXLOC, 0, N, $%seq(
-                                        $mstore(ITERLOC, $mload($add(TMPLISTLOC, $mul($mload(INDEXLOC), 32)))),
-                                        $%seq(BODYCODE),.LLLExps)),.LLLExps)),.LLLExps
+    rule #forlistLiteral(TITERCODE, TINDEXCODE, LISTVAR:TypedLLLExp, LISTCODE, STMTS)
+        =>  #seq(#mkSetter(LISTVAR, LISTCODE),
+                 //no need to use #setInLoop here because the temp loop var can't be used inside the loop.
+                 #forlistVar(TITERCODE, TINDEXCODE, LISTVAR, STMTS))
 
 
-    syntax CLLLExps  ::= "#forlistvariable" "(" TypedLLLExp  ","  // iter
-                                                TypedLLLExp  ","  // index for iter
-                                                TypedLLLExp  ","  // list
-                                                CLLLExps          // stmts
+    syntax CLLLExps  ::= "#forlistVar" "("      TypedLLLExp  ","  // iterator var - value in list
+                                                TypedLLLExp  ","  // index var - position in list
+                                                TypedLLLExp  ","  // list var - variable storing the list literal
+                                                CLLLExps          // for body
                                             ")"      [strict(4)]
  // ------------------------------------------------------------------------------------------
     // List allocated in memory
-    rule #forlistvariable(@tlll(_, ITERLOC, _),
+    rule #forlistVar(@tlll(_, ITERLOC, _),
                           @tlll(_, INDEXLOC, _),
                           @tlll(%listT(SUBTYPE, N), LISTLOC, @locattr(@memory, _)),
                           BODYCODE)
@@ -1126,7 +1105,7 @@ module VIPER-LLL
                                      $%seq(BODYCODE),.LLLExps)),.LLLExps
 
     // List allocated in storage
-    rule #forlistvariable(@tlll(_, ITERLOC, _),
+    rule #forlistVar(@tlll(_, ITERLOC, _),
                           @tlll(_, INDEXLOC, _),
                           @tlll(%listT(SUBTYPE, N), LISTLOC, @locattr(@storage, _)),
                           BODYCODE)
@@ -1134,6 +1113,12 @@ module VIPER-LLL
              $repeat(INDEXLOC, 0, N, $%seq(
                                        $mstore(ITERLOC, $sload($add($sha3_32(LISTLOC), $mload(INDEXLOC)))),
                                        $%seq(BODYCODE),.LLLExps)),.LLLExps),.LLLExps
+
+
+    //sequence of statements to be concatenated
+    syntax CLLLExps ::= "#seq" "(" CLLLExps "," CLLLExps ")" [seqstrict]
+    // ------------------------------------------
+    rule #seq(CODE1:LLLExps, CODE2:LLLExps) => $%seq(CODE1 ++LLL CODE2),.LLLExps
 
 
     syntax KItem  ::= "#setInLoop" "(" Var ")"
@@ -1148,17 +1133,12 @@ module VIPER-LLL
          <inLoop> (SetItem(VAR) => .Set) INLOOPS </inLoop>
 
 
+    // deletes the variable from <env> and <forvar>
     syntax KItem  ::= "#clearIter" "(" Id ")"
  // -------------------------------------------------
     rule <k> CODE:LLLExps ~> (#clearIter(ITER) => .) ... </k>
          <env> (%var(ITER) |-> _ => .Map) ENV </env>
          <forvar> (SetItem(%var(ITER)) => .Set) FORVARS </forvar>
-
-
-    syntax KItem  ::= "#clearVar" "(" Id ")"
- // -------------------------------------------------
-    rule <k> CODE:LLLExps ~> (#clearVar(NAME) => .) ... </k>
-         <env> (%var(NAME) |-> _ => .Map) ENV </env>
 
 
 // Break
@@ -1788,7 +1768,7 @@ module VIPER-LLL
 
     rule #compileExpr(%self) => @tlll(%address, $address, @none)
 
-    rule #compileExpr(V) => #lookupVar(V)
+    rule #compileExpr(V:Var) => #lookupVar(V)
 
 
 // List Literal
@@ -1906,8 +1886,8 @@ module VIPER-LLL
     syntax UnitTuple  ::= "@unittuple" "(" Map "," Bool ")"
     syntax KItem      ::= "#newUnitTuple" "(" BinOp "," Type "," Type "," LLLExp ")"
  // --------------------------------------------------------------------------------
-   // add
-   rule #newUnitTuple(+, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
+    // add
+    rule #newUnitTuple(+, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
         => #ifThen(LM =/=K RM,
                    #exception("Unit mismatch."))
         ~> #ifThen(LPOS ==K true andBool RPOS ==K true,
@@ -2131,7 +2111,6 @@ module VIPER-LLL
                                               CLLLExps      // for_loop_seq
                                           ")"  [strict(2)]
  // --------------------------------------------------------------------------------------
-    //todo figure out which one is in list and which is in range.
     rule #compareSeq(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC)
         => #compareSeqListTLiteral(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC,
                                    #newPlaceholder(RT))
@@ -2141,6 +2120,7 @@ module VIPER-LLL
         => #compareSeqListTVar(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC)
       requires notBool isMultiLLLExp(RCODE)
 
+    // in operator with RHS a sequence variable.
     syntax CLLLExps  ::= "#compareSeqListTVar" "(" TypedLLLExp  ","
                                                    TypedLLLExp  ","
                                                    Int               // result loc
@@ -2150,6 +2130,7 @@ module VIPER-LLL
     rule #compareSeqAux(SETTER, FORLOOPSEQ) => $%seq(SETTER ++LLL FORLOOPSEQ),.LLLExps
 
 
+    // in operator with RHS a sequence literal.
     syntax CLLLExps  ::= "#compareSeqListTLiteral" "(" TypedLLLExp  ","
                                                        TypedLLLExp  ","
                                                        Int          ","  // result loc
@@ -3718,6 +3699,7 @@ module VIPER-LLL
       requires INDEXNAME =/=K FIELDNAME
 
 
+    //defines a new variable of given name in <env>
     syntax CTypedLLLExp  ::= "#newVar" "(" Id "," Type ")"
  // ------------------------------------------------------
     rule <k> #newVar(NAME, T) => @tlll(T, LOC, @locattr(@memory, true)) ...</k>
@@ -3725,10 +3707,17 @@ module VIPER-LLL
          <nextMem> LOC => LOC +Int #sizeOfType(T) </nextMem>
       requires notBool %var(NAME) in_keys(ENV)
 
-    rule <k> #new(NAME, T)
+    rule <k> #newVar(NAME, T)
            => #exception("Duplicate variable name: " +String Id2String(NAME)) ...</k>
          <env> ENV </env>
       requires %var(NAME) in_keys(ENV)
+
+
+    // deletes the variable from <env>
+    syntax KItem  ::= "#clearVar" "(" Id ")"
+ // -------------------------------------------------
+    rule <k> CODE:LLLExps ~> (#clearVar(NAME) => .) ... </k>
+         <env> (%var(NAME) |-> _ => .Map) ENV </env>
 
 
     syntax CTypedLLLExp  ::= "#lookupOrNewVar" "(" Var "," Type ")"
@@ -3758,6 +3747,7 @@ module VIPER-LLL
       requires notBool %var(NAME) in FORVARS
 
 
+    // Creates a new variable with unique name, which doesn't need to be removed.
     syntax CTypedLLLExp  ::= "#newPlaceholder" "(" Type ")"
  // -------------------------------------------------------
     rule <k> #newPlaceholder(T)

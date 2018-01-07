@@ -5,8 +5,7 @@ module VIPER-LLL-POST
     imports VIPER-LLL
 
  // -----------------------------------------------------------------
-    rule $%seq(EXPRS) => #convertSeqExp(EXPRS)             [anywhere]
     rule $%seq(EXPR, .LLLExps) => EXPR
-    rule $%seq(EXPR, (EXPR1, EXPRS)) => $seq(EXPR, $%seq(EXPR1, EXPRS))
+    rule $%seq(EXPR1, (EXPR2, EXPRS)) => $seq(EXPR1, $%seq(EXPR2, EXPRS))
 
 endmodule 

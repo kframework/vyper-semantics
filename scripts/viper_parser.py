@@ -277,11 +277,47 @@ def parseConst(node):
 #    syntax Expr :== ...
 #                    "%icall"     "(" Id        "," Exprs ")"
 #
-#    syntax ReservedFunc  ::= "%as_num128"    "(" Expr ")"
-#                           | "%as_num256"    "(" Expr ")"
-#                           | "%as_wei_value" "(" Expr "," Id   ")"
-#                           | "%num256_add"   "(" Expr "," Expr ")"
-#                           | "%num256_sub"   "(" Expr "," Expr ")"
+#     syntax ReservedFunc  ::= "%floor"               "(" Expr ")"
+#                           | "%decimal"             "(" Expr ")"
+#                           | "%as_unitless_number"  "(" Expr ")"
+#                           | "%as_num128"           "(" Expr ")"
+#                           | "%as_num256"           "(" Expr ")"
+#                           | "%as_bytes32"          "(" Expr ")"
+#                           | "%slice"               "(" Expr "," Expr "," Expr ")"
+#                           | "%len"                 "(" Expr ")"
+#                           | "%concat"              "(" Exprs ")"
+#                           | "%keccak256"           "(" Expr ")"
+#                           | "%method_id"           "(" Expr ")"
+#                           | "%ecrecover"           "(" Expr ")"
+#                           | "%ecadd"               "(" Expr "," Expr ")"
+#                           | "%ecmul"               "(" Expr "," Expr ")"
+#                           | "%extract32"           "(" Expr "," Expr "," Id ")"
+#                           | "%bytes_to_num"        "(" Expr ")"
+#                           | "%as_wei_value"        "(" Expr "," Id   ")"
+#                        // | "%raw_call"            "(" Expr "," Expr "," Expr "," Expr "," Expr ")"
+#                           | "%RLPlist"             "(" Expr "," Expr ")"
+#                           | "%blockhash"           "(" Expr ")"
+#                           | "%bitwise_and"         "(" Expr "," Expr ")"
+#                           | "%bitwise_or"          "(" Expr "," Expr ")"
+#                           | "%bitwise_xor"         "(" Expr "," Expr ")"
+#                           | "%bitwise_not"         "(" Expr ")"
+#                           | "%num256_add"          "(" Expr "," Expr ")"
+#                           | "%num256_sub"          "(" Expr "," Expr ")"
+#                           | "%num256_mul"          "(" Expr "," Expr ")"
+#                           | "%num256_div"          "(" Expr "," Expr ")"
+#                           | "%num256_exp"          "(" Expr "," Expr ")"
+#                           | "%num256_mod"          "(" Expr "," Expr ")"
+#                           | "%num256_addmod"       "(" Expr "," Expr "," Expr ")"
+#                           | "%num256_mulmod"       "(" Expr "," Expr "," Expr ")"
+#                           | "%num256_gt"           "(" Expr "," Expr ")"
+#                           | "%num256_ge"           "(" Expr "," Expr ")"
+#                           | "%num256_lt"           "(" Expr "," Expr ")"
+#                           | "%num256_le"           "(" Expr "," Expr ")"
+#                           | "%shift"               "(" Expr "," Expr ")"
+#                        // | "%create_with_code_of" "(" Expr "," Expr ")"
+#                           | "%min"                 "(" Expr "," Expr ")"
+#                           | "%max"                 "(" Expr "," Expr ")"
+#                           | "%sha3"                "(" Expr ")"
 #
 # example:
 #   %as_num256(%msg.value)
@@ -303,6 +339,8 @@ def parseCallExpr(expr: ast.Call):
         elif expr.func.id == "as_wei_value":
             return "%as_wei_value({}, {})".format(parseExpr(expr.args[0]),
                                                   expr.args[1].s if type(expr.args[1]) == ast.Str else expr.args[1].id)
+        elif expr.func.id == "concat":
+            return "%concat({})".format(parseArgs(expr.args + expr.keywords))
         else:
             return "%{}({})".format(expr.func.id, parseArgs(expr.args + expr.keywords, ", "))
     elif type(expr.func) == ast.Attribute and type(expr.func.value) == ast.Name and expr.func.value.id == "self":

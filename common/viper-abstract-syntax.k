@@ -200,7 +200,7 @@ module VIPER-ABSTRACT-SYNTAX
                            | "%as_bytes32"          "(" Expr ")"
                            | "%slice"               "(" Expr "," Expr "," Expr ")"
                            | "%len"                 "(" Expr ")"
-                           | "%concat"              "(" Exprs ")"
+                           | "%concat"              "(" Exprs ")"                           //operates on byte arrays
                            | "%keccak256"           "(" Expr ")"
                            | "%method_id"           "(" Expr ")"
                            | "%ecrecover"           "(" Expr ")"
