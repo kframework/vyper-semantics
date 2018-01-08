@@ -2062,29 +2062,59 @@ module VIPER-LLL
 // Compare
 // =======
 
-
     rule #compileExpr(%compareop(COP, LEXP, REXP))
         => #compareOp(COP, #compileExpr(LEXP), #compileExpr(REXP))
     requires COP =/=K %in
 
     rule #compileExpr(%compareop(%in, LEXP, REXP))
-        => #inOperatorAux(LEXP, REXP, #newVarId, #newVarId)
+        => #inOperatorAux(LEXP, REXP, #compileExpr(LEXP), #compileExpr(REXP), #newVarId, #newVarId)
 
 
+// Compare - in operator
+// ---------------------
+    syntax CTypedLLLExp  ::= "#inOperatorAux" "(" Expr          "," // LHS
+                                                  Expr          "," // RHS
+                                                  CTypedLLLExp  "," // LHS compiled
+                                                  CTypedLLLExp  "," // RHS compiled
+                                                  K             "," // aux var - result
+                                                  K                 // aux var - loop iterator
+                                              ")"               [seqstrict(3,4,5,6)]
+
+    /* Desugaring template:
+        a %in list
+    =>
+        rez = False
+        for i %in list:
+            if a == i: rez = True
+        rez;
+    */
+    // TODO: https://github.com/ethereum/viper/issues/581
+    //       https://github.com/ethereum/viper/issues/582
+    //       Need to think carefully how to implement list and type casting.
+    rule #inOperatorAux(LEXP, REXP,
+                        @tlll(LT, LCODE, _), @tlll(%listT(LElemType:Type, _), RCODE, _),
+                        RESULTID:Id, LOOPID:Id)
+        => #ifThen(notBool(#areUnitsCompatible(LT, LElemType, #isNumLiteral(LCODE))) andBool
+                   notBool(#areUnitsCompatible(LElemType, LT, #isNumLiteral(RCODE))),
+                   #exception("Can't use IN comparison with different types!"))
+        ~> #exprSeq(
+              #compileStmts((
+                %assign(%var(RESULTID), false)
+                %forlist(LOOPID, REXP,
+                         %if(%compareop(%eq, LEXP, %var(LOOPID)),
+                             %assign(%var(RESULTID), true)))),
+                .LLLExps),
+              #compileValueExpr(%var(RESULTID))
+           )
+
+
+// Compare - operators other than "in"
+// ---------------------
     syntax CTypedLLLExp  ::= "#compareOp" "(" CompareOp    ","
                                               CTypedLLLExp ","
                                               CTypedLLLExp
                                           ")"  [seqstrict(2,3)]
  // -----------------------------------------------------------
-    //fixme integrate into %in semantics extra checks from here
-    rule #compareOp(%in, @tlll(LT, LCODE, LEXPRATTR), @tlll(%listT(SUBTYPE, N), RCODE, REXPRATTR))
-        => #ifThen(notBool(#areUnitsCompatible(LT, SUBTYPE, #isNumLiteral(LCODE))) andBool
-                   notBool(#areUnitsCompatible(SUBTYPE, LT, #isNumLiteral(RCODE))),
-                   #exception("Can't use IN comparison with different types!"))
-        ~> #buildInComparator(@tlll(LT, LCODE, LEXPRATTR),
-                              @tlll(%listT(SUBTYPE, N), RCODE, REXPRATTR),
-                              #newPlaceholder(%bool))
-
     rule #compareOp(COP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
         => #ifThen(notBool(#areUnitsCompatible(LT, RT, #isNumLiteral(LCODE))) andBool
                    notBool(#areUnitsCompatible(RT, LT, #isNumLiteral(RCODE))),
@@ -2095,100 +2125,6 @@ module VIPER-LLL
         ~> #compareOpAux(COP,
                          #unwrapLoc(@tlll(#dropUnit(LT), LCODE, LEXPRATTR)),
                          #unwrapLoc(@tlll(#dropUnit(RT), RCODE, REXPRATTR)))
-      requires COP =/=K %in
-
-
-// Compare - in operator
-// ---------------------
-    syntax CTypedLLLExp  ::= "#inOperatorAux" "(" Expr      "," //LHS
-                                                  Expr      "," //RHS
-                                                  K         "," //aux var - result
-                                                  K             //aux var - loop iterator
-                                              ")"               [seqstrict(3,4)]
-
-    /* Desugaring template:
-        a %in list
-    =>
-        rez = False
-        for i %in list:
-            if a == i: rez =  True
-        rez;
-    */
-    rule #inOperatorAux(LEXP, REXP, RESULTID:Id, LOOPID:Id)
-        => #exprSeq(
-              #compileStmts((
-                %assign(%var(RESULTID), false)
-                %forlist(LOOPID, REXP,
-                         %if(%compareop(%eq, LEXP, %var(LOOPID)),
-                             %assign(%var(RESULTID), true)))),
-                .LLLExps),
-              #compileValueExpr(%var(RESULTID))
-           )
-
-    // in comparator fixme delete all extra
-    // TODO: https://github.com/ethereum/viper/issues/581
-    //       https://github.com/ethereum/viper/issues/582
-    //       Need to think carefully how to implement list and type casting.
-    syntax CTypedLLLExp  ::= "#buildInComparator" "(" TypedLLLExp  ","  // left
-                                                      TypedLLLExp  ","  // right
-                                                      CTypedLLLExp      // result placeholder
-                                                  ")"      [strict(3)]
-
-    syntax CTypedLLLExp  ::= "#buildInComparatorAux" "(" CLLLExps ")"  [strict]
- // ---------------------------------------------------------------------------
-    rule #buildInComparator(TLCODE, TRCODE, @tlll(_, RESULTLOC, _))
-        => #buildInComparatorAux(#compareSeq(TLCODE, TRCODE, RESULTLOC))
-
-    rule #buildInComparatorAux(COMPARESEQ) => @tlll(%bool, $eq(1, COMPARESEQ), @none)
-
-
-    syntax CLLLExps  ::= "#compareSeq" "(" TypedLLLExp "," TypedLLLExp "," Int ")"
-
-    syntax CLLLExps  ::= "#compareSeqAux" "(" LLLExps  ","  // setter
-                                              CLLLExps      // for_loop_seq
-                                          ")"  [strict(2)]
- // --------------------------------------------------------------------------------------
-    rule #compareSeq(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC)
-        => #compareSeqListTLiteral(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC,
-                                   #newPlaceholder(RT))
-      requires isMultiLLLExp(RCODE)
-
-    rule #compareSeq(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC)
-        => #compareSeqListTVar(TLCODE, @tlll(RT, RCODE, EXPRATTR), RESULTLOC)
-      requires notBool isMultiLLLExp(RCODE)
-
-    // in operator with RHS a sequence variable.
-    syntax CLLLExps  ::= "#compareSeqListTVar" "(" TypedLLLExp  ","
-                                                   TypedLLLExp  ","
-                                                   Int               // result loc
-                                               ")"      [strict(3)]
-
-
-    rule #compareSeqAux(SETTER, FORLOOPSEQ) => $%seq(SETTER ++LLL FORLOOPSEQ),.LLLExps
-
-
-    // in operator with RHS a sequence literal.
-    syntax CLLLExps  ::= "#compareSeqListTLiteral" "(" TypedLLLExp  ","
-                                                       TypedLLLExp  ","
-                                                       Int          ","  // result loc
-                                                       CTypedLLLExp      // tmp_list
-                                                   ")"      [strict(3)]
-
-    syntax CLLLExps  ::= "#compareSeqListTLiteralAux" "(" TypedLLLExp ","
-                                                          TypedLLLExp ","
-                                                          Int         ","  // result loc
-                                                          CLLLExps    ","  // setter
-                                                          LLLExp           // load_i_from_list
-                                                      ")"      [strict(4)]
- // ----------------------------------------------------------------------
-    rule #compareSeqListLiteral(TLCODE, TRCODE, RESULTLOC, @tlll(T, TMPLISTLOC, LOCATTR))
-        => #compareSeqListTLiteralAux(TLCODE, TRCODE, RESULTLOC,
-                                      #mkSetter(@tlll(T, TMPLISTLOC, LOCATTR), TRCODE),
-                                      $mload(add(TMPLISTLOC, $mul(32, $mload(@freeLoopIndexPos)))))
-
-    rule #compareSeqListTLiteralAux(TLCODE, TRCODE, RESULTLOC, SETTER, LODEFROMLIST)
-        => #compareSeqAux(SETTER, .LLLExps)
-
 
 
     // normal compare operator
