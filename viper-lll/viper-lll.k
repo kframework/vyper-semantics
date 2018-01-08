@@ -1032,67 +1032,59 @@ module VIPER-LLL
 // for in list
 //-------------------------
 
+    /*
+    Desugaring for over expr into for over var:
+        for a in exp: block
+    =>
+        list = exp
+        for a in list: block
+    */
+    rule #compileStmt(%forlist(ITER, EXPR, STMTS)) => #forlistNonVar(ITER, EXPR, STMTS, #newVarId)
+    requires notBool isVar(EXPR)
+
+    syntax CLLLExps  ::= "#forlistNonVar" "(" Id           "," // loop iterator
+                                              Expr         "," // list expr
+                                              Stmts        "," // loop statements
+                                              K                // temp var - the list
+                                          ")"                  [strict(4)]
+  // ---------------------------------------------------------
+    rule #forlistNonVar(ITER, EXPR, STMTS, ListId:Id)
+         => #compileStmts((
+                %assign(%var(ListId), EXPR)
+                %forlist(ITER, %var(ListId), STMTS)),
+                .LLLExps
+            )
+
+
     // e.g. for i in list(): ...
-    rule #compileStmt(%forlist(ITER, EXPR, STMTS))
-        => #forlist(ITER, EXPR, #compileExpr(EXPR), STMTS)
+    rule #compileStmt(%forlist(ITER, VAR:Var, STMTS))
+        => #forlist(ITER, VAR, #compileExpr(VAR), STMTS)
 
     syntax CLLLExps  ::= "#forlist" "(" Id           "," // loop iterator
-                                        Expr         "," // list expr
+                                        Var          "," // list expr
                                         CTypedLLLExp "," // list expr, compiled
                                         Stmts            // loop statements
                                     ")"    [strict(3)]
 
  // ---------------------------------------------------------
-    rule #forlist(ITER, EXPR:Expr, @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR), STMTS)
+    rule #forlist(ITER:Id, VAR:Var, @tlll(%listT(SUBTYPE:Type, N), CODE, EXPRATTR), STMTS:Stmts)
         => #ifThen(notBool(isBaseType(SUBTYPE)),
                    #exception("For loops allowed only on basetype lists."))
-        ~> #forlistAux(#newLoopVar(ITER, SUBTYPE),
+        ~> #setInLoop(VAR)
+        ~> #forlistVar(#newLoopVar(ITER, SUBTYPE),
                        #newVar(String2Id("_index_for_" +String Id2String(ITER)), %num),
-                       EXPR,
                        @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR),
-                       STMTS)
+                       #compileStmts(STMTS, .LLLExps))
+        ~> #removeInLoop(VAR)
         ~> #clearIter(ITER)
         ~> #clearVar(String2Id("_index_for_" +String Id2String(ITER)))
 
 
-    syntax CLLLExps  ::= "#forlistAux" "(" CTypedLLLExp ","  // iter - value in list
-                                           CTypedLLLExp ","  // index var - position in list
-                                           Expr         ","  // list expr
-                                           TypedLLLExp  ","  // list expr, compiled
-                                           Stmts
-                                       ")"  [seqstrict(1, 2)]
- // ---------------------------------------------------------
-    rule #forlistAux(TITERCODE, TINDEXCODE, EXPR:ListExpr, @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR), STMTS)
-        => #forlistLiteral(TITERCODE, TINDEXCODE,
-                           #newPlaceholder(%listT(SUBTYPE, N)),
-                           @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR),
-                           #compileStmts(STMTS, .LLLExps))
-
-    rule #forlistAux(TITERCODE, TINDEXCODE, VAR:Var, LISTVAR:TypedLLLExp, STMTS)
-        => #setInLoop(VAR)
-        ~> #forlistVar(TITERCODE, TINDEXCODE, LISTVAR, #compileStmts(STMTS, .LLLExps))
-        ~> #removeInLoop(VAR)
-
-
-    // for over a list literal
-    syntax CLLLExps  ::= "#forlistLiteral" "(" TypedLLLExp  ","  // iterator var - value in list
-                                               TypedLLLExp  ","  // index var - position in list
-                                               CTypedLLLExp ","  // variable storing the list literal
-                                               TypedLLLExp  ","  // list expr, compiled
-                                               CLLLExps          // for body
-                                           ")"      [strict(3)]
- // -----------------------------------------------------------------
-    rule #forlistLiteral(TITERCODE, TINDEXCODE, LISTVAR:TypedLLLExp, LISTCODE, STMTS)
-        =>  #seq(#mkSetter(LISTVAR, LISTCODE),
-                 //no need to use #setInLoop here because the temp loop var can't be used inside the loop.
-                 #forlistVar(TITERCODE, TINDEXCODE, LISTVAR, STMTS))
-
-
-    syntax CLLLExps  ::= "#forlistVar" "("      TypedLLLExp  ","  // iterator var - value in list
-                                                TypedLLLExp  ","  // index var - position in list
-                                                TypedLLLExp  ","  // list var - variable storing the list literal
-                                                CLLLExps          // for body
-                                            ")"      [strict(4)]
+    syntax CLLLExps  ::= "#forlistVar" "("      CTypedLLLExp  ","  // iterator var - value in list
+                                                CTypedLLLExp  ","  // index var - position in list
+                                                TypedLLLExp   ","  // list var - variable storing the list literal
+                                                CLLLExps           // for body
+                                       ")"      [strict(1,2,4)]
  // ------------------------------------------------------------------------------------------
     // List allocated in memory
     rule #forlistVar(@tlll(_, ITERLOC, _),
