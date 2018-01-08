@@ -676,11 +676,11 @@ module VIPER-LLL
     rule <k> #getTarget(%var(NAME), TCODE)
             => #exception("Altering iterator which is in use!") ... </k>
          <forvar> FORVARS </forvar>
-      requires %var(NAME) in FORVARS
+      requires NAME in FORVARS
 
     rule <k> #getTarget(%var(NAME), TCODE) => #getTargetAux(TCODE) ... </k>
          <forvar> FORVARS </forvar>
-      requires notBool %var(NAME) in FORVARS
+      requires notBool NAME in FORVARS
 
     rule #getTarget(%svar(NAME), TCODE) => #getTargetAux(TCODE)
 
@@ -1133,9 +1133,11 @@ module VIPER-LLL
     // deletes the variable from <env> and <forvar>
     syntax KItem  ::= "#clearIter" "(" Id ")"
  // -------------------------------------------------
-    rule <k> CODE:LLLExps ~> (#clearIter(ITER) => .) ... </k>
+    rule <k> CODE:LLLExps ~> (#clearIter(ITER:Id) => .) ... </k>
          <env> (%var(ITER) |-> _ => .Map) ENV </env>
-         <forvar> (SetItem(%var(ITER)) => .Set) FORVARS </forvar>
+         //K bug: in this format rule gets stuck when <forvar has 2 entries> See test_repeater.py test 3.
+         //<forvar> (SetItem(%var(ITER)) => .Set) FORVARS </forvar>
+         <forvar>... SetItem(ITER) => .Set ...</forvar>
 
 
 // Break
@@ -3705,11 +3707,11 @@ module VIPER-LLL
  // ----------------------------------------------------------
     rule <k> #newLoopVar(NAME, T) => #exception("Duplicate iter: " +String Id2String(NAME)) ... </k>
          <forvar> FORVARS </forvar>
-      requires %var(NAME) in FORVARS
+      requires NAME in FORVARS
 
     rule <k> #newLoopVar(NAME, T) => #newVar(NAME, T) ... </k>
-         <forvar> FORVARS (.Set => SetItem(%var(NAME))) </forvar>
-      requires notBool %var(NAME) in FORVARS
+         <forvar> FORVARS (.Set => SetItem(NAME)) </forvar>
+      requires notBool NAME in FORVARS
 
 
     // Creates a new variable with unique name, which doesn't need to be removed.
