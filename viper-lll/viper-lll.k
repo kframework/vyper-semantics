@@ -100,7 +100,8 @@ module VIPER-LLL
     syntax CPackedArgData      ::= PackedArgData
     syntax CPackedLoggingData  ::= PackedLoggingData
 
-    syntax KResult  ::= Int
+    syntax KResult  ::= Id
+                      | Int
                       | Bool
                       | Type
                       | Bytes
@@ -1042,7 +1043,7 @@ module VIPER-LLL
                                     ")"    [strict(3)]
 
  // ---------------------------------------------------------
-    rule #forlist(ITER, EXPR, @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR), STMTS)
+    rule #forlist(ITER, EXPR:Expr, @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR), STMTS)
         => #ifThen(notBool(isBaseType(SUBTYPE)),
                    #exception("For loops allowed only on basetype lists."))
         ~> #forlistAux(#newLoopVar(ITER, SUBTYPE),
@@ -1061,18 +1062,16 @@ module VIPER-LLL
                                            Stmts
                                        ")"  [seqstrict(1, 2)]
  // ---------------------------------------------------------
-    rule #forlistAux(TITERCODE, TINDEXCODE, EXPR, @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR), STMTS)
+    rule #forlistAux(TITERCODE, TINDEXCODE, EXPR:ListExpr, @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR), STMTS)
         => #forlistLiteral(TITERCODE, TINDEXCODE,
                            #newPlaceholder(%listT(SUBTYPE, N)),
                            @tlll(%listT(SUBTYPE, N), CODE, EXPRATTR),
                            #compileStmts(STMTS, .LLLExps))
-      requires isListExpr(EXPR)
 
-    rule #forlistAux(TITERCODE, TINDEXCODE, VAR, LISTVAR:TypedLLLExp, STMTS)
+    rule #forlistAux(TITERCODE, TINDEXCODE, VAR:Var, LISTVAR:TypedLLLExp, STMTS)
         => #setInLoop(VAR)
         ~> #forlistVar(TITERCODE, TINDEXCODE, LISTVAR, #compileStmts(STMTS, .LLLExps))
         ~> #removeInLoop(VAR)
-      requires isVar(VAR)
 
 
     // for over a list literal
@@ -1119,6 +1118,12 @@ module VIPER-LLL
     syntax CLLLExps ::= "#seq" "(" CLLLExps "," CLLLExps ")" [seqstrict]
     // ------------------------------------------
     rule #seq(CODE1:LLLExps, CODE2:LLLExps) => $%seq(CODE1 ++LLL CODE2),.LLLExps
+
+
+    //sequence of statements to be concatenated, followed by an expression
+    syntax CTypedLLLExps ::= "#exprSeq" "(" CLLLExps "," CTypedLLLExp ")" [seqstrict]
+    // ------------------------------------------
+    rule #exprSeq(CODE1:LLLExps, @tlll(T, CODE2, EXPRATTR)) => @tlll(T, $%seq(CODE1 ++LLL CODE2), EXPRATTR)
 
 
     syntax KItem  ::= "#setInLoop" "(" Var ")"
@@ -2060,6 +2065,10 @@ module VIPER-LLL
 
     rule #compileExpr(%compareop(COP, LEXP, REXP))
         => #compareOp(COP, #compileExpr(LEXP), #compileExpr(REXP))
+    requires COP =/=K %in
+
+    rule #compileExpr(%compareop(%in, LEXP, REXP))
+        => #inOperatorAux(LEXP, REXP, #newVarId, #newVarId)
 
 
     syntax CTypedLLLExp  ::= "#compareOp" "(" CompareOp    ","
@@ -2067,6 +2076,7 @@ module VIPER-LLL
                                               CTypedLLLExp
                                           ")"  [seqstrict(2,3)]
  // -----------------------------------------------------------
+    //fixme integrate into %in semantics extra checks from here
     rule #compareOp(%in, @tlll(LT, LCODE, LEXPRATTR), @tlll(%listT(SUBTYPE, N), RCODE, REXPRATTR))
         => #ifThen(notBool(#areUnitsCompatible(LT, SUBTYPE, #isNumLiteral(LCODE))) andBool
                    notBool(#areUnitsCompatible(SUBTYPE, LT, #isNumLiteral(RCODE))),
@@ -2088,7 +2098,34 @@ module VIPER-LLL
       requires COP =/=K %in
 
 
-    // in comparator
+// Compare - in operator
+// ---------------------
+    syntax CTypedLLLExp  ::= "#inOperatorAux" "(" Expr      "," //LHS
+                                                  Expr      "," //RHS
+                                                  K         "," //aux var - result
+                                                  K             //aux var - loop iterator
+                                              ")"               [seqstrict(3,4)]
+
+    /* Desugaring template:
+        a %in list
+    =>
+        rez = False
+        for i %in list:
+            if a == i: rez =  True
+        rez;
+    */
+    rule #inOperatorAux(LEXP, REXP, RESULTID:Id, LOOPID:Id)
+        => #exprSeq(
+              #compileStmts((
+                %assign(%var(RESULTID), false)
+                %forlist(LOOPID, REXP,
+                         %if(%compareop(%eq, LEXP, %var(LOOPID)),
+                             %assign(%var(RESULTID), true)))),
+                .LLLExps),
+              #compileValueExpr(%var(RESULTID))
+           )
+
+    // in comparator fixme delete all extra
     // TODO: https://github.com/ethereum/viper/issues/581
     //       https://github.com/ethereum/viper/issues/582
     //       Need to think carefully how to implement list and type casting.
@@ -3754,6 +3791,12 @@ module VIPER-LLL
            => #newVar(String2Id("_placeholder_" +String Int2String(I)), T) ... </k>
          <placeholder> I => I +Int 1 </placeholder>
 
+
+    // Creates a new variable name. Produces an Id.
+    syntax K  ::= "#newVarId"
+ // -------------------------------------------------------
+    rule <k> #newVarId => String2Id("_var_" +String Int2String(I)) ... </k>
+         <placeholder> I => I +Int 1 </placeholder>
 
 // Others
 // ======
