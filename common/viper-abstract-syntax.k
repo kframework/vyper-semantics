@@ -97,6 +97,7 @@ module VIPER-ABSTRACT-SYNTAX
                     | "%hex"     "(" String ")"
                     | String
                     | Bool
+                    | "%None"
 
     syntax FixedPoint  ::= "%fixed10" "(" Int "," Int ")"  // decimal fixed point value with a precision of 10 decimal places
                                                            // %fixed10(A, B) = A/B and B is a power of 10.

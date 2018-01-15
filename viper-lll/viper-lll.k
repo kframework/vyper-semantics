@@ -668,6 +668,7 @@ module VIPER-LLL
     rule #assign(V, @tlll(T, CODE, EXPRATTR))
         => #mkSetter(#getTarget(V, #lookupOrNewVar(V, T)),
                       @tlll(T, CODE, EXPRATTR))
+      requires notBool T ==K %NoneType
 
 
     syntax CTypedLLLExp  ::= "#getTarget" "(" Var "," CTypedLLLExp ")"  [strict(2)]
@@ -1759,6 +1760,32 @@ module VIPER-LLL
     rule #compileExpr(true)  => @tlll(%bool, 1, @none)
 
     rule #compileExpr(false)  => @tlll(%bool, 0, @none)
+
+// None Literal
+// ===============
+    rule #compileExpr(%None)  => @tlll(%NoneType, 0, @none)
+
+    syntax Type ::= "%NoneType"
+
+    rule #assign(V, @tlll(%NoneType, _, _))
+         => #assignNone(#getTarget(V, #lookupVar(V)))
+
+    // Assign None expression: V = None.
+    // Semantics: Writes zero over entire memory space of the LHS variable.
+    syntax CLLLExps  ::= "#assignNone" "(" CTypedLLLExp  /*left variable loc*/  ")"  [seqstrict]
+ // -----------------------------------------------------------------
+
+    rule #assignNone(@tlll(T:Type, LOC:LLLExp, @locattr(@memory, _)))
+         => $with($_opos, LOC,
+                $repeat(@freeLoopIndexPos, 0, (#sizeOfType(T) +Int 31) /Int 32,
+                        $mstore($add($_opos, $mul(32, $mload(@freeLoopIndexPos))),
+                                0))),.LLLExps
+
+    rule #assignNone(@tlll(T:Type, LOC:LLLExp, @locattr(@storage, _)))
+         => $with($_opos, $sha3_32(LOC),
+                $repeat(@freeLoopIndexPos, 0, (#sizeOfType(T) +Int 31) /Int 32,
+                        $sstore($add($_opos, $mload(@freeLoopIndexPos)),
+                                0))),.LLLExps
 
 
 // Variable
