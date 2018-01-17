@@ -171,11 +171,11 @@ module VIPER-UTILS
                   %return(VAR) .Stmts) .Defs
 
     // Byte Array
-    rule #mkPublicGetter(VARNAME, PARAMS, %bytesT(L), VAR, DEPTH)
+    rule #mkPublicGetter(VARNAME, PARAMS, %bytesT(N), VAR, DEPTH)
         => %fdecl(%@public %@constant .Decorators,
                   String2Id("get_" +String VARNAME),
                   PARAMS,
-                  %bytesT(L),
+                  %bytesT(N),
                   %return(VAR) .Stmts) .Defs
 
     // List
@@ -214,9 +214,9 @@ module VIPER-UTILS
 
     syntax KItem /*String*/ ::= "#canonicalizeType" "(" Type "," Bool /*event?*/ ")"
  // --------------------------------------------------------------------------------
-    rule #canonicalizeType(%bytesT(L), EVENT)
-        => #if EVENT ==K true andBool L <=Int 32
-             #then "bytes" +String Int2String(L)
+    rule #canonicalizeType(%bytesT(N), EVENT)
+        => #if EVENT ==K true andBool N <=Int 32
+             #then "bytes" +String Int2String(N)
              #else "bytes"
            #fi
 

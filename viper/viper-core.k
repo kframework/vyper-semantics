@@ -24,8 +24,8 @@ module VIPER-CORE-SEMANTICS
         <xStack>        .List </xStack>  // exception stack
         <interimStates> .List </interimStates>
 
-        <env>      .Map  </env>
-        <envStack> .List </envStack>  // for block scoping
+        <memory>   .Map  </memory>
+        <memStack> .List </memStack>  // for block scoping
         <forLoop>
           <forvar> .Set  </forvar>  // Variables defined in for loops, eg. for i in range(6):...
           <inLoop> .Set  </inLoop>  // In Loop status. Whether body is currently evaluating within a for-loop or not.
@@ -81,15 +81,17 @@ module VIPER-CORE-SEMANTICS
     syntax TypedValues ::= List{TypedValue, ""}  [klabel(TypedValues)]
 
 
-    syntax TypedValues ::= "#revTypedValues" "(" TypedValues "," TypedValues ")"  [function]
- // ----------------------------------------------------------------------------------------
-    rule #revTypedValues(.TypedValues, RESULT) => RESULT
+    syntax TypedValues ::= "#reverseTypedValues" "(" TypedValues "," TypedValues ")"  [function]
+ // --------------------------------------------------------------------------------------------
+    rule #reverseTypedValues(.TypedValues, RESULT) => RESULT
 
-    rule #revTypedValues(TV TVS, RESULT) => #revTypedValues(TVS, TV RESULT)
+    rule #reverseTypedValues(TV TVS, RESULT) => #reverseTypedValues(TVS, TV RESULT)
 
 
-    syntax Value ::= Int
+    syntax Value ::= Bool
+                   | Int
                    | Decimal
+                   | String
                    | Map
 
     syntax Decimal ::= "@d" "(" Int ")"  // value = acutal_value * @decimalDivisor
@@ -139,7 +141,7 @@ module VIPER-CORE-SEMANTICS
     syntax KItem ::= "#loadCode" "(" Int "," Pgm ")"
  // ------------------------------------------------
     rule <k> #loadCode(ACCTID, %pgm(ES, GS, DEFS))
-            => ES ~> GS ~> (DEFS ++Def #mkPublicGetters(GS, .Defs)) ~> #clearTX
+            => ES ~> GS ~> (DEFS ++Def #mkPublicGetters(GS, .Defs)) ~> #clearState
          ... </k>
          <id> _ => ACCTID </id>
 
@@ -214,11 +216,11 @@ module VIPER-CORE-SEMANTICS
 
     syntax KItem ::= "#checkEventParamType" "(" Type ")"
  // ----------------------------------------------------
-    rule #checkEventParamType(%bytesT(L)) => .
-      requires L <=Int 32
+    rule #checkEventParamType(%bytesT(N)) => .
+      requires N <=Int 32
 
-    rule #checkEventParamType(%bytesT(L)) => #exception("Can only log a maximum of 32 bytes at a time.")
-      requires L >Int 32
+    rule #checkEventParamType(%bytesT(N)) => #exception("Can only log a maximum of 32 bytes at a time.")
+      requires N >Int 32
 
     rule #checkEventParamType(T) => .
       requires notBool isByteArrayType(T)
@@ -292,7 +294,7 @@ module VIPER-CORE-SEMANTICS
          <account>
            <acctID> ACCTID </acctID>
            <storage> STORAGE
-                    => STORAGE[VARNAME <- @val(@tv(T, #initialize(T), false), true)] </storage>
+                    => STORAGE[VARNAME <- @val(#defaultTypedValue(T), true)] </storage>
            ...
          </account>
       requires notBool VARNAME in_keys(STORAGE)
@@ -425,81 +427,10 @@ module VIPER-CORE-SEMANTICS
     rule #parseTypeForParam(NAME, T:Type) => %param(NAME, T)
 
 
-
-// Clearing State
-// ==============
-
-
-    syntax KItem ::= "#clearTX"
- // ---------------------------
-    rule <k> #clearTX => . ... </k>
-         <out>           _ => .List </out>
-         <callStack>     _ => .List </callStack>
-         <xStack>        _ => .List </xStack>
-         <interimStates> _ => .List </interimStates>
-         <env>           _ => .Map  </env>
-         <envStack>      _ => .List </envStack>
-         <forvar>        _ => .Set  </forvar>
-         <inLoop>        _ => .Set  </inLoop>
-         <constant>      _ => false </constant>
-         <payable>       _ => false </payable>
-         <return>        _ => %void </return>
-         <id>            _ => 0     </id>
-         <caller>        _ => 0     </caller>
-         <callValue>     _ => 0     </callValue>
-         <selfDestruct>  _ => .Set  </selfDestruct>
-         <log>           _ => .List </log>
-
-
-
 //////////////////////////////////////////////////////////////////////////////
 // Statements
 //////////////////////////////////////////////////////////////////////////////
 
-
-    syntax Value ::= "#initialize" "(" Type ")"  [function]
- // -------------------------------------------------------
-    rule #initialize(%bool) => false
-
-    rule #initialize(%num) => 0
-
-    rule #initialize(%decimal) => @d(0)
-
-    rule #initialize(%unitT(%num, _:Map, _)) => 0
-
-    rule #initialize(%unitT(%decimal, _:Map, _)) => @d(0)
-
-    rule #initialize(%num256) => 0
-
-    rule #initialize(%signed256) => 0
-
-    rule #initialize(%bytes32) => 0
-
-    rule #initialize(%address) => 0
-
-    rule #initialize(%bytesT(L)) => ""
-
-    rule #initialize(%listT(T, N)) => #initializeList(T, N, 0)
-
-    rule #initialize(%mapT(KT, VT)) => .Map
-
-    rule #initialize(%structT(ANNVARS)) => #initializeStruct(ANNVARS)
-
-
-    syntax Map ::= "#initializeList" "(" Type "," Int "," Int ")"  [function]
- // -------------------------------------------------------------------------
-    rule #initializeList(T, N, N) => .Map
-
-    rule #initializeList(T, N, INDEX)
-        => (INDEX |-> #initialize(T)) #initializeList(T, N, INDEX +Int 1)
-
-
-    syntax Map ::= "#initializeStruct" "(" AnnVars ")"  [function]
- // --------------------------------------------------------------
-    rule #initializeStruct(.AnnVars) => .Map
-
-    rule #initializeStruct(%annvar(FIELDNAME, FIELDTYPE) ANNVARS)
-        => (FIELDNAME |-> #initialize(FIELDTYPE)) #initializeStruct(ANNVARS)
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -507,14 +438,26 @@ module VIPER-CORE-SEMANTICS
 //////////////////////////////////////////////////////////////////////////////
 
 
+    syntax KItem /*TypedValue*/ ::= "#evalExpr" "(" Expr ")"
+ // --------------------------------------------------------
+
+
+    syntax KItem /*TypedValues*/ ::= "#evalExprs" "(" Exprs "," TypedValues ")"
+ // ---------------------------------------------------------------------------
+    rule #evalExprs(.Exprs, RESULT) => #reverseTypedValues(RESULT, .TypedValues)
+
+    rule #evalExprs((ARG:Expr ARGS:Exprs), RESULT) => #evalExpr(ARG) ~> #evalExprs(ARGS, RESULT)
+
+    rule ARG:TypedValue ~> #evalExprs(ARGS:Exprs, RESULT) => #evalExprs(ARGS, ARG RESULT)
+
+
 // Constants
 // =========
 
 
-    rule I:Int => @tv(%num, I, true)
+    rule #evalExpr(I:Int) => @tv(%num, I, true)
 
-    rule %hex(STR:String) => @tv(%address, #parseHexWord(STR), true)
-
+    rule #evalExpr(%hex(STR:String)) => @tv(%address, #parseHexWord(STR), true)
 
 
 // External Call
@@ -523,22 +466,69 @@ module VIPER-CORE-SEMANTICS
 
     syntax KItem ::= "#ecall" "(" K /*TypedValue*/ "," Id "," K /*TypedValues*/ ")"  [seqstrict(1, 3)]
  // --------------------------------------------------------------------------------------------------
-    rule %ecall(ADDR, FUNCNAME, EXPRS) => #ecall(ADDR, FUNCNAME, #evalArgs(EXPRS, .TypedValues))
+    rule #evalExpr(%ecall(ADDR, FUNCNAME, EXPRS)) => #ecall(#evalExpr(ADDR), FUNCNAME, #evalExprs(EXPRS, .TypedValues))
+
+    rule <k> #ecall(@tv(%address, ACCTID, _), FUNCNAME, TARGS:TypedValues)
+            => #push
 
 
-    syntax KItem /*TypedValues*/ ::= "#evalArgs" "(" Exprs "," TypedValues ")"
- // --------------------------------------------------------------------------
-    rule #evalArgs(.Exprs, RESULT) => #revTypedValues(RESULT, .TypedValues)
-
-    rule #evalArgs((ARG:Expr ARGS:Exprs), RESULT) => ARG ~> #evalArgs(ARGS, RESULT)
-
-    rule ARG:TypedValue ~> #evalArgs(ARGS:Exprs, RESULT) => #evalArgs(ARGS, ARG RESULT)
-
+//////////////////////////////////////////////////////////////////////////////
+// Clear State
+//////////////////////////////////////////////////////////////////////////////
 
 
 ///////////////////////////////////////////////////////////////////////////////
 // Types
 ///////////////////////////////////////////////////////////////////////////////
+
+
+// Default Values
+// ==============
+
+    syntax TypedValue ::= "#defaultTypedValue" "(" Type ")"  [function]
+ // -------------------------------------------------------------------
+    rule #defaultTypedValue(%bool) => @tv(%bool, false, false)
+
+    rule #defaultTypedValue(%num) => @tv(%num, 0, false)
+
+    rule #defaultTypedValue(%decimal) => @tv(%decimal, @d(0), false)
+
+    rule #defaultTypedValue(%unitT(%num, UNIT:Map, POSITIONAL)) => @tv(%unitT(%num, UNIT, POSITIONAL), 0, false)
+
+    rule #defaultTypedValue(%unitT(%decimal, UNIT:Map, POSITIONAL)) => @tv(%unitT(%decimal, UNIT, POSITIONAL), @d(0), false)
+
+    rule #defaultTypedValue(%num256) => @tv(%num256, 0, false)
+
+    rule #defaultTypedValue(%signed256) => @tv(%signed256, 0, false)
+
+    rule #defaultTypedValue(%bytes32) => @tv(%bytes32, 0, false)
+
+    rule #defaultTypedValue(%address) => @tv(%address, 0, false)
+
+    rule #defaultTypedValue(%bytesT(N)) => @tv(%bytesT(N), "", false)
+
+    rule #defaultTypedValue(%listT(SUBTYPE, LEN)) => @tv(%listT(SUBTYPE, LEN), #defaultValueListType(SUBTYPE, LEN, 0), false)
+
+    rule #defaultTypedValue(%mapT(KT, VT)) => @tv(%mapT(KT, VT), .Map, false)
+
+    rule #defaultTypedValue(%structT(ANNVARS)) => @tv(%structT(ANNVARS), #defaultValueStructType(ANNVARS), false)
+
+
+    syntax Map ::= "#defaultValueListType" "(" Type "," Int "," Int ")"  [function]
+ // -------------------------------------------------------------------------------
+    rule #defaultValueListType(SUBTYPE, N, N) => .Map
+
+    rule #defaultValueListType(T, N, INDEX)
+        => (INDEX |-> #defaultTypedValue(T)) #defaultValueListType(T, N, INDEX +Int 1)
+      requires INDEX <Int N
+
+
+    syntax Map ::= "#defaultValueStructType" "(" AnnVars ")"  [function]
+ // --------------------------------------------------------------------
+    rule #defaultValueStructType(.AnnVars) => .Map
+
+    rule #defaultValueStructType(%annvar(FIELDNAME, FIELDTYPE) ANNVARS)
+        => (FIELDNAME |-> #defaultTypedValue(FIELDTYPE)) #defaultValueStructType(ANNVARS)
 
 
 // Type Parsing
@@ -568,10 +558,10 @@ module VIPER-CORE-SEMANTICS
 
     rule #parseType(%address, _) => %address
 
-    rule #parseType(%bytesT(L), _)
-        => #if L <=Int 0
-             #then @exception("Bad byte array length: " +String Int2String(L)) #fi
-        ~> %bytesT(L)
+    rule #parseType(%bytesT(N), _)
+        => #if N <=Int 0
+             #then @exception("Bad byte array length: " +String Int2String(N)) #fi
+        ~> %bytesT(N)
 
     rule #parseType(%listT(SUBTYPE, N), INMEMORY)
         => #parseListType(#parseType(SUBTYPE, INMEMORY), N)

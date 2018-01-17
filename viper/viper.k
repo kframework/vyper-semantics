@@ -186,7 +186,7 @@ module VIPER
       requires notBool #isSorted(CONTENT)
 
     rule <k> exec { "caller" : (CALLER:String), "data" : (CALLEXPR:Expr), "value" : (VALUE:String) }
-            => CALLEXPR ... </k>
+            => #evalExpr(CALLEXPR) ... </k>
          <caller>    _ => #parseHexWord(CALLER) </caller>
          <callValue> _ => #parseWord(VALUE)  </callValue>
 
