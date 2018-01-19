@@ -44,6 +44,7 @@ module VIPER-ABSTRACT-SYNTAX
 
 
     syntax Stmt  ::= AnnVar
+                   | "%annassign" "(" Id "," Type "," Expr ")"
                    | "%assign"    "(" Var "," Expr ")"
                    | "%augassign" "(" AugAssignOp "," Var "," Expr ")"
                    | "%if"        "(" Expr "," Stmts "," Stmts ")"
