@@ -8,52 +8,12 @@ module VIPER
     imports VIPER-CORE-SEMANTICS
 
 
-    syntax Int ::= "pow160"  [function]
- // -----------------------------------
-    rule pow160 => 2 ^Int 160
-
-
-// Address
-// =======
-
-
-    syntax Int ::= "#addr" "(" Int ")"  [function]
- // ----------------------------------------------
-    rule #addr(W) => W modInt pow160
-
-
-    syntax Int ::= "#parseAddr" "(" String ")"  [function]
- // ------------------------------------------------------
-    rule #parseAddr(S) => #addr(#parseHexWord(S))
-
-
-// Account
-// =======
-
-
-    syntax KItem ::= "#newAccount" "(" Int ")"
- // ------------------------------------------
-    rule <k> #newAccount(ACCTID) => . ... </k>
-         <accounts>
-           (.Bag
-          => <account>
-               <acctID>   ACCTID </acctID>
-               <balance>  0      </balance>
-               <fun>      .Map   </fun>
-               <event>    .Map   </event>
-               <external> .Map   </external>
-               <storage>  .Map   </storage>
-             </account> )
-           ...
-         </accounts>
-
-
 // JSON
 // ====
 
 
     syntax JSONList ::= List{JSON,","}  [klabel(JSONList)]
-    syntax JSONKey  ::= String | Int
+    syntax JSONKey  ::= String | Int | Var
     syntax JSON     ::= String
                       | JSONKey ":" JSON
                       | "{" JSONList "}"
@@ -62,7 +22,7 @@ module VIPER
     // extend JSONKey and JSON to provide a "pretti-fication" to the nicer input form
     syntax JSONKey ::= Id
 
-    syntax JSON ::= Pgm | Expr | ValRecord | Map
+    syntax JSON ::= Pgm | Expr
 
     syntax JSONList ::= #sortJSONList ( JSONList )            [function]
                       | #sortJSONList ( JSONList , JSONList ) [function, klabel(#sortJSONListAux)]
@@ -147,7 +107,9 @@ module VIPER
         => #loadAccount { ACCTID : { "code" : { #sortJSONList(CONTENT) } } }
       requires notBool #isSorted(CONTENT)
 
-    rule #loadAccount { (ACCTID:Int) : { "code" : { "arguments" : [ ARGS ], "source" : (CODE:Pgm) } } }
+    rule #loadAccount { (ACCTID:Int) : { "code" : { .JSONList } } } => .
+
+    rule #loadAccount { (ACCTID:Int) : { "code" : { "args" : [ ARGS ], "source" : (CODE:Pgm) } } }
         => #loadCodeAndExecInit(ACCTID, CODE, #toExprs(ARGS))
 
     rule #loadAccount { (ACCTID:Int) : { "code" : { "source" : (CODE:Pgm) } } }
@@ -155,25 +117,16 @@ module VIPER
 
 
     // Load account - storage
-    syntax KItem ::= "#loadStorage" "(" Int "," JSONList ")"
- // ---------------------------------------------------------------
-    rule #loadAccount { (ACCTID:Int) : { "storage" : { STORAGE:JSONList } } }
-        => #loadStorage(ACCTID, STORAGE)
+    syntax KItem ::= "#loadStorage" "(" JSONList ")"
+ // ------------------------------------------------
+    rule <k> #loadAccount { (ACCTID:Int) : { "storage" : { STORAGES:JSONList } } }
+            => #loadStorage(STORAGES) ~> #clearVyperState ... </k>
+         <id> _ => ACCTID </id>
 
+    rule #loadStorage(.JSONList) => .
 
-    rule #loadStorage(ACCTID, .JSONList) => .
-
-    rule <k> #loadStorage(ACCTID, ((KEY : VALUE), REST))
-            => #loadStorage(ACCTID, REST)
-         ... </k>
-         <accounts>
-           <account>
-             <acctID> ACCTID </acctID>
-             <storage> ... (KEY |-> (OLD => VALUE)) ... </storage>
-             ...
-           </account>
-           ...
-         </accounts>
+    rule #loadStorage((KEY : VALUE), REST)
+        => #evalStmt(%assign(KEY, VALUE)) ~> #loadStorage(REST)
 
 
 // Command - Exec
@@ -182,13 +135,19 @@ module VIPER
 
     syntax SimulationCommand ::= "exec" JSON
  // ----------------------------------------
-    rule exec { CONTENT } => exec { #sortJSONList(CONTENT) }
-      requires notBool #isSorted(CONTENT)
+    rule exec { "from" : (ACCTFROM:String), "to" : (ACCTTO:String), "value" : (VALUE:String),
+                "function" : (FUNCNAME:String), "args" : [ ARGS ] }
+        => #exec(#parseHexWord(ACCTFROM),
+                 #parseHexWord(ACCTTO),
+                 #parseWord(VALUE),
+                 String2Id(FUNCNAME),
+                 #evalExprs(#toExprs(ARGS), .EvaledExprs))
 
-    rule <k> exec { "caller" : (CALLER:String), "data" : (CALLEXPR:Expr), "value" : (VALUE:String) }
-            => #evalExpr(CALLEXPR) ... </k>
-         <caller>    _ => #parseHexWord(CALLER) </caller>
-         <callValue> _ => #parseWord(VALUE)  </callValue>
+
+    syntax Expr ::= "#exec" "(" Int "," Int "," Int "," Id "," K ")"  [strict(5)]
+ // -----------------------------------------------------------------------------
+    rule #exec(ACCTFROM, ACCTTO, VALUE, FUNCNAME, TARGS:EvaledExprs)
+        => #call(ACCTFROM, ACCTTO, VALUE, FUNCNAME, TARGS)
 
 
 //////////////////////////////////////////////////////////////////////////////

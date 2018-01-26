@@ -10,9 +10,27 @@ module VIPER-UTILS
 ///////////////////////////////////////////////////////////////////////////////
 
 
-    syntax Int  ::= "@decimalDivisor"
- // ---------------------------------
-    rule @decimalDivisor => 10000000000  [macro]
+    syntax Int ::= "pow160"           [function]
+                 | "@decimalDivisor"  [function]
+                 | "@maxNum"          [function]
+                 | "@minNum"          [function]
+                 | "@maxDecimal"      [function]
+                 | "@minDecimal"      [function]
+                 | "@maxNum256"       [function]
+ // --------------------------------------------
+    rule pow160 => 2 ^Int 160
+
+    rule @decimalDivisor => 10000000000
+
+    rule @maxNum     => 2 ^Int 127 -Int 1
+
+    rule @minNum     => -2 ^Int 127
+
+    rule @maxDecimal => (2 ^Int 127 -Int 1) *Int @decimalDivisor
+
+    rule @minDecimal => (-2 ^Int 127) *Int @decimalDivisor
+
+    rule @maxNum256  => 2 ^Int 256 -Int 1
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -225,7 +243,7 @@ module VIPER-UTILS
       requires isBaseType(SUBTYPE) orBool isListType(SUBTYPE)
 
     rule #canonicalizeType(%listT(SUBTYPE, N), _)
-        => @exception("List of byte arrays not allowed.")
+        => @staticException("List of byte arrays not allowed.")
       requires isByteArrayType(SUBTYPE)
 
     rule #canonicalizeType(%num, _) => "int128"
@@ -324,8 +342,12 @@ module VIPER-UTILS
 //////////////////////////////////////////////////////////////////////////////
 
 
-    syntax KItem ::= "@exception" "(" String ")"
- // -------------------------------------------
+    syntax KItem ::= "@staticException" "(" String ")"
+ // --------------------------------------------------
+
+
+    syntax KItem ::= "@dynamicException" "(" String ")"
+ // ---------------------------------------------------
 
 
 endmodule

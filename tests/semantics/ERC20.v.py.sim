@@ -1,4 +1,8 @@
 load "account" : {
+  "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b": {
+    "balance": "0xe8d4a51000",
+    "code": {}
+  },
   "0x1000000000000000000000000000000000000000" : {
     "balance" : "0x20",
     "code"    : {
@@ -48,14 +52,20 @@ load "account" : {
           %fdecl(%@public %@constant, allowance, %param(_owner, %address) %param(_spender, %address), %num256,
             %return(%subscript(%subscript(%svar(allowances), %var(_owner)), %var(_spender))))
         )     
+    },
+    "storage" : {
+      %svar(num_issued) : %as_num256(10000),
+      %subscript(%svar(balances), %hex("0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b")) : %as_num256(10000)
     }
   }
 }
 
 exec {
-  "caller" : "0xcd1722f2947def4cf144679da39c4c32bdc35681",
-  "data"   : %ecall(%hex("0x1000000000000000000000000000000000000000"), totalSupply, 2 3),
-  "value"  : "0x0de0b6b3a7640000"
+  "from"      : "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b",
+  "to"        : "0x1000000000000000000000000000000000000000",
+  "value"     : "0x0",
+  "function"  : "balanceOf",
+  "args"      : [%hex("0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b")]
 }
 
 .Simulation
