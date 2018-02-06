@@ -91,9 +91,10 @@ module VIPER-CORE-SEMANTICS
 // ==========
 
    // Var with Expr inside evaluated.
-   syntax EvaledVar ::= "@evar" "(" Var ")"
-
-   syntax Var ::= "#subscript" "(" Var "," EvaledExpr ")"
+   syntax EvaledVar ::= "@%var"  "(" Id ")"
+                      | "@%svar" "(" Id ")"
+                      | "@%subscript" "(" EvaledVar "," EvaledExpr ")"
+                      | "@%attribute" "(" EvaledVar "," Id ")"
 
 
 // Evaluated Expression
@@ -116,6 +117,7 @@ module VIPER-CORE-SEMANTICS
 
 // Record
 // ======
+
 
     syntax ValRecord ::= "@val" "(" TypedValue "," Bool ")"  // typed_value, mutable?
 
@@ -152,32 +154,44 @@ module VIPER-CORE-SEMANTICS
 //////////////////////////////////////////////////////////////////////////////
 
 
-    syntax KItem ::= "#loadCode" "(" Int "," Pgm ")"
+    syntax KItem ::= "#loadProgramAndInit" "(" Int "," Pgm ")"
  // ------------------------------------------------
-    rule <k> #loadCode(ACCTID, %pgm(ES, GS, DEFS))
-            => ES ~> GS ~> (DEFS ++Def #mkPublicGetters(GS, .Defs)) ~> #clearVyperState
+    rule <k> #loadProgramAndInit(ACCTID, %pgm(ES, GS, DEFS))
+            => #addEvents(ACCTID, ES) ~> #addGlobals(ACCTID, GS)
+            ~> #addFuncs(ACCTID, (DEFS ++Def #mkPublicGetters(GS, .Defs)), 0)
          ... </k>
-         <id> _ => ACCTID </id>
 
 
     // TODO: loadCode with init function
-    syntax KItem ::= "#loadCodeAndExecInit" "(" Int "," Pgm "," Exprs ")"
+    syntax KItem ::= "#loadProgramAndInit" "(" Int "," Pgm "," Exprs ")"
  // ---------------------------------------------------------------------
+
+
+    syntax KItem ::= "#loadProgramWithoutInit" "(" Int "," Pgm ")"
+ // --------------------------------------------------------------
+    rule <k> #loadCode(ACCTID, %pgm(ES, GS, DEFS))
+            => #addEvents(ACCTID, ES)
+            ~> #addFuncs(ACCTID, (DEFS ++Def #mkPublicGetters(GS, .Defs)), 0)
+         ... </k>
 
 
 // Event Declarations
 // ==================
 
-    rule .Events => .
 
-    rule E:Event ES:Events => E ~> ES
+    syntax KItem ::= "#addEvents" "(" Int "," Events ")"
+ // ----------------------------------------------------
+    rule #addEvents(ACCTID, .Events) => .
 
-    rule <k> %event(EVENTNAME, EPARAMS)
+    rule #addEvents(ACCTID, E ES) => #addEvent(ACCTID, E) ~> #addEvents(ACCTID, ES)
+
+
+    syntax KItem ::= "#addEvent" "(" Int "," Event ")"
+ // --------------------------------------------------
+    rule <k> #addEvent(ACCTID, %event(EVENTNAME, EPARAMS))
             => #checkEventParams(EPARAMS, 0, .Ids)
-            ~> #addEvent(EVENTNAME,
-                         #parseTypeForEventParams(EPARAMS, .EventParams))
+            ~> #addEventAux(ACCTID, EVENTNAME, #parseTypeForEventParams(EPARAMS, .EventParams))
          ... </k>
-         <id> ACCTID </id>
          <account>
            <acctID> ACCTID </acctID>
            <event> EVENTS </event>
@@ -185,10 +199,9 @@ module VIPER-CORE-SEMANTICS
          </account>
       requires notBool EVENTNAME in_keys(EVENTS)
 
-    rule <k> %event(EVENTNAME, EPARAMS)
+    rule <k> #addEvent(ACCTID, %event(EVENTNAME, EPARAMS))
             => @staticException("Duplicate event name: " +String Id2String(EVENTNAME))
          ... </k>
-         <id> ACCTID </id>
          <account>
            <acctID> ACCTID </acctID>
            <event> EVENTS </event>
@@ -206,44 +219,45 @@ module VIPER-CORE-SEMANTICS
 
     rule #checkEventParams(%eparam(NAME, T, true) EPARAMS, TOPICNUM, NAMES)
        => #checkEventParam(%eparam(NAME, T, true), NAMES)
-       ~> #checkEventParams(EPARAMS, TOPICNUM +Int 1, NAMES ++Id (NAME .Ids))
+       ~> #checkEventParams(EPARAMS, TOPICNUM +Int 1, NAME NAMES)
       requires TOPICNUM <Int 3
 
     rule #checkEventParams(%eparam(NAME, T, true) EPARAMS, TOPICNUM, NAMES)
-        => #exception("Maximum of 3 topics.")
+        => @staticException("Maximum of 3 topics.")
       requires TOPICNUM >=Int 3
 
     rule #checkEventParams(%eparam(NAME, T, false) EPARAMS, TOPICNUM, NAMES)
         => #checkEventParam(%eparam(NAME, T, false), NAMES)
-        ~> #checkEventParams(EPARAMS, TOPICNUM, NAMES ++Id (NAME .Ids))
+        ~> #checkEventParams(EPARAMS, TOPICNUM, NAME NAMES)
 
 
     syntax KItem ::= "#checkEventParam" "(" EventParam "," Ids ")"
  // --------------------------------------------------------------
-    rule #checkEventParam(%eparam(NAME, T, _), NAMES)
-        => #checkEventParamType(T)
+    rule #checkEventParam(%eparam(NAME, T, ISTOPIC), NAMES)
+        => #checkEventParamType(T, ISTOPIC)
         ~> #if notBool #isVarNameValid(NAME)
              #then @staticException("Argument name invalid or reserved: " +String Id2String(NAME)) #fi
         ~> #if #isInIds(NAME, NAMES)
              #then @staticException("Duplicate function argument name: " +String Id2String(NAME)) #fi
 
 
-    syntax KItem ::= "#checkEventParamType" "(" Type ")"
- // ----------------------------------------------------
-    rule #checkEventParamType(%bytesT(N)) => .
+    syntax KItem ::= "#checkEventParamType" "(" Type "," Bool /*topic?*/ ")"
+ // ------------------------------------------------------------------------
+    rule #checkEventParamType(%bytesT(N), true) => .
       requires N <=Int 32
 
-    rule #checkEventParamType(%bytesT(N)) => #exception("Can only log a maximum of 32 bytes at a time.")
+    rule #checkEventParamType(%bytesT(N), true) => @staticException("Indexed arguments are limited to 32 bytes.")
       requires N >Int 32
 
-    rule #checkEventParamType(T) => .
+    rule #checkEventParamType(T, true) => .
       requires notBool isByteArrayType(T)
 
+    rule #checkEventParamType(T, false) => .
 
-    syntax KItem ::= "#addEvent" "(" Id "," K /*EventParams*/ ")"  [strict(2)]
- // --------------------------------------------------------------------------
-    rule <k> #addEvent(EVENTNAME, EPARAMS:EventParams) => . ... </k>
-         <id> ACCTID </id>
+
+    syntax KItem ::= "#addEventAux" "(" Int "," Id "," K /*EventParams*/ ")"  [strict(3)]
+ // -------------------------------------------------------------------------------------
+    rule <k> #addEventAux(ACCTID, EVENTNAME, EPARAMS:EventParams) => . ... </k>
          <account>
            <acctID> ACCTID </acctID>
            <event> EVENTS => EVENTS[EVENTNAME <- @event(EVENTNAME, EPARAMS)] </event>
@@ -253,14 +267,14 @@ module VIPER-CORE-SEMANTICS
 
     syntax KItem /*EventParams*/ ::= "#parseTypeForEventParams" "(" EventParams "," EventParams ")"
  // -----------------------------------------------------------------------------------------------
-    rule #parseTypeForEventParams(.EventParams, RESULT) => RESULT
+    rule #parseTypeForEventParams(.EventParams, RESULT) => #revEventParams(RESULT, .EventParams)
 
     rule #parseTypeForEventParams(%eparam(NAME, T, ISTOPIC) EPARAMS, RESULT)
         => #parseTypeForEventParam(NAME, #parseType(T, true), ISTOPIC)
         ~> #parseTypeForEventParams(EPARAMS, RESULT)
 
     rule EPARAM:EventParam ~> #parseTypeForEventParams(EPARAMS, RESULT)
-        => #parseTypeForEventParams(EPARAMS, RESULT ++Eparam (EPARAM .EventParams))
+        => #parseTypeForEventParams(EPARAMS, EPARAM RESULT)
 
 
     syntax KItem ::= "#parseTypeForEventParam" "(" Id "," K /*Type*/ "," Bool ")"  [strict(2)]
@@ -272,16 +286,20 @@ module VIPER-CORE-SEMANTICS
 // ===================
 
 
-    rule .Globals => .
+    syntax KItem ::= "#addGlobals" "(" Int "," Globals ")"
+ // ------------------------------------------------------
+    rule #addGlobals(ACCTID, .Globals) => .
 
-    rule G:Global GS:Globals => G ~> GS
+    rule #addGlobals(ACCTID, G GS) => #addGlobal(ACCTID, G) ~> #addGlobals(ACCTID, GS)
 
-    rule <k> %svdecl(VARNAME, T, _)
+
+    syntax KItem ::= "#addGlobal" "(" Int "," Global ")"
+ // ----------------------------------------------------
+    rule <k> #addGlobal(ACCTID, %svdecl(VARNAME, T, _))
             => #if notBool #isVarNameValid(VARNAME)
                 #then @staticException("Variable name invalid or reserved: " +String Id2String(VARNAME)) #fi
-            ~> #addGlobal(VARNAME, #parseType(T, false))
+            ~> #addGlobalAux(ACCTID, VARNAME, #parseType(T, false))
          ... </k>
-         <id> ACCTID </id>
          <account>
            <acctID> ACCTID </acctID>
            <storage> STORAGE </storage>
@@ -289,10 +307,9 @@ module VIPER-CORE-SEMANTICS
          </account>
       requires notBool VARNAME in_keys(STORAGE)
 
-    rule <k> %svdecl(VARNAME, T, _)
+    rule <k> #addGlobal(ACCTID, %svdecl(VARNAME, T, _))
             => @staticException("Cannot declare a persistent variable twice! " +String Id2String(VARNAME))
          ... </k>
-         <id> ACCTID </id>
          <account>
            <acctID> ACCTID </acctID>
            <storage> STORAGE </storage>
@@ -301,52 +318,46 @@ module VIPER-CORE-SEMANTICS
       requires VARNAME in_keys(STORAGE)
 
 
-    syntax KItem ::= "#addGlobal" "(" Id "," K /*Type*/ ")"  [strict(2)]
- // --------------------------------------------------------------------
-    rule <k> #addGlobal(VARNAME, T:Type) => . ... </k>
-         <id> ACCTID </id>
+    syntax KItem ::= "#addGlobalAux" "(" Int "," Id "," K /*Type*/ ")"  [strict(3)]
+ // -------------------------------------------------------------------------------
+    rule <k> #addGlobalAux(ACCTID, VARNAME, T:Type) => . ... </k>
          <account>
            <acctID> ACCTID </acctID>
            <storage> STORAGE
                     => STORAGE[VARNAME <- @val(#defaultTypedValue(T), true)] </storage>
            ...
          </account>
-      requires notBool VARNAME in_keys(STORAGE)
 
 
 // Function Declarations
 // =====================
 
 
-    rule FUNCDEFS:Defs => #addFuncs(FUNCDEFS, 0)
+    syntax KItem ::= "#addFuncs" "(" Int "," Defs "," Int /*order*/ ")"
+ // -------------------------------------------------------------------
+    rule #addFuncs(ACCTID, .Defs, _) => .
 
-
-    syntax KItem ::= "#addFuncs" "(" Defs "," Int /*order*/ ")"
- // -----------------------------------------------------------
-    rule #addFuncs(.Defs, _) => .
-
-    rule #addFuncs(%fdecl(DECS, FUNCNAME, PARAMS, T, FUNCBODY) DEFS, ORDER)
-        => #addFunc(FUNCNAME, PARAMS, T, FUNCBODY,
+    rule #addFuncs(ACCTID, %fdecl(DECS, FUNCNAME, PARAMS, T, FUNCBODY) DEFS, ORDER)
+        => #addFunc(ACCTID, FUNCNAME, PARAMS, T, FUNCBODY,
                     #isInDecorators(%@constant, DECS),
                     #isInDecorators(%@payable , DECS),
                     #isInDecorators(%@private , DECS),
                     #isInDecorators(%@public  , DECS),
                     ORDER)
-        ~> #addFuncs(DEFS, ORDER +Int 1)
+        ~> #addFuncs(ACCTID, DEFS, ORDER +Int 1)
 
 
-    syntax KItem ::= "#addFunc" "(" Id "," Params "," Type "," Stmts "," Bool "," Bool "," Bool "," Bool "," Int ")"
- // ----------------------------------------------------------------------------------------------------------------
-    rule <k> #addFunc(FUNCNAME, PARAMS, RT, FUNCBODY, CONSTANT, PAYABLE, PRIVATE, PUBLIC, ORDER)
-            => #checkFuncParams(PARAMS, .Ids)
+    syntax KItem ::= "#addFunc" "(" Int "," Id "," Params "," Type "," Stmts "," Bool "," Bool "," Bool "," Bool "," Int ")"
+ // ------------------------------------------------------------------------------------------------------------------------
+    rule <k> #addFunc(ACCTID, FUNCNAME, PARAMS, RT, FUNCBODY, CONSTANT, PAYABLE, PRIVATE, PUBLIC, ORDER)
+            => #checkFuncParams(ACCTID, PARAMS, .Ids)
             ~> #checkPrivatePublicMECE(PRIVATE, PUBLIC)
-            ~> #addFuncAux(FUNCNAME,
+            ~> #addFuncAux(ACCTID, FUNCNAME,
                            #parseTypeForParams(PARAMS, .Params),
                            #parseType(RT, true),
                            FUNCBODY,
                            CONSTANT, PAYABLE, PRIVATE, ORDER)
          ... </k>
-         <id> ACCTID </id>
          <account>
            <acctID> ACCTID </acctID>
            <fun> FUNCS </fun>
@@ -355,10 +366,9 @@ module VIPER-CORE-SEMANTICS
          </account>
       requires notBool(FUNCNAME in_keys(FUNCS)) andBool notBool(FUNCNAME in_keys(EVENTS))
 
-    rule <k> #addFunc(FUNCNAME, PARAMS, RT, FUNCBODY, CONSTANT, PAYABLE, PRIVATE, PUBLIC, ORDER)
+    rule <k> #addFunc(ACCTID, FUNCNAME, PARAMS, RT, FUNCBODY, CONSTANT, PAYABLE, PRIVATE, PUBLIC, ORDER)
             => @staticException("Duplicate event or function name: " +String Id2String(FUNCNAME))
          ... </k>
-         <id> ACCTID </id>
          <account>
            <acctID> ACCTID </acctID>
            <fun> FUNCS </fun>
@@ -368,19 +378,19 @@ module VIPER-CORE-SEMANTICS
       requires (FUNCNAME in_keys(FUNCS)) orBool (FUNCNAME in_keys(EVENTS))
 
 
-    syntax KItem ::= "#checkFuncParams" "(" Params "," Ids ")"
- // ----------------------------------------------------------
-    rule #checkFuncParams(.Params, NAMES) => .
+    syntax KItem ::= "#checkFuncParams" "(" Int "," Params "," Ids ")"
+ // ------------------------------------------------------------------
+    rule #checkFuncParams(ACCTID, .Params, NAMES) => .
 
-    rule #checkFuncParams(%param(NAME, T) PARAMS, NAMES)
-        => #checkFuncParam(%param(NAME, T), NAMES)
-        ~> #checkFuncParams(PARAMS, NAMES ++Id (NAME .Ids))
+    rule #checkFuncParams(ACCTID, %param(NAME, T) PARAMS, NAMES)
+        => #checkFuncParam(ACCTID, %param(NAME, T), NAMES)
+        ~> #checkFuncParams(ACCTID, PARAMS, NAME NAMES)
 
 
-    syntax KItem ::= "#checkFuncParam" "(" Param "," Ids ")"
- // --------------------------------------------------------
-     rule #checkFuncParam(%param(NAME, _), NAMES)
-        => #checkVarName(NAME)
+    syntax KItem ::= "#checkFuncParam" "(" Int "," Param "," Ids ")"
+ // ----------------------------------------------------------------
+     rule #checkFuncParam(ACCTID, %param(NAME, _), NAMES)
+        => #checkVarName(ACCTID, NAME)
         ~> #if #isInIds(NAME, NAMES)
              #then @staticException("Duplicate function argument name: " +String Id2String(NAME)) #fi
 
@@ -394,11 +404,9 @@ module VIPER-CORE-SEMANTICS
              #then @staticException("Function visibility must be declared (@public or @private).") #fi
 
 
-    syntax KItem ::= "#addFuncAux" "(" Id "," K /*Params*/ "," K /*Type*/ "," Stmts "," Bool "," Bool "," Bool "," Int ")"  [strict(2, 3)]
- // --------------------------------------------------------------------------------------------------------------------------------------
-    rule <k> #addFuncAux(FUNCNAME, PARAMS:Params, RT:Type, FUNCBODY, CONSTANT, PAYABLE, PRIVATE, ORDER)
-            => . ... </k>
-         <id> ACCTID </id>
+    syntax KItem ::= "#addFuncAux" "(" Int "," Id "," K /*Params*/ "," K /*Type*/ "," Stmts "," Bool "," Bool "," Bool "," Int ")"  [strict(3, 4)]
+ // ----------------------------------------------------------------------------------------------------------------------------------------------
+    rule <k> #addFuncAux(ACCTID, FUNCNAME, PARAMS:Params, RT:Type, FUNCBODY, CONSTANT, PAYABLE, PRIVATE, ORDER) => . ... </k>
          <account>
            <acctID> ACCTID </acctID>
            <fun> FUNCS
@@ -409,14 +417,14 @@ module VIPER-CORE-SEMANTICS
 
     syntax KItem /*Params*/ ::= "#parseTypeForParams" "(" Params "," Params ")"
  // ---------------------------------------------------------------------------
-    rule #parseTypeForParams(.Params, RESULT) => RESULT
+    rule #parseTypeForParams(.Params, RESULT) => #revParams(RESULT, .Params)
 
     rule #parseTypeForParams(%param(NAME, T) PARAMS, RESULT)
         => #parseTypeForParam(NAME, #parseType(T, true))
         ~> #parseTypeForParams(PARAMS, RESULT)
 
     rule PARAM:Param ~> #parseTypeForParams(PARAMS, RESULT)
-        => #parseTypeForParams(PARAMS, RESULT ++Param (PARAM .Params))
+        => #parseTypeForParams(PARAMS, PARAM RESULT)
 
 
     syntax KItem ::= "#parseTypeForParam"  "(" Id "," K /*Type*/ ")"  [strict(2)]
@@ -446,10 +454,13 @@ module VIPER-CORE-SEMANTICS
     rule #evalStmt(%annvar(VARNAME, T)) => #newVar(VARNAME, #parseType(T, true))
 
 
-    syntax KItem ::= "#newVar" "(" Id "," K /*Type*/ ")"  [strict(2)]
+    syntax KItem ::= "#newVar"    "(" Id "," K /*Type*/ ")"  [strict(2)]
     syntax KItem ::= "#newVarAux" "(" Id "," Type ")"
- // -----------------------------------------------------------------
-    rule #newVar(VARNAME, T) => #checkVarName(VARNAME) ~> #newVarAux(VARNAME, T)
+ // --------------------------------------------------------------------
+    rule <k> #newVar(VARNAME, T)
+            => #checkVarName(ACCTID, VARNAME) ~> #newVarAux(VARNAME, T)
+         ... </k>
+         <id> ACCTID </id>
 
     rule <k> #newVarAux(VARNAME, T)
             => @staticException("Duplicate variable name: " +String Id2String(VARNAME))
@@ -473,36 +484,36 @@ module VIPER-CORE-SEMANTICS
  // -----------------------------------------------------------------------------------------------
     rule #annassign(VARNAME, VARTYPE:Type, @ee(EXPRTYPE, VALUE, LITERAL))
         => #newVar(VARNAME, VARTYPE)
-        ~> #assign(@ee(EXPRTYPE, VALUE, LITERAL), @evar(%var(VARNAME)))
+        ~> #assignTo(@ee(EXPRTYPE, VALUE, LITERAL), @%var(VARNAME))
 
 
 // Assignment
 // ----------
 
 
-    rule #evalStmt(%assign(VAR, EXPR)) => #assign(#evalExpr(EXPR), #evalVar(VAR))
+    rule #evalStmt(%assign(VAR, EXPR)) => #assignTo(#evalExpr(EXPR), #getAssignTarget(VAR))
 
 
-    syntax KItem ::= "#assign" "(" K /*EvaledExpr*/ "," K /*EvaledVar*/ ")"  [seqstrict]
-    syntax KItem ::= "#assignAux" "(" EvaledExpr "," Var "," K /*ValRecord*/ ")"  [strict(3)]
- // -----------------------------------------------------------------------------------------
-    rule #assign(EEXPR:EvaledExpr, @evar(VAR))
-        => #assignAux(EEXPR, VAR, #lookupVar(VAR))
+    syntax KItem ::= "#assignTo"    "(" K /*EvaledExpr*/ "," K /*EvaledVar*/ ")"          [seqstrict]
+    syntax KItem ::= "#assignToAux" "(" EvaledExpr "," EvaledVar "," K /*ValRecord*/ ")"  [strict(3)]
+ // -------------------------------------------------------------------------------------------------
+    rule #assignTo(EEXPR:EvaledExpr, EVAR:EvaledVar)
+        => #assignToAux(EEXPR, EVAR, #lookupVar(EVAR))
 
-    rule #assignAux(EEXPR, VAR, @val(_, false))
+    rule #assignToAux(EEXPR, EVAR, @val(_, false))
         => @staticException("Cannot modify function argument.")
 
-    rule #assignAux(EEXPR, VAR, @val(@tv(OLDTYPE, _), true))
-        => #assignHelper(VAR, #baseTypeConvert(EEXPR, OLDTYPE))
-      requires isBaseType(OLDTYPE)
+    rule #assignToAux(EEXPR, EVAR, @val(@tv(TYPE, _), true))
+        => #assignToHelper(EVAR, #baseTypeConvert(EEXPR, TYPE))
+      requires isBaseType(TYPE)
 
 
-    syntax KItem ::= "#assignHelper" "(" Var "," K ")"  [strict(2)]
- // ------------------------------------------------------------
-    rule <k> #assignHelper(%var(VARNAME), TVNEW:TypedValue) => . ... </k>
+    syntax KItem ::= "#assignToHelper" "(" EvaledVar "," K ")"  [strict(2)]
+ // -----------------------------------------------------------------------
+    rule <k> #assignToHelper(@%var(VARNAME), TVNEW:TypedValue) => . ... </k>
          <memory> MEM => MEM[VARNAME <- @val(TVNEW, true)] </memory>
 
-    rule <k> #assignHelper(%svar(VARNAME), TVNEW:TypedValue) => . ... </k>
+    rule <k> #assignToHelper(@%svar(VARNAME), TVNEW:TypedValue) => . ... </k>
          <id> ACCTID </id>
          <account>
            <acctID> ACCTID </acctID>
@@ -510,23 +521,25 @@ module VIPER-CORE-SEMANTICS
            ...
          </account>
 
-    rule #assignHelper(#subscript(VAR, EEXPR), TV)
-        => #assignHelper(VAR, #updateMap(#lookupVar(VAR), EEXPR, TV))
+
+    rule #assignToHelper(@%subscript(EVAR, OFFSETEXPR), TVNEW)
+        => #assignToHelper(EVAR, #updateValue(#lookupVar(EVAR), OFFSETEXPR, TVNEW))
 
 
-    syntax KItem /*TypedValue*/ ::= "#updateMap" "(" K /*ValRecord*/ "," K "," TypedValue ")"  [strict(1)]
- // ------------------------------------------------------------------------------------------------------
-    rule #updateMap(@val(@tv(%mapT(KT, VT), MAPVALUE:Map), _), EEXPR:EvaledExpr, TV)
-        => #updateMapAux(@tv(%mapT(KT, VT), MAPVALUE), #baseTypeConvert(EEXPR, KT), TV)
-
-
-    syntax KItem /*TypedValue*/ ::= "#updateMapAux" "(" TypedValue "," K /*TypedValue*/ "," TypedValue ")"  [strict(2)]
+    syntax KItem /*TypedValue*/ ::= "#updateValue" "(" K /*ValRecord*/ "," K /*offset*/ "," TypedValue ")"  [strict(1)]
  // -------------------------------------------------------------------------------------------------------------------
-    rule #updateMapAux(@tv(T, MAP:Map), @tv(KT, KEY), TV) => @tv(T, MAP[KEY <- TV])
+    rule #updateValue(@val(@tv(%mapT(KT, VT), MAPVALUE:Map), _), KEYEXPR:EvaledExpr, TVNEW)
+        => #updateMapValue(@tv(%mapT(KT, VT), MAPVALUE), #baseTypeConvert(KEYEXPR, KT), TVNEW)
+      requires isBaseType(KT)
 
 
-    syntax KItem /*EvaledExpr*/ ::= "#getAssignTarget" "(" Var ")"
- // --------------------------------------------------------------
+    syntax KItem /*TypedValue*/ ::= "#updateMapValue" "(" TypedValue "," K /*key*/ "," TypedValue ")"  [strict(2)]
+ // --------------------------------------------------------------------------------------------------------------
+    rule #updateMapValue(@tv(T, MAP:Map), @tv(KT, OFFSET), TV) => @tv(T, MAP[OFFSET <- TV])
+
+
+    syntax KItem /*EvaledVar*/ ::= "#getAssignTarget" "(" Var ")"
+ // -------------------------------------------------------------
     rule <k> #getAssignTarget(%var(VARNAME))
             => #if %var(VARNAME) in FORVARS
                  #then @staticException("Altering iterator which is in use!") #fi
@@ -554,38 +567,48 @@ module VIPER-CORE-SEMANTICS
          ... </k>
          <inLoop> INLOOP </inLoop>
 
-    rule #getAssignTarget(%attribute(VAR, FIELDNAME)) => #evalVar(%attribute(VAR, FIELDNAME))
-
-
-    syntax KItem /*EvaledVar*/ ::= "#evalVar" "(" Var ")"
-    syntax KItem /*EvaledVar*/ ::= "#evalSubscriptVar" "(" K "," K ")"  [seqstrict]
-    syntax KItem /*EvaledVar*/ ::= "#evalAttributeVar" "(" K "," Id ")"  [strict(1)]
- // --------------------------------------------------------------------------------
-    rule #evalVar(%var(VARNAME)) => @evar(%var(VARNAME))
-
-    rule #evalVar(%svar(VARNAME)) => @evar(%svar(VARNAME))
-
-    rule #evalVar(%subscript(VAR, EXPR)) => #evalSubscriptVar(#evalVar(VAR), #evalExpr(EXPR))
-
-    rule #evalVar(%attribute(VAR, FIELDNAME)) => #evalAttributeVar(#evalVar(VAR), FIELDNAME)
-
-    rule #evalSubscriptVar(@evar(VAR), EEXPR:EvaledExpr) => @evar(#subscript(VAR, EEXPR))
-
-    rule #evalAttributeVar(@evar(VAR), FIELDNAME) => @evar(#attribute(VAR, FIELDNAME))
+    rule <k> #getAssignTarget(%attribute(VAR, FIELDNAME))
+            => #if %attribute(VAR, FIELDNAME) in INLOOP
+                 #then @staticException("Altering list which is being iterated!") #fi
+            ~> #evalVar(%attribute(VAR, FIELDNAME))
+         ... </k>
+         <inLoop> INLOOP </inLoop>
 
 
 // Return
 // ------
 
-    rule #evalStmt(%return(EXPR)) => #return(#evalExpr(EXPR))
+    rule <k> #evalStmt(%return(EXPR)) => #return(#evalExpr(EXPR), T) ... </k>
+         <return> T </return>
+      requires T =/=K %void
+
+    rule <k> #evalStmt(%return(EXPR))
+            => @staticException("Not expecting to return a value") ... </k>
+         <return> %void </return>
 
 
     syntax KItem ::= "#return"
  // --------------------------
 
 
-    syntax KItem ::= "#return" "(" K ")"  [strict]
- // ----------------------------------------------
+    syntax KItem ::= "#return" "(" K "," Type ")"  [strict]
+ // -------------------------------------------------------
+    rule #return(@ee(ACTUALTYPE, VALUE, LITERAL), EXPECTEDTYPE)
+        => #if notBool #areUnitsCompatible(ACTUALTYPE, LITERAL, EXPECTEDTYPE)
+             #then @staticException("Return type units mismatch.") #fi
+        ~> #returnBaseType(@ee(ACTUALTYPE, VALUE, LITERAL), EXPECTEDTYPE)
+      requires isBaseType(ACTUALTYPE)
+
+
+    syntax KItem ::= "#returnBaseType" "(" EvaledExpr "," Type ")"
+ // --------------------------------------------------------------
+    rule #returnBaseType(@ee(ACTUALTYPE, VALUE, LITERAL), EXPECTEDTYPE)
+        => #dropSubstate ~> #dropWorldState ~> #popCallStack(@ee(EXPECTEDTYPE, VALUE, LITERAL))
+      requires #dropUnit(ACTUALTYPE) ==K #dropUnit(EXPECTEDTYPE)
+
+    rule #returnBaseType(@ee(ACTUALTYPE, VALUE, LITERAL), EXPECTEDTYPE)
+        => #dropWorldState ~> #dropSubstate ~> #popCallStack(@ee(EXPECTEDTYPE, VALUE, LITERAL))
+      requires #dropUnit(ACTUALTYPE) ==K %num andBool #dropUnit(EXPECTEDTYPE) ==K %signed256
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -614,6 +637,38 @@ module VIPER-CORE-SEMANTICS
 
     rule #evalExpr(%hex(STR:String)) => @ee(%bytes32, #parseHexWord(STR), true)
       requires lengthString(STR) ==K 66
+
+
+// Variable
+// ========
+
+
+    rule #evalExpr(VAR:Var) => #var(#evalVar(VAR))
+
+
+    syntax KItem ::= "#var" "(" K ")"     [strict]
+    syntax KItem ::= "#varAux" "(" K ")"  [strict]
+ // ----------------------------------------------
+    rule #var(EVAR:EvaledVar) => #varAux(#lookupVar(EVAR))
+
+    rule #varAux(@val(@tv(T, V), _)) => @ee(T, V, false)
+
+
+    syntax KItem /*EvaledVar*/ ::= "#evalVar" "(" Var ")"
+    syntax KItem /*EvaledVar*/ ::= "#evalSubscriptVar" "(" K "," K ")"   [seqstrict]
+    syntax KItem /*EvaledVar*/ ::= "#evalAttributeVar" "(" K "," Id ")"  [strict(1)]
+ // --------------------------------------------------------------------------------
+    rule #evalVar(%var(VARNAME)) => @%var(VARNAME)
+
+    rule #evalVar(%svar(VARNAME)) => @%svar(VARNAME)
+
+    rule #evalVar(%subscript(VAR, EXPR)) => #evalSubscriptVar(#evalVar(VAR), #evalExpr(EXPR))
+
+    rule #evalVar(%attribute(VAR, FIELDNAME)) => #evalAttributeVar(#evalVar(VAR), FIELDNAME)
+
+    rule #evalSubscriptVar(EVAR:EvaledVar, EEXPR:EvaledExpr) =>  @%subscript(EVAR, EEXPR)
+
+    rule #evalAttributeVar(EVAR:EvaledVar, FIELDNAME) => @%attribute(EVAR, FIELDNAME)
 
 
 // Function Call
@@ -676,66 +731,6 @@ module VIPER-CORE-SEMANTICS
     rule #checkFuncOrder(ACCTFROM, FROMORDER, ACCTTO, @func(FUNCNAME, _, _, _, _, _, _, TOORDER))
         => #if (ACCTFROM ==K ACCTTO) andBool (FROMORDER <Int TOORDER)
              #then @staticException("Function " +String Id2String(FUNCNAME) +String "is called before being declared.") #fi
-
-
-    syntax State ::= "@state" "(" Int  "," K "," Map "," List "," Set "," Set "," Bool "," Type "," Int "," Int "," Int ")"
- // -----------------------------------------------------------------------------------------------------------------------
-
-
-    syntax KItem ::= "#pushCallStack" "(" K ")"
- // -------------------------------------------
-    rule <k> #pushCallStack(RESTPGM) => . ... </k>
-         <callStack> (.List
-                    => ListItem(@state(ACCT, RESTPGM, MEM, MEMSTACK, FORVAR, INLOOP, CONSTANT, RT, ORDER, CR, CV)))
-         ... </callStack>
-         <memory>   MEM      </memory>
-         <memStack> MEMSTACK </memStack>
-         <forLoop>
-           <forvar> FORVAR </forvar>
-           <inLoop> INLOOP </inLoop>
-         </forLoop>
-         <constant>  CONSTANT </constant>
-         <return>    RT       </return>
-         <order>     ORDER    </order>
-         <id>        ACCT     </id>
-         <caller>    CR       </caller>
-         <callValue> CV       </callValue>
-
-
-    syntax Account ::= "@account" "(" Int "," Int "," Map "," Map "," Map "," Map ")"
- // ---------------------------------------------------------------------------------
-
-
-    syntax KItem ::= "#pushWorldState"
-    syntax KItem ::= "#pushWorldStateAux" "(" Set ")"
-    syntax KItem ::= "#pushAccount" "(" Int ")"
- // --------------------------------------------------
-    rule <k> #pushWorldState => #pushWorldStateAux(ACCTS) ... </k>
-         <activeAccounts> ACCTS </activeAccounts>
-         <interimStates> (.List => ListItem(.Set)) ... </interimStates>
-
-    rule #pushWorldStateAux(.Set) => .
-
-    rule #pushWorldStateAux(SetItem(ACCTID) REST) => #pushAccount(ACCTID) ~> #pushWorldStateAux(REST)
-
-    rule <k> #pushAccount(ACCTID) => . ... </k>
-         <interimStates> ListItem((.Set => SetItem(@account(ACCTID, BAL, FUN, EVENT, EXTERNAL, STORAGE)))
-                                  REST) ... </interimStates>
-         <account>
-           <acctID>   ACCTID   </acctID>
-           <balance>  BAL      </balance>
-           <fun>      FUN      </fun>
-           <event>    EVENT    </event>
-           <external> EXTERNAL </external>
-           <storage>  STORAGE  </storage>
-         </account>
-
-
-    syntax KItem ::= "#pushSubstate"
- // --------------------------------
-    rule <k> #pushSubstate => . ... </k>
-         <substate> SUBSTATE </substate>
-         <substateStack> (.List => ListItem(<substate> SUBSTATE </substate>)) ... </substateStack>
 
 
     syntax KItem ::= "#transferFunds" "(" Int "," Int "," Int ")"
@@ -850,7 +845,7 @@ module VIPER-CORE-SEMANTICS
 // --------------------
 
     // as_num256
-    syntax KItem /*TypedValue*/ ::= "#asNum256" "(" K ")"  [strict]
+    syntax KItem /*EvaledExpr*/ ::= "#asNum256" "(" K ")"  [strict]
  // ---------------------------------------------------------------
    rule #evalExpr(%as_num256(EXPR)) => #asNum256(#evalExpr(EXPR))
 
@@ -882,6 +877,7 @@ module VIPER-CORE-SEMANTICS
          <callValue>     _ => 0     </callValue>
          <selfDestruct>  _ => .Set  </selfDestruct>
          <log>           _ => .List </log>
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // Types
@@ -1011,7 +1007,7 @@ module VIPER-CORE-SEMANTICS
 
     syntax KItem /*Type*/ ::= "#parseStructType" "(" AnnVars "," Bool "," Ids "," AnnVars ")"
  // -----------------------------------------------------------------------------------------
-    rule #parseStructType(.AnnVars, _, _, ANNVARS) => %structT(ANNVARS)
+    rule #parseStructType(.AnnVars, _, _, ANNVARS) => %structT(#revAnnVars(ANNVARS, .AnnVars))
 
     rule #parseStructType(%annvar(FIELDNAME, T) ANNVARS, INMEMORY, FIELDNAMES, RESULT)
         => #if notBool #isVarNameValid(FIELDNAME)
@@ -1022,7 +1018,7 @@ module VIPER-CORE-SEMANTICS
         ~> #parseStructType(ANNVARS, INMEMORY, FIELDNAMES, RESULT)
 
     rule %annvar(FIELDNAME, T) ~> #parseStructType(ANNVARS, INMEM, FIELDNAMES, RESULT)
-        => #parseStructType(ANNVARS, INMEM, FIELDNAMES ++Id (FIELDNAME .Ids), RESULT ++Annvar (%annvar(FIELDNAME, T) .AnnVars))
+        => #parseStructType(ANNVARS, INMEM, FIELDNAME FIELDNAMES, %annvar(FIELDNAME, T) RESULT)
 
 
     syntax KItem ::= "#parseTypeForField" "(" Id "," K /*Type*/ ")"  [strict(2)]
@@ -1075,8 +1071,8 @@ module VIPER-CORE-SEMANTICS
 
 
 
-// Utils
-// =====
+// Type Utils
+// ==========
 
 
     syntax Bool  ::= "#isTypeOf" "(" Type "," Type /*target type*/ ")"    [function]
@@ -1128,21 +1124,127 @@ module VIPER-CORE-SEMANTICS
                andBool notBool(FROMTYPE ==K %num256 andBool TOTYPE ==K %num)
 
 
+///////////////////////////////////////////////////////////////////////////////
+// Call Stack
+///////////////////////////////////////////////////////////////////////////////
+
+
+    syntax State ::= "@vyper" "(" Int  "," K "," Map "," List "," Set "," Set "," Bool "," Type "," Int "," Int "," Int ")"
+ // -----------------------------------------------------------------------------------------------------------------------
+
+
+    syntax KItem ::= "#pushCallStack" "(" K ")"
+ // -------------------------------------------
+    rule <k> #pushCallStack(RESTPGM) => . ... </k>
+         <callStack> (.List
+                    => ListItem(@vyper(ACCTID, RESTPGM, MEM, MEMSTACK, FORVAR, INLOOP, CONSTANT, RT, ORDER, CR, CV)))
+         ... </callStack>
+         <memory>   MEM      </memory>
+         <memStack> MEMSTACK </memStack>
+         <forLoop>
+           <forvar> FORVAR </forvar>
+           <inLoop> INLOOP </inLoop>
+         </forLoop>
+         <constant>  CONSTANT </constant>
+         <return>    RT       </return>
+         <order>     ORDER    </order>
+         <id>        ACCTID   </id>
+         <caller>    CR       </caller>
+         <callValue> CV       </callValue>
+
+
+    syntax KItem ::= "#popCallStack" "(" EvaledExpr ")"
+ // ---------------------------------------------------
+    rule <k> #popCallStack(EEXPR) ~> _  => EEXPR ~> RESTPGM </k>
+         <callStack> (ListItem(@vyper(ACCTID, RESTPGM, MEM, MEMSTACK, FORVAR, INLOOP, CONSTANT, RT, ORDER, CR, CV))
+                    => .List)
+         ... </callStack>
+         <memory>   _ => MEM      </memory>
+         <memStack> _ => MEMSTACK </memStack>
+         <forLoop>
+           <forvar> _ => FORVAR </forvar>
+           <inLoop> _ => INLOOP </inLoop>
+         </forLoop>
+         <constant>  _ => CONSTANT </constant>
+         <return>    _ => RT       </return>
+         <order>     _ => ORDER    </order>
+         <id>        _ => ACCTID   </id>
+         <caller>    _ => CR       </caller>
+         <callValue> _ => CV       </callValue>
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// World State
+///////////////////////////////////////////////////////////////////////////////
+
+
+    syntax Account ::= "@account" "(" Int "," Int "," Map "," Map "," Map "," Map ")"
+ // ---------------------------------------------------------------------------------
+
+
+    syntax KItem ::= "#pushWorldState"
+    syntax KItem ::= "#pushWorldStateAux" "(" Set ")"
+    syntax KItem ::= "#pushAccount" "(" Int ")"
+ // --------------------------------------------------
+    rule <k> #pushWorldState => #pushWorldStateAux(ACCTS) ... </k>
+         <activeAccounts> ACCTS </activeAccounts>
+         <interimStates> (.List => ListItem(.Set)) ... </interimStates>
+
+    rule #pushWorldStateAux(.Set) => .
+
+    rule #pushWorldStateAux(SetItem(ACCTID) REST) => #pushAccount(ACCTID) ~> #pushWorldStateAux(REST)
+
+    rule <k> #pushAccount(ACCTID) => . ... </k>
+         <interimStates> ListItem((.Set => SetItem(@account(ACCTID, BAL, FUN, EVENT, EXTERNAL, STORAGE)))
+                                  REST) ... </interimStates>
+         <account>
+           <acctID>   ACCTID   </acctID>
+           <balance>  BAL      </balance>
+           <fun>      FUN      </fun>
+           <event>    EVENT    </event>
+           <external> EXTERNAL </external>
+           <storage>  STORAGE  </storage>
+         </account>
+
+
+    syntax KItem ::= "#dropWorldState"
+ // ----------------------------------
+    rule <k> #dropWorldState => . ... </k>
+         <interimStates> (ListItem(_) => .List) ... </interimStates>
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Substate
+///////////////////////////////////////////////////////////////////////////////
+
+
+    syntax KItem ::= "#pushSubstate"
+ // --------------------------------
+    rule <k> #pushSubstate => . ... </k>
+         <substate> SUBSTATE </substate>
+         <substateStack> (.List => ListItem(<substate> SUBSTATE </substate>)) ... </substateStack>
+
+
+    syntax KItem ::= "#dropSubstate"
+ // --------------------------------
+    rule <k> #dropSubstate => .K ... </k>
+         <substateStack> (ListItem(_) => .List) ... </substateStack>
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // Utils
 ///////////////////////////////////////////////////////////////////////////////
 
 
-    syntax KItem ::= "#checkVarName" "(" Id ")"
- // -------------------------------------------
-    rule <k> #checkVarName(VARNAME)
+    syntax KItem ::= "#checkVarName" "(" Int "," Id ")"
+ // ---------------------------------------------------
+    rule <k> #checkVarName(ACCTID, VARNAME)
             => #if notBool #isVarNameValid(VARNAME)
                  #then @staticException("Variable name invalid or reserved: " +String Id2String(VARNAME)) #fi
             ~> #if VARNAME in_keys(STORAGE)
                  #then @staticException("Variable name overlaps with globals: " +String Id2String(VARNAME)) #fi
          ... </k>
-         <id> ACCTID </id>
          <account>
            <acctID> ACCTID </acctID>
            <storage> STORAGE </storage>
@@ -1150,22 +1252,8 @@ module VIPER-CORE-SEMANTICS
          </account>
 
 
-// Address
-// =======
-
-
-    syntax Int ::= "#addr" "(" Int ")"  [function]
- // ----------------------------------------------
-    rule #addr(W) => W modInt pow160
-
-
-    syntax Int ::= "#parseAddr" "(" String ")"  [function]
- // ------------------------------------------------------
-    rule #parseAddr(S) => #addr(#parseHexWord(S))
-
-
-// Account
-// =======
+// New Account
+// ===========
 
 
     syntax KItem ::= "#newAccount" "(" Int ")"
@@ -1209,17 +1297,17 @@ module VIPER-CORE-SEMANTICS
 // =============
 
 
-    syntax KItem /*ValRecord*/ ::= "#lookupVar" "(" Var ")"
- // -------------------------------------------------------
-    rule <k> #lookupVar(%var(VARNAME)) => VR ... </k>
+    syntax KItem /*ValRecord*/ ::= "#lookupVar" "(" EvaledVar ")"
+ // -------------------------------------------------------------
+    rule <k> #lookupVar(@%var(VARNAME)) => VR ... </k>
          <memory> ... VARNAME |-> VR:ValRecord ... </memory>
 
-    rule <k> #lookupVar(%var(VARNAME))
+    rule <k> #lookupVar(@%var(VARNAME))
             => @staticException("Undeclared Variable: " +String Id2String(VARNAME)) ... </k>
          <memory> MEM </memory>
       requires notBool VARNAME in_keys(MEM)
 
-    rule <k> #lookupVar(%svar(VARNAME)) => VR ... </k>
+    rule <k> #lookupVar(@%svar(VARNAME)) => VR ... </k>
          <id> ACCTID </id>
           <account>
            <acctID> ACCTID </acctID>
@@ -1227,7 +1315,7 @@ module VIPER-CORE-SEMANTICS
            ...
          </account>
 
-    rule <k> #lookupVar(%svar(VARNAME))
+    rule <k> #lookupVar(@%svar(VARNAME))
             => @staticException("Persistent variable undeclared: " +String Id2String(VARNAME)) ... </k>
          <id> ACCTID </id>
           <account>
@@ -1237,17 +1325,15 @@ module VIPER-CORE-SEMANTICS
          </account>
       requires notBool VARNAME in_keys(STORAGE)
 
-    rule #lookupVar(%subscript(VAR, EXPR)) => #lookupSubscript(#lookupVar(VAR), #evalExpr(EXPR))
+    rule #lookupVar(@%subscript(EVAR, EEXPR)) => #lookupSubscript(#lookupVar(EVAR), EEXPR)
 
-    rule #lookupVar(#subscript(VAR, EEXPR)) => #lookupSubscript(#lookupVar(VAR), EEXPR)
-
-    rule #lookupVar(%attribute(VAR, FIELDNAME)) => #lookupAttribute(#lookupVar(VAR), FIELDNAME)
+    rule #lookupVar(@%attribute(EVAR, FIELDNAME)) => #lookupAttribute(#lookupVar(EVAR), FIELDNAME)
 
 
-    syntax KItem /*ValRecord*/ ::= "#lookupSubscript" "(" K "," K ")"  [seqstrict]
- // ------------------------------------------------------------------------------
-    rule #lookupSubscript(@val(@tv(%mapT(KT, VT), VALUE), MUTABLE), EEXPR:EvaledExpr)
-        => #lookupMapElem(@val(@tv(%mapT(KT, VT), VALUE), MUTABLE), #baseTypeConvert(EEXPR, KT))
+    syntax KItem /*ValRecord*/ ::= "#lookupSubscript" "(" K "," EvaledExpr ")"  [strict(1)]
+ // ---------------------------------------------------------------------------------------
+    rule #lookupSubscript(@val(@tv(%mapT(KT, VT), VALUE), MUTABLE), KEYEXPR)
+        => #lookupMapElem(@val(@tv(%mapT(KT, VT), VALUE), MUTABLE), #baseTypeConvert(KEYEXPR, KT))
 
 
     syntax KItem /*ValRecord*/ ::= "#lookupMapElem" "(" ValRecord "," K ")"  [strict(2)]

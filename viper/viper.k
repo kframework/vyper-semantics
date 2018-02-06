@@ -110,10 +110,10 @@ module VIPER
     rule #loadAccount { (ACCTID:Int) : { "code" : { .JSONList } } } => .
 
     rule #loadAccount { (ACCTID:Int) : { "code" : { "args" : [ ARGS ], "source" : (CODE:Pgm) } } }
-        => #loadCodeAndExecInit(ACCTID, CODE, #toExprs(ARGS))
+        => #loadProgramAndInit(ACCTID, CODE, #toExprs(ARGS))
 
     rule #loadAccount { (ACCTID:Int) : { "code" : { "source" : (CODE:Pgm) } } }
-        => #loadCode(ACCTID, CODE)
+        => #loadProgramAndInit(ACCTID, CODE)
 
 
     // Load account - storage
@@ -137,17 +137,21 @@ module VIPER
  // ----------------------------------------
     rule exec { "from" : (ACCTFROM:String), "to" : (ACCTTO:String), "value" : (VALUE:String),
                 "function" : (FUNCNAME:String), "args" : [ ARGS ] }
-        => #exec(#parseHexWord(ACCTFROM),
-                 #parseHexWord(ACCTTO),
-                 #parseWord(VALUE),
-                 String2Id(FUNCNAME),
-                 #evalExprs(#toExprs(ARGS), .EvaledExprs))
+        => @%exec(#parseHexWord(ACCTFROM),
+                  #parseHexWord(ACCTTO),
+                  #parseWord(VALUE),
+                  String2Id(FUNCNAME),
+                  #toExprs(ARGS))
 
 
-    syntax Expr ::= "#exec" "(" Int "," Int "," Int "," Id "," K ")"  [strict(5)]
- // -----------------------------------------------------------------------------
-    rule #exec(ACCTFROM, ACCTTO, VALUE, FUNCNAME, TARGS:EvaledExprs)
-        => #call(ACCTFROM, ACCTTO, VALUE, FUNCNAME, TARGS)
+    syntax Expr  ::= "@%exec" "(" Int "," Int "," Int "," Id "," Exprs ")"
+    syntax KItem ::= "#execAux" "(" Int "," Int "," Int "," Id "," K ")"  [strict(5)]
+ // --------------------------------------------------------------------------------
+    rule @%exec(ACCTFROM, ACCTTO, VALUE, FUNCNAME, ARGS)
+        => #execAux(ACCTFROM, ACCTTO, VALUE, FUNCNAME, #evalExprs(ARGS, .EvaledExprs))
+
+    rule #execAux(ACCTFROM, ACCTTO, VALUE, FUNCNAME, EARGS:EvaledExprs)
+        => #call(ACCTFROM, ACCTTO, VALUE, FUNCNAME, EARGS)
 
 
 //////////////////////////////////////////////////////////////////////////////

@@ -34,6 +34,21 @@ module VIPER-UTILS
 
 
 ///////////////////////////////////////////////////////////////////////////////
+// Address
+///////////////////////////////////////////////////////////////////////////////
+
+
+    syntax Int ::= "#addr" "(" Int ")"  [function]
+ // ----------------------------------------------
+    rule #addr(W) => W modInt pow160
+
+
+    syntax Int ::= "#parseAddr" "(" String ")"  [function]
+ // ------------------------------------------------------
+    rule #parseAddr(S) => #addr(#parseHexWord(S))
+
+
+///////////////////////////////////////////////////////////////////////////////
 // #if _ #then _ #else _ #fi
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -269,7 +284,6 @@ module VIPER-UTILS
         => T +String "[" +String Int2String(N) +String "]"
 
 
-
 ///////////////////////////////////////////////////////////////////////////////
 // Lists
 ///////////////////////////////////////////////////////////////////////////////
@@ -297,30 +311,34 @@ module VIPER-UTILS
     rule #isInDecorators(DEC, DEC1 DECS) => #isInDecorators(DEC, DECS)  requires DEC =/=K DEC1
 
 
-// List Concatenation
-// ==================
+// List Operation
+// ==============
 
     // TODO: use `reverse` list twice instead of appending to list
     syntax Ids ::= List{Id, ""}
     syntax Ids ::= Ids "++Id" Ids  [right, function]
  // ------------------------------------------------
-    rule .Ids ++Id IDS:Ids   => IDS
-
-    rule (ID IDS1) ++Id IDS2 => ID (IDS1 ++Id IDS2)
 
 
-    syntax AnnVars ::= AnnVars "++Annvar" AnnVars  [right, function]
- // ----------------------------------------------------------------
-    rule .AnnVars ++Annvar ANNVARS:AnnVars => ANNVARS
+    syntax AnnVars ::= "#revAnnVars" "(" AnnVars "," AnnVars ")"  [function]
+ // ------------------------------------------------------------------------
+    rule #revAnnVars(.AnnVars, RESULT) => RESULT
 
-    rule (ANNVAR ANNVARS1) ++Annvar ANNVARS2 => ANNVAR (ANNVARS1 ++Annvar ANNVARS2)
+    rule #revAnnVars(ANNVAR ANNVARS, RESULT) => #revAnnVars(ANNVARS, ANNVAR RESULT)
 
 
-    syntax EventParams ::= EventParams "++Eparam" EventParams  [right, function]
- // ----------------------------------------------------------------------------
-    rule .EventParams ++Eparam EPARAMS:EventParams => EPARAMS
+    syntax EventParams ::= "#revEventParams" "(" EventParams "," EventParams ")"  [function]
+ // ----------------------------------------------------------------------------------------
+    rule #revEventParams(.EventParams, RESULT) => RESULT
 
-    rule (EPARAM EPARAMS1) ++Eparam EPARAMS2 => EPARAM (EPARAMS1 ++Eparam EPARAMS2)
+    rule #revEventParams(EPARAM EPARAMS, RESULT) => #revEventParams(EPARAMS, EPARAM RESULT)
+
+
+    syntax Params ::= "#revParams" "(" Params "," Params ")"  [function]
+ // -------------------------------------------------------------------
+    rule #revParams(.Params, RESULT) => RESULT
+
+    rule #revParams(PARAM PARAMS, RESULT) => #revParams(PARAMS, PARAM RESULT)
 
 
     syntax Params ::= Params "++Param" Params  [right, function]
