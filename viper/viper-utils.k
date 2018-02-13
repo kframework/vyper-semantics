@@ -53,13 +53,15 @@ module VIPER-UTILS
 ///////////////////////////////////////////////////////////////////////////////
 
 
-    syntax KItem ::= "#if" Bool "#then" K "#fi"            [function]
-                   | "#if" Bool "#then" K "#else" K "#fi"  [function]
- // -----------------------------------------------------------------
+    syntax KItem ::= "#if" Bool "#then" K "#fi"
+                   | "#if" Bool "#then" K "#else" K "#fi"
+ // -----------------------------------------------------
     rule #if true  #then THENCLAUSE #fi => THENCLAUSE
+
     rule #if false #then THENCLAUSE #fi => .
 
     rule #if true  #then THENCLAUSE #else ELSECLAUSE #fi => THENCLAUSE
+
     rule #if false #then THENCLAUSE #else ELSECLAUSE #fi => ELSECLAUSE
 
 
@@ -89,10 +91,12 @@ module VIPER-UTILS
     // TODO: Add more invalid cases(utils.py)
     syntax Bool ::= "#isVarNameValid" "(" Id ")"  [function]
  // --------------------------------------------------------
-    rule #isVarNameValid(NAME)
-        => #if #isReservedWords(Id2String(NAME))
-             #then false
-             #else true #fi
+    rule #isVarNameValid(NAME) => true
+      requires notBool #isReservedWords(Id2String(NAME))
+
+    rule #isVarNameValid(NAME) => false
+      requires #isReservedWords(Id2String(NAME))
+
 
     syntax Bool ::= "#isReservedWords" "(" String ")"  [function]
  // -------------------------------------------------------------

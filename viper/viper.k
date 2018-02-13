@@ -1,11 +1,13 @@
 require "../common/viper-abstract-syntax.k"
 require "viper-core.k"
+require "viper-verification.k"
 require "domains.k"
 
 
 module VIPER
     imports VIPER-ABSTRACT-SYNTAX
     imports VIPER-CORE-SEMANTICS
+    imports VIPER-VERIFICATION
 
 
 // JSON

@@ -31,7 +31,7 @@ module VIPER-CORE-SEMANTICS
         </forLoop>
         <constant> false </constant>  // Is the current function constant?
         <return>   %void </return>
-        <order>    0     </order>
+        <order>    -1     </order>  // init value is -1 so that it can call any function in the contract.
 
         // transaction
         <id>        0 </id>
@@ -139,6 +139,14 @@ module VIPER-CORE-SEMANTICS
 //////////////////////////////////////////////////////////////////////////////
 
 
+    // _Kind is the super sort of _ and it contains term needs to be evaluated to _.
+    syntax EvaledVarKind   ::= EvaledVar
+    syntax EvaledExprKind  ::= EvaledExpr
+    syntax TypeKind        ::= Type
+    syntax EventParamsKind ::= EventParams
+    syntax ParamsKind      ::= Params
+
+
     syntax KResult ::= EvaledVar
                      | EvaledExpr
                      | EvaledExprs
@@ -155,7 +163,7 @@ module VIPER-CORE-SEMANTICS
 
 
     syntax KItem ::= "#loadProgramAndInit" "(" Int "," Pgm ")"
- // ------------------------------------------------
+ // ----------------------------------------------------------
     rule <k> #loadProgramAndInit(ACCTID, %pgm(ES, GS, DEFS))
             => #addEvents(ACCTID, ES) ~> #addGlobals(ACCTID, GS)
             ~> #addFuncs(ACCTID, (DEFS ++Def #mkPublicGetters(GS, .Defs)), 0)
@@ -164,7 +172,7 @@ module VIPER-CORE-SEMANTICS
 
     // TODO: loadCode with init function
     syntax KItem ::= "#loadProgramAndInit" "(" Int "," Pgm "," Exprs ")"
- // ---------------------------------------------------------------------
+ // --------------------------------------------------------------------
 
 
     syntax KItem ::= "#loadProgramWithoutInit" "(" Int "," Pgm ")"
@@ -255,8 +263,8 @@ module VIPER-CORE-SEMANTICS
     rule #checkEventParamType(T, false) => .
 
 
-    syntax KItem ::= "#addEventAux" "(" Int "," Id "," K /*EventParams*/ ")"  [strict(3)]
- // -------------------------------------------------------------------------------------
+    syntax KItem ::= "#addEventAux" "(" Int "," Id "," EventParamsKind ")"  [strict(3)]
+ // -----------------------------------------------------------------------------------
     rule <k> #addEventAux(ACCTID, EVENTNAME, EPARAMS:EventParams) => . ... </k>
          <account>
            <acctID> ACCTID </acctID>
@@ -265,8 +273,8 @@ module VIPER-CORE-SEMANTICS
          </account>
 
 
-    syntax KItem /*EventParams*/ ::= "#parseTypeForEventParams" "(" EventParams "," EventParams ")"
- // -----------------------------------------------------------------------------------------------
+    syntax EventParamsKind ::= "#parseTypeForEventParams" "(" EventParams "," EventParams ")"
+ // -----------------------------------------------------------------------------------------
     rule #parseTypeForEventParams(.EventParams, RESULT) => #revEventParams(RESULT, .EventParams)
 
     rule #parseTypeForEventParams(%eparam(NAME, T, ISTOPIC) EPARAMS, RESULT)
@@ -277,8 +285,8 @@ module VIPER-CORE-SEMANTICS
         => #parseTypeForEventParams(EPARAMS, EPARAM RESULT)
 
 
-    syntax KItem ::= "#parseTypeForEventParam" "(" Id "," K /*Type*/ "," Bool ")"  [strict(2)]
- // -------------------------------------------------------------------------------------------
+    syntax KItem ::= "#parseTypeForEventParam" "(" Id "," TypeKind "," Bool ")"  [strict(2)]
+ // ----------------------------------------------------------------------------------------
     rule #parseTypeForEventParam(NAME, T:Type, TOPIC) => %eparam(NAME, T, TOPIC)
 
 
@@ -318,8 +326,8 @@ module VIPER-CORE-SEMANTICS
       requires VARNAME in_keys(STORAGE)
 
 
-    syntax KItem ::= "#addGlobalAux" "(" Int "," Id "," K /*Type*/ ")"  [strict(3)]
- // -------------------------------------------------------------------------------
+    syntax KItem ::= "#addGlobalAux" "(" Int "," Id "," TypeKind ")"  [strict(3)]
+ // -----------------------------------------------------------------------------
     rule <k> #addGlobalAux(ACCTID, VARNAME, T:Type) => . ... </k>
          <account>
            <acctID> ACCTID </acctID>
@@ -404,8 +412,8 @@ module VIPER-CORE-SEMANTICS
              #then @staticException("Function visibility must be declared (@public or @private).") #fi
 
 
-    syntax KItem ::= "#addFuncAux" "(" Int "," Id "," K /*Params*/ "," K /*Type*/ "," Stmts "," Bool "," Bool "," Bool "," Int ")"  [strict(3, 4)]
- // ----------------------------------------------------------------------------------------------------------------------------------------------
+    syntax KItem ::= "#addFuncAux" "(" Int "," Id "," ParamsKind "," TypeKind "," Stmts "," Bool "," Bool "," Bool "," Int ")"  [seqstrict(3, 4)]
+ // ---------------------------------------------------------------------------------------------------------------------------------------------
     rule <k> #addFuncAux(ACCTID, FUNCNAME, PARAMS:Params, RT:Type, FUNCBODY, CONSTANT, PAYABLE, PRIVATE, ORDER) => . ... </k>
          <account>
            <acctID> ACCTID </acctID>
@@ -415,8 +423,8 @@ module VIPER-CORE-SEMANTICS
          </account>
 
 
-    syntax KItem /*Params*/ ::= "#parseTypeForParams" "(" Params "," Params ")"
- // ---------------------------------------------------------------------------
+    syntax ParamsKind ::= "#parseTypeForParams" "(" Params "," Params ")"
+ // ---------------------------------------------------------------------
     rule #parseTypeForParams(.Params, RESULT) => #revParams(RESULT, .Params)
 
     rule #parseTypeForParams(%param(NAME, T) PARAMS, RESULT)
@@ -427,8 +435,8 @@ module VIPER-CORE-SEMANTICS
         => #parseTypeForParams(PARAMS, PARAM RESULT)
 
 
-    syntax KItem ::= "#parseTypeForParam"  "(" Id "," K /*Type*/ ")"  [strict(2)]
- // -----------------------------------------------------------------------------
+    syntax KItem ::= "#parseTypeForParam"  "(" Id "," TypeKind ")"  [strict(2)]
+ // ---------------------------------------------------------------------------
     rule #parseTypeForParam(NAME, T:Type) => %param(NAME, T)
 
 
@@ -480,8 +488,8 @@ module VIPER-CORE-SEMANTICS
         => #annassign(VARNAME, #parseType(T, true), #evalExpr(EXPR))
 
 
-    syntax KItem ::= "#annassign" "(" Id "," K /*Type*/ "," K /*EvaledExpr*/ ")"  [seqstrict(2, 3)]
- // -----------------------------------------------------------------------------------------------
+    syntax KItem ::= "#annassign" "(" Id "," TypeKind "," K /*EvaledExpr*/ ")"  [seqstrict(2,3)]
+ // --------------------------------------------------------------------------------------------
     rule #annassign(VARNAME, VARTYPE:Type, @ee(EXPRTYPE, VALUE, LITERAL))
         => #newVar(VARNAME, VARTYPE)
         ~> #assignTo(@ee(EXPRTYPE, VALUE, LITERAL), @%var(VARNAME))
@@ -607,7 +615,7 @@ module VIPER-CORE-SEMANTICS
       requires #dropUnit(ACTUALTYPE) ==K #dropUnit(EXPECTEDTYPE)
 
     rule #returnBaseType(@ee(ACTUALTYPE, VALUE, LITERAL), EXPECTEDTYPE)
-        => #dropWorldState ~> #dropSubstate ~> #popCallStack(@ee(EXPECTEDTYPE, VALUE, LITERAL))
+        => #dropSubstate ~> #dropWorldState ~> #popCallStack(@ee(EXPECTEDTYPE, VALUE, LITERAL))
       requires #dropUnit(ACTUALTYPE) ==K %num andBool #dropUnit(EXPECTEDTYPE) ==K %signed256
 
 
@@ -703,12 +711,12 @@ module VIPER-CORE-SEMANTICS
          ... </k>
          <account>
            <acctID> ACCTTO </acctID>
-           <fun> ... FUNCNAME |-> FUNCRECORD ... </fun>
+           <fun> FUNCNAME |-> FUNCRECORD _:Map </fun>
            ...
          </account>
 
     rule <k> #call(ACCTFROM, ACCTTO, VALUE, FUNCNAME, EARGS)
-            => @dynamicException("Function " +String Id2String(FUNCNAME) +String "not declared yet.")
+            => @dynamicException("Function " +String Id2String(FUNCNAME) +String " not declared yet.")
          ... </k>
          <account>
            <acctID> ACCTTO </acctID>
@@ -721,16 +729,15 @@ module VIPER-CORE-SEMANTICS
             => #checkFuncOrder(ACCTFROM, ORDER, ACCTTO, FUNCRECORD)
             ~> #pushCallStack(RESTPGM) ~> #pushWorldState ~> #pushSubstate
             ~> #transferFunds(ACCTFROM, ACCTTO, VALUE)
-            ~> #mkCall(ACCTFROM, ACCTTO, VALUE, FUNCRECORD, EARGS)
-         ... </k>
+            ~> #mkCall(ACCTFROM, ACCTTO, VALUE, FUNCRECORD, EARGS) </k>
          <order> ORDER </order>
 
 
     syntax KItem ::= "#checkFuncOrder" "(" Int "," Int "," Int "," FuncRecord ")"
  // -----------------------------------------------------------------------------
     rule #checkFuncOrder(ACCTFROM, FROMORDER, ACCTTO, @func(FUNCNAME, _, _, _, _, _, _, TOORDER))
-        => #if (ACCTFROM ==K ACCTTO) andBool (FROMORDER <Int TOORDER)
-             #then @staticException("Function " +String Id2String(FUNCNAME) +String "is called before being declared.") #fi
+        => #if (ACCTFROM ==K ACCTTO) andBool (FROMORDER <Int TOORDER) andBool (FROMORDER =/=Int -1)
+             #then @staticException("Function " +String Id2String(FUNCNAME) +String " is called before being declared.") #fi
 
 
     syntax KItem ::= "#transferFunds" "(" Int "," Int "," Int ")"
@@ -815,7 +822,7 @@ module VIPER-CORE-SEMANTICS
  // ------------------------------------------------
     rule #checkFuncPrivate(false) => .
 
-    rule <k> #checkFuncPrivate(true) => . </k>
+    rule <k> #checkFuncPrivate(true) => . ...</k>
          <id>     ACCTTO   </id>
          <caller> ACCTFROM </caller>
       requires ACCTTO ==K ACCTFROM
@@ -937,8 +944,8 @@ module VIPER-CORE-SEMANTICS
 // ============
 
 
-    syntax KItem /*Type*/ ::= "#parseType" "(" Type "," Bool /*in memory?*/ ")"
- // ---------------------------------------------------------------------------
+    syntax TypeKind ::= "#parseType" "(" Type "," Bool /*in memory?*/ ")"
+ // ---------------------------------------------------------------------
     rule #parseType(%void, _) => %void
 
     rule #parseType(%bool, _) => %bool
@@ -961,23 +968,25 @@ module VIPER-CORE-SEMANTICS
     rule #parseType(%address, _) => %address
 
     rule #parseType(%bytesT(N), _)
-        => #if N <=Int 0
-             #then @staticException("Bad byte array length: " +String Int2String(N)) #fi
-        ~> %bytesT(N)
+        => @staticException("Arrays must have a positive integral number of elements.")
+      requires N <=Int 0
+
+    rule #parseType(%bytesT(N), _) => %bytesT(N)
+      requires N >Int 0
 
     rule #parseType(%listT(SUBTYPE, N), INMEMORY)
         => #parseListType(#parseType(SUBTYPE, INMEMORY), N)
 
-    rule #parseType(%mapT(KT, VT), true)
-        => @staticException("No mappings allowed for in-memory types, only fixed-size arrays")
+    rule #parseType(%mapT(KT, VT), false)
+        => #parseMapType(#parseType(KT, false), #parseType(VT, false))
+      requires isBaseType(KT) orBool isByteArrayType(KT)
 
     rule #parseType(%mapT(KT, VT), false)
-        => #if isBaseType(KT) orBool isByteArrayType(KT)
-             #then #parseMapType(#parseType(KT, false), #parseType(VT, false))
-             #else @staticException("Mapping keys must be base or bytes types") #fi
+        => @staticException("Mapping keys must be base or bytes types")
+      requires notBool(isBaseType(KT) orBool isByteArrayType(KT))
 
     rule #parseType(%structT(ANNVARS), INMEMORY)
-        => #parseStructType(ANNVARS, INMEMORY, .Ids, .AnnVars)
+        => #parseStructType(ANNVARS, INMEMORY)
 
     // TODO: support Tuple
 
@@ -995,35 +1004,53 @@ module VIPER-CORE-SEMANTICS
     rule #parseType(%wei_value, _)       => %unitT(%num, %wei |-> 1, false)
 
 
-    syntax KItem /*Type*/ ::= "#parseListType" "(" K /*Type*/ "," Int ")"  [strict(1)]
- // ----------------------------------------------------------------------------------
+    syntax TypeKind ::= "#parseListType" "(" TypeKind "," Int ")"  [strict(1)]
+ // --------------------------------------------------------------------------
     rule #parseListType(T, N) => %listT(T, N)
 
 
-    syntax KItem /*Type*/ ::= "#parseMapType" "(" K /*KT*/ "," K /*VT*/ ")"  [seqstrict]
- // ------------------------------------------------------------------------------------
+    syntax TypeKind ::= "#parseMapType" "(" TypeKind "," TypeKind ")"  [seqstrict]
+ // ------------------------------------------------------------------------------
     rule #parseMapType(KT, VT) => %mapT(KT, VT)
 
 
-    syntax KItem /*Type*/ ::= "#parseStructType" "(" AnnVars "," Bool "," Ids "," AnnVars ")"
- // -----------------------------------------------------------------------------------------
-    rule #parseStructType(.AnnVars, _, _, ANNVARS) => %structT(#revAnnVars(ANNVARS, .AnnVars))
+    syntax TypeKind ::= "#parseStructType"    "(" AnnVars "," Bool ")"
+    syntax TypeKind ::= "#parseStructTypeAux" "(" AnnVars "," Bool "," Ids "," AnnVars")"
+ // -------------------------------------------------------------------------------------
+    rule #parseStructType(ANNVARS, INMEMORY)
+        => #parseStructTypeAux(ANNVARS, INMEMORY, #getFieldNames(ANNVARS), .AnnVars)
 
-    rule #parseStructType(%annvar(FIELDNAME, T) ANNVARS, INMEMORY, FIELDNAMES, RESULT)
-        => #if notBool #isVarNameValid(FIELDNAME)
-             #then @staticException("Invalid member variable for struct.") #fi
-        ~> #if #isInIds(FIELDNAME, FIELDNAMES)
-             #then @staticException("Member variable duplicated: " +String Id2String(FIELDNAME)) #fi
-        ~> #parseTypeForField(FIELDNAME, #parseType(T, INMEMORY))
-        ~> #parseStructType(ANNVARS, INMEMORY, FIELDNAMES, RESULT)
+    rule #parseStructTypeAux(.AnnVars, _, _, ANNVARS) => %structT(#revAnnVars(ANNVARS, .AnnVars))
 
-    rule %annvar(FIELDNAME, T) ~> #parseStructType(ANNVARS, INMEM, FIELDNAMES, RESULT)
-        => #parseStructType(ANNVARS, INMEM, FIELDNAME FIELDNAMES, %annvar(FIELDNAME, T) RESULT)
+    rule #parseStructTypeAux(%annvar(FIELDNAME, T) ANNVARS, INMEMORY, FIELDNAMES, RESULT)
+        => #parseTypeForField(FIELDNAME, #parseType(T, INMEMORY), FIELDNAMES)
+        ~> #parseStructTypeAux(ANNVARS, INMEMORY, FIELDNAMES, RESULT)
+
+    rule %annvar(FIELDNAME, T) ~> #parseStructTypeAux(ANNVARS, INMEMORY, FIELDNAMES, RESULT)
+        => #parseStructTypeAux(ANNVARS, INMEMORY, FIELDNAME FIELDNAMES, %annvar(FIELDNAME, T) RESULT)
 
 
-    syntax KItem ::= "#parseTypeForField" "(" Id "," K /*Type*/ ")"  [strict(2)]
- // ----------------------------------------------------------------------------
-    rule #parseTypeForField(FIELDNAME, T:Type) => %annvar(FIELDNAME, T)
+    syntax Ids ::= "#getFieldNames" "(" AnnVars ")"  [function]
+ // -----------------------------------------------------------
+    rule #getFieldNames(.AnnVars) => .Ids
+
+    rule #getFieldNames(%annvar(FIELDNAME, _) ANNVARS)
+        => FIELDNAME #getFieldNames(ANNVARS)
+
+
+    syntax KItem ::= "#parseTypeForField" "(" Id "," TypeKind "," Ids ")"  [strict(2)]
+ // ----------------------------------------------------------------------------------
+    rule #parseTypeForField(FIELDNAME, T, _)
+        => @staticException("Invalid member variable for struct.")
+      requires notBool #isVarNameValid(FIELDNAME)
+
+    rule #parseTypeForField(FIELDNAME, T, FIELDNAMES)
+        => @staticException("Member variable duplicated: " +String Id2String(FIELDNAME))
+      requires #isInIds(FIELDNAME, FIELDNAMES)
+
+    rule #parseTypeForField(FIELDNAME, T, FIELDNAMES)
+        => %annvar(FIELDNAME, T)
+      requires #isVarNameValid(FIELDNAME) andBool notBool(#isInIds(FIELDNAME, FIELDNAMES))
 
 
 // Units
