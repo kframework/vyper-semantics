@@ -455,13 +455,14 @@ module VIPER-LLL
                                            ")"                      [seqstrict]
  // ---------------------------------------------------------------------------
     rule <k> #compileFunc(%fdecl(_, FNAME, _, _, STMTS))
-            => #compileFuncAux(#copyArg(PARAMS, #isInitFunc(FNAME)),
+            => #clearConfig
+            ~> #compileFuncAux(#copyArg(PARAMS, #isInitFunc(FNAME)),
                                #addClampersForDecorators(PAYABLE, PRIVATE),
                                #fillParams(PARAMS, 0, #isInitFunc(FNAME), .LLLExps),
                                #compileStmts(STMTS, .LLLExps),
                                FUNCID,
                                #isInitFunc(FNAME))
-           ~> #clearConfig ... </k>
+         ... </k>
          <internalSig> FNAME |-> @func(FUNCID, FNAME, PARAMS, RT, CONSTANT, PAYABLE, PRIVATE) SIGS</internalSig>
          <return> _ => RT </return>
          <constant> _ => CONSTANT </constant>
@@ -610,13 +611,10 @@ module VIPER-LLL
 
     syntax KItem  ::= "#clearConfig"
  // --------------------------------
-    rule <k> CODE:LLLExps ~> (#clearConfig => .) ...</k>
+    rule <k> #clearConfig => . ...</k>
          <env> _ => .Map </env>
          <nextMem> _ => @reservedMemPos </nextMem>
          <forvar> _ => .Set </forvar>
-         <return> _ => %void </return>
-         <constant> _ => false </constant>
-         <payable> _ => false </payable>
          <placeholder> _ => 1 </placeholder>
          <inLoop> _ => .Set </inLoop>
 
@@ -2506,7 +2504,7 @@ module VIPER-LLL
                        #asNum128Aux(CODE),
                        #exception("Function arg type does not match expected type."))
 
-    rule #asNum128Aux(CODE) => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)), @none)
+    rule #asNum128Aux(CODE:LLLExp) => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)), @none)
 
 
     // as_num256
