@@ -1217,10 +1217,16 @@ module VIPER-LLL
 
     rule #returnBytesTAux(@tlll(%bytesT(L), CODE, @locattr(@memory, _)))
         => $with(
-             $_loc,
+             $_loc, // _loc = CODE
              CODE,
              $%seq(
+                //*(_loc-32) = 32
+                // Why this memory region is used, instead of _loc to _loc+32 ??
                $mstore($sub($_loc, 32), 32),
+                //return bytes from _loc-32 of length: *(_loc) + 64
+                //value on _loc represents the size of byte array.
+                //Value on _loc+32 represents first (and in this implementation the only) 32 bytes of the byte array.
+                //fixme (not here, byte array read rule) only 32 bytes are read regardless of actual byte array size.
                $return($sub($_loc, 32), $ceil32($add($mload($_loc), 64))),.LLLExps)),.LLLExps
 
     rule <k> #returnBytesTAux(@tlll(%bytesT(L), CODE, @locattr(@storage, MUTABLE)))
@@ -2614,6 +2620,56 @@ module VIPER-LLL
                                             COPIER,
                                             $mstore($_opos, $_length),
                                             $_opos,.LLLExps)))), @locattr(@memory, true))
+
+
+    // bytes_to_num
+    syntax CTypedLLLExp  ::= "#bytes_to_num"    "(" CTypedLLLExp ")"    [strict]
+    syntax CTypedLLLExp  ::= "#bytes_to_num_Aux" "(" LLLExp ")"
+ // ------------------------------------------------------------------------
+    rule #compileExpr(%bytes_to_num(EXPR)) => #bytes_to_num(#compileExpr(EXPR))
+
+    rule #bytes_to_num(@tlll(T, LOC, _))
+        => #ifThenElse(isByteArrayType(T),
+                       #bytes_to_num_Aux(LOC),
+                       #exception("Function arg type does not match expected type."))
+
+    /*Conversion algorithm:
+        Allocate 64 bytes to some V.
+        Check that most significant byte in the array is not 0x00.
+        Initialzie first 32 bytes with the correct padding: 0x00 if nonnegative, 0xff if negative.
+        Copy the block starting with LOC+32 to position V+32-[byte array size].
+            This way the useful [byte array size] bites will be the last in the block V -> V+32.
+        Return block V.
+
+        Alternative implementation:
+            allocate only 32 bytes and copy the useful bytes one by one in a loop using $mstore8 .
+
+        Byte array format in memory: First 32 bytes (from LOC): SIZE,
+                                     next SIZE bytes: the actual bytes. (padded with 0x00 to full blocks of 32 bytes)
+        bytes example:    1234000000. Useful bytes position: LOC+32 -> LOC+32 + *LOC
+        int128 equiv :    xxxxxx1234  Useful bytes position: LOC+64 - *LOC -> LOC+64
+    */
+    rule <k> #bytes_to_num_Aux(LOC:LLLExp)
+            => @tlll(%num,
+                     $with($_loc, LOC, // _loc = LOC
+                           $if($iszero($mload(LOC)), 0,
+                               $%seq(
+                                   //checking that most significant byte is not 0x00
+                                   $assert($byte(0, $mload($add($_loc, 32)))),
+
+                                   $mstore(V, 0),
+                                   $mstore($add(V, $sub(32, $mload(LOC))), $mload($add($_loc, 32))),
+
+                                   //re-writing everything with padding 0xff if number is negative
+                                   $if($gt($mload(V), @maxNum),
+                                        $seq($mstore(V, -1),
+                                             $mstore($add(V, $sub(32, $mload(LOC))), $mload($add($_loc, 32))))),
+                                   $mload(V),
+                                   .LLLExps)
+                           )),
+                     @none)
+         ...</k>
+         <nextMem> V:Int => V +Int 64 </nextMem>
 
 
     // as_wei_value
