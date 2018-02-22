@@ -1571,7 +1571,15 @@ module VIPER-LLL
 
     syntax CLLLExps  ::= "#icallNoReturn" "(" Exprs "," FuncRecord ")"
  // ----------------------------------------------------------------------
-    rule <k> #stmtExpr(%icall(FNAME, ARGS)) => #icallNoReturn(ARGS, FUNCRECORD) ... </k>
+    rule #stmtExpr(%icall(_, ARGS:Arguments => toExprs(ARGS)))
+      when notBool isExprs(ARGS)
+
+    syntax Arguments ::= "toExprs" "(" Arguments ")"                        [function]
+    rule toExprs(EXP:Expr ARGS:Arguments) => EXP toExprs(ARGS)
+    rule toExprs(%kwarg(_, EXP:Expr) ARGS:Arguments) => EXP toExprs(ARGS)
+    rule toExprs(.Arguments) => .Exprs
+
+    rule <k> #stmtExpr(%icall(FNAME, ArgExprs:Exprs)) => #icallNoReturn(ArgExprs, FUNCRECORD) ... </k>
          <internalSig> FNAME |-> FUNCRECORD SIGS </internalSig>
 
     // TODO: Is it necessary to enforce that functions cannot call functions defined later than themselves?
@@ -1659,10 +1667,11 @@ module VIPER-LLL
 
 
     // Compile an expression that results in a value
-    syntax CTypedLLLExp  ::= "#compileValueExpr"    "(" Expr ")"
+    syntax CTypedLLLExp  ::= "#compileValueExpr"    "(" Argument ")"
     syntax CTypedLLLExp  ::= "#compileValueExprAux" "(" CTypedLLLExp ")"  [strict]
  // ------------------------------------------------------------------------------
-    rule #compileValueExpr(EXPR) => #compileValueExprAux(#compileExpr(EXPR))
+    rule #compileValueExpr(%kwarg(_, EXP:Expr) => EXP)
+    rule #compileValueExpr(EXPR:Expr) => #compileValueExprAux(#compileExpr(EXPR))
 
     rule #compileValueExprAux(TCODE) => #unwrapLoc(TCODE)
 
@@ -1679,9 +1688,10 @@ module VIPER-LLL
                        @tlll(T, CODE, EXPRATTR))
 
 
-    syntax CTypedLLLExp  ::= "#compileExpr" "(" Expr ")"
+    syntax CTypedLLLExp  ::= "#compileExpr" "(" Argument ")"
  // ----------------------------------------------------
 
+    rule #compileExpr(%kwarg(_, EXP:Expr) => EXP)
 
 // Number
 // ======
@@ -2559,8 +2569,8 @@ module VIPER-LLL
                                              CTypedLLLExp      // placeholder
                                          ")"      [strict(4)]
  // -----------------------------------------------------------------------------------------------------
-    rule #compileExpr(%slice(EXPR, STARTEXPR, LENEXPR))
-        => #slice(#compileExpr(EXPR), #compileValueExpr(STARTEXPR), #compileValueExpr(LENEXPR))
+    rule #compileExpr(%slice(ARG:Argument, STARTARG:Argument, LENARG:Argument))
+        => #slice(#compileExpr(ARG), #compileValueExpr(STARTARG), #compileValueExpr(LENARG))
 
     rule #slice(@tlll(%bytesT(L), BYTESCODE, EXPRATTR), @tlll(%num, START, _), @tlll(%num, LEN, _))
         => #sliceAux(@tlll(%bytesT(L), BYTESCODE, EXPRATTR), START, LEN,
@@ -2996,7 +3006,7 @@ module VIPER-LLL
  // ----------------------------------------------------------
     rule .Exprs     ++Expr EXPRS:Exprs => EXPRS
 
-    rule (EXPR EXPRS1) ++Expr EXPRS2 => EXPR (EXPRS1 ++Expr EXPRS2)
+    rule (EXPR:Expr EXPRS1:Exprs) ++Expr EXPRS2:Exprs => (EXPR (EXPRS1 ++Expr EXPRS2)):Exprs
 
 
     syntax LLLExp   ::= "$%seq" "(" LLLExps ")"    [function]
