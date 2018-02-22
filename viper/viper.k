@@ -1,7 +1,6 @@
-require "../common/viper-abstract-syntax.k"
-require "viper-core.k"
-require "viper-verification.k"
-require "domains.k"
+requires "../common/viper-abstract-syntax.k"
+requires "viper-core.k"
+requires "viper-verification.k"
 
 
 module VIPER

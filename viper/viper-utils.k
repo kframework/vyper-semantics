@@ -1,4 +1,6 @@
-require "../common/viper-abstract-syntax.k"
+requires "../common/viper-abstract-syntax.k"
+requires "krypto.k"
+requires "domains.k"
 
 module VIPER-UTILS
     imports VIPER-ABSTRACT-SYNTAX
@@ -49,20 +51,20 @@ module VIPER-UTILS
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// #if _ #then _ #else _ #fi
+// #If _ #Then _ #Else _ #Endif
 ///////////////////////////////////////////////////////////////////////////////
 
 
-    syntax KItem ::= "#if" Bool "#then" K "#fi"
-                   | "#if" Bool "#then" K "#else" K "#fi"
+    syntax KItem ::= "#If" Bool "#Then" K "#Endif"
+                   | "#If" Bool "#Then" K "#Else" K "#Endif"
  // -----------------------------------------------------
-    rule #if true  #then THENCLAUSE #fi => THENCLAUSE
+    rule #If true  #Then THENCLAUSE #Endif => THENCLAUSE
 
-    rule #if false #then THENCLAUSE #fi => .
+    rule #If false #Then THENCLAUSE #Endif => .
 
-    rule #if true  #then THENCLAUSE #else ELSECLAUSE #fi => THENCLAUSE
+    rule #If true  #Then THENCLAUSE #Else ELSECLAUSE #Endif => THENCLAUSE
 
-    rule #if false #then THENCLAUSE #else ELSECLAUSE #fi => ELSECLAUSE
+    rule #If false #Then THENCLAUSE #Else ELSECLAUSE #Endif => ELSECLAUSE
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -252,10 +254,10 @@ module VIPER-UTILS
     syntax KItem /*String*/ ::= "#canonicalizeType" "(" Type "," Bool /*event?*/ ")"
  // --------------------------------------------------------------------------------
     rule #canonicalizeType(%bytesT(N), EVENT)
-        => #if EVENT ==K true andBool N <=Int 32
-             #then "bytes" +String Int2String(N)
-             #else "bytes"
-           #fi
+        => #If EVENT ==K true andBool N <=Int 32
+             #Then "bytes" +String Int2String(N)
+             #Else "bytes"
+           #Endif
 
     rule #canonicalizeType(%listT(SUBTYPE, N), _)
         => #canonicalizeListType(#canonicalizeType(SUBTYPE, false), N)

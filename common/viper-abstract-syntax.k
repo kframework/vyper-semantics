@@ -1,4 +1,7 @@
+requires "domains.k"
+
 module VIPER-ABSTRACT-SYNTAX
+    imports DOMAINS
 
     syntax Pgm  ::= "%pgm" "(" Events "," Globals "," Defs ")"
                   | "%pgm" "(" Events "," Globals "," Def /*Init function*/ "," Defs ")"

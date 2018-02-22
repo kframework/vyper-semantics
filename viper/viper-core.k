@@ -177,7 +177,7 @@ module VIPER-CORE-SEMANTICS
 
     syntax KItem ::= "#loadProgramWithoutInit" "(" Int "," Pgm ")"
  // --------------------------------------------------------------
-    rule <k> #loadCode(ACCTID, %pgm(ES, GS, DEFS))
+    rule <k> #loadProgramWithoutInit(ACCTID, %pgm(ES, GS, DEFS))
             => #addEvents(ACCTID, ES)
             ~> #addFuncs(ACCTID, (DEFS ++Def #mkPublicGetters(GS, .Defs)), 0)
          ... </k>
@@ -243,10 +243,10 @@ module VIPER-CORE-SEMANTICS
  // --------------------------------------------------------------
     rule #checkEventParam(%eparam(NAME, T, ISTOPIC), NAMES)
         => #checkEventParamType(T, ISTOPIC)
-        ~> #if notBool #isVarNameValid(NAME)
-             #then @staticException("Argument name invalid or reserved: " +String Id2String(NAME)) #fi
-        ~> #if #isInIds(NAME, NAMES)
-             #then @staticException("Duplicate function argument name: " +String Id2String(NAME)) #fi
+        ~> #If notBool #isVarNameValid(NAME)
+             #Then @staticException("Argument name invalid or reserved: " +String Id2String(NAME)) #Endif
+        ~> #If #isInIds(NAME, NAMES)
+             #Then @staticException("Duplicate function argument name: " +String Id2String(NAME)) #Endif
 
 
     syntax KItem ::= "#checkEventParamType" "(" Type "," Bool /*topic?*/ ")"
@@ -304,8 +304,8 @@ module VIPER-CORE-SEMANTICS
     syntax KItem ::= "#addGlobal" "(" Int "," Global ")"
  // ----------------------------------------------------
     rule <k> #addGlobal(ACCTID, %svdecl(VARNAME, T, _))
-            => #if notBool #isVarNameValid(VARNAME)
-                #then @staticException("Variable name invalid or reserved: " +String Id2String(VARNAME)) #fi
+            => #If notBool #isVarNameValid(VARNAME)
+                #Then @staticException("Variable name invalid or reserved: " +String Id2String(VARNAME)) #Endif
             ~> #addGlobalAux(ACCTID, VARNAME, #parseType(T, false))
          ... </k>
          <account>
@@ -399,17 +399,17 @@ module VIPER-CORE-SEMANTICS
  // ----------------------------------------------------------------
      rule #checkFuncParam(ACCTID, %param(NAME, _), NAMES)
         => #checkVarName(ACCTID, NAME)
-        ~> #if #isInIds(NAME, NAMES)
-             #then @staticException("Duplicate function argument name: " +String Id2String(NAME)) #fi
+        ~> #If #isInIds(NAME, NAMES)
+             #Then @staticException("Duplicate function argument name: " +String Id2String(NAME)) #Endif
 
 
     syntax KItem ::= "#checkPrivatePublicMECE" "(" Bool /*private?*/ "," Bool /*public?*/ ")"
  // -----------------------------------------------------------------------------------------
     rule #checkPrivatePublicMECE(PRIVATE, PUBLIC)
-        => #if PRIVATE ==K true andBool PUBLIC ==K true
-             #then @staticException("Cannot use public and private decorators on the same function.") #fi
-        ~> #if PRIVATE ==K false andBool PUBLIC ==K false
-             #then @staticException("Function visibility must be declared (@public or @private).") #fi
+        => #If PRIVATE ==K true andBool PUBLIC ==K true
+             #Then @staticException("Cannot use public and private decorators on the same function.") #Endif
+        ~> #If PRIVATE ==K false andBool PUBLIC ==K false
+             #Then @staticException("Function visibility must be declared (@public or @private).") #Endif
 
 
     syntax KItem ::= "#addFuncAux" "(" Int "," Id "," ParamsKind "," TypeKind "," Stmts "," Bool "," Bool "," Bool "," Int ")"  [seqstrict(3, 4)]
@@ -549,35 +549,35 @@ module VIPER-CORE-SEMANTICS
     syntax KItem /*EvaledVar*/ ::= "#getAssignTarget" "(" Var ")"
  // -------------------------------------------------------------
     rule <k> #getAssignTarget(%var(VARNAME))
-            => #if %var(VARNAME) in FORVARS
-                 #then @staticException("Altering iterator which is in use!") #fi
-            ~> #if %var(VARNAME) in INLOOP
-                 #then @staticException("Altering list which is being iterated!") #fi
+            => #If %var(VARNAME) in FORVARS
+                 #Then @staticException("Altering iterator which is in use!") #Endif
+            ~> #If %var(VARNAME) in INLOOP
+                 #Then @staticException("Altering list which is being iterated!") #Endif
             ~> #evalVar(%var(VARNAME))
          ... </k>
          <forvar> FORVARS </forvar>
          <inLoop> INLOOP </inLoop>
 
     rule <k> #getAssignTarget(%svar(VARNAME))
-            => #if CONSTANT ==K true
-                 #then @staticException("Cannot modify storage inside a constant function") #fi
-            ~> #if %var(VARNAME) in INLOOP
-                 #then @staticException("Altering list which is being iterated!") #fi
+            => #If CONSTANT ==K true
+                 #Then @staticException("Cannot modify storage inside a constant function") #Endif
+            ~> #If %var(VARNAME) in INLOOP
+                 #Then @staticException("Altering list which is being iterated!") #Endif
             ~> #evalVar(%svar(VARNAME))
          ... </k>
          <constant> CONSTANT </constant>
          <inLoop> INLOOP </inLoop>
 
     rule <k> #getAssignTarget(%subscript(VAR, INDEX))
-            => #if VAR in INLOOP
-                 #then @staticException("Altering list which is being iterated!") #fi
+            => #If VAR in INLOOP
+                 #Then @staticException("Altering list which is being iterated!") #Endif
             ~> #evalVar(%subscript(VAR, INDEX))
          ... </k>
          <inLoop> INLOOP </inLoop>
 
     rule <k> #getAssignTarget(%attribute(VAR, FIELDNAME))
-            => #if %attribute(VAR, FIELDNAME) in INLOOP
-                 #then @staticException("Altering list which is being iterated!") #fi
+            => #If %attribute(VAR, FIELDNAME) in INLOOP
+                 #Then @staticException("Altering list which is being iterated!") #Endif
             ~> #evalVar(%attribute(VAR, FIELDNAME))
          ... </k>
          <inLoop> INLOOP </inLoop>
@@ -602,8 +602,8 @@ module VIPER-CORE-SEMANTICS
     syntax KItem ::= "#return" "(" K "," Type ")"  [strict]
  // -------------------------------------------------------
     rule #return(@ee(ACTUALTYPE, VALUE, LITERAL), EXPECTEDTYPE)
-        => #if notBool #areUnitsCompatible(ACTUALTYPE, LITERAL, EXPECTEDTYPE)
-             #then @staticException("Return type units mismatch.") #fi
+        => #If notBool #areUnitsCompatible(ACTUALTYPE, LITERAL, EXPECTEDTYPE)
+             #Then @staticException("Return type units mismatch.") #Endif
         ~> #returnBaseType(@ee(ACTUALTYPE, VALUE, LITERAL), EXPECTEDTYPE)
       requires isBaseType(ACTUALTYPE)
 
@@ -736,8 +736,8 @@ module VIPER-CORE-SEMANTICS
     syntax KItem ::= "#checkFuncOrder" "(" Int "," Int "," Int "," FuncRecord ")"
  // -----------------------------------------------------------------------------
     rule #checkFuncOrder(ACCTFROM, FROMORDER, ACCTTO, @func(FUNCNAME, _, _, _, _, _, _, TOORDER))
-        => #if (ACCTFROM ==K ACCTTO) andBool (FROMORDER <Int TOORDER) andBool (FROMORDER =/=Int -1)
-             #then @staticException("Function " +String Id2String(FUNCNAME) +String " is called before being declared.") #fi
+        => #If (ACCTFROM ==K ACCTTO) andBool (FROMORDER <Int TOORDER) andBool (FROMORDER =/=Int -1)
+             #Then @staticException("Function " +String Id2String(FUNCNAME) +String " is called before being declared.") #Endif
 
 
     syntax KItem ::= "#transferFunds" "(" Int "," Int "," Int ")"
@@ -781,8 +781,8 @@ module VIPER-CORE-SEMANTICS
  // -------------------------------------------------------------------------------------
     rule <k> #mkCall(ACCTFROM, ACCTTO, VALUE, @func(FUNCNAME, PARAMS, RT, STMTS, CONSTANT, PAYABLE, PRIVATE, ORDER), EARGS)
             => #initCall ~> #checkFuncPayable(PAYABLE) ~> #checkFuncPrivate(PRIVATE)
-            ~> #if #numOfParams(PARAMS) =/=Int #numOfEvaledExprs(EARGS)
-                 #then @staticException("# of args doesn't match # of params in function" +String Id2String(FUNCNAME)) #fi
+            ~> #If #numOfParams(PARAMS) =/=Int #numOfEvaledExprs(EARGS)
+                 #Then @staticException("# of args doesn't match # of params in function" +String Id2String(FUNCNAME)) #Endif
             ~> #bindParams(PARAMS, EARGS)
             ~> #evalStmts(STMTS)
             ~> #return
@@ -857,8 +857,8 @@ module VIPER-CORE-SEMANTICS
    rule #evalExpr(%as_num256(EXPR)) => #asNum256(#evalExpr(EXPR))
 
    rule #asNum256(@ee(T, VALUE, _))
-       => #if notBool(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %address))
-            #then @staticException("Function arg type does not match expected type.") #fi
+       => #If notBool(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %address))
+            #Then @staticException("Function arg type does not match expected type.") #Endif
        ~> #checkInRangeNum256(VALUE)
        ~> @ee(%num256, VALUE, false)
 
@@ -1122,8 +1122,8 @@ module VIPER-CORE-SEMANTICS
     syntax KItem /*TypedValue*/ ::= "#baseTypeConvert" "(" EvaledExpr "," Type ")"
  // ------------------------------------------------------------------------------
     rule #baseTypeConvert(@ee(FROMTYPE, VALUE, LITERAL), TOTYPE)
-        => #if notBool #areUnitsCompatible(FROMTYPE, LITERAL, TOTYPE)
-             #then @staticException("Base type conversion unavailable due to incompatible units") #fi
+        => #If notBool #areUnitsCompatible(FROMTYPE, LITERAL, TOTYPE)
+             #Then @staticException("Base type conversion unavailable due to incompatible units") #Endif
         ~> #baseTypeConvertAux(#baseTypeConvertNoUnit(#dropUnit(FROMTYPE), VALUE, #dropUnit(TOTYPE)), TOTYPE)
 
 
@@ -1267,10 +1267,10 @@ module VIPER-CORE-SEMANTICS
     syntax KItem ::= "#checkVarName" "(" Int "," Id ")"
  // ---------------------------------------------------
     rule <k> #checkVarName(ACCTID, VARNAME)
-            => #if notBool #isVarNameValid(VARNAME)
-                 #then @staticException("Variable name invalid or reserved: " +String Id2String(VARNAME)) #fi
-            ~> #if VARNAME in_keys(STORAGE)
-                 #then @staticException("Variable name overlaps with globals: " +String Id2String(VARNAME)) #fi
+            => #If notBool #isVarNameValid(VARNAME)
+                 #Then @staticException("Variable name invalid or reserved: " +String Id2String(VARNAME)) #Endif
+            ~> #If VARNAME in_keys(STORAGE)
+                 #Then @staticException("Variable name overlaps with globals: " +String Id2String(VARNAME)) #Endif
          ... </k>
          <account>
            <acctID> ACCTID </acctID>
@@ -1385,15 +1385,15 @@ module VIPER-CORE-SEMANTICS
     syntax KItem ::= "#checkInRangeNum" "(" Int ")"
  // -----------------------------------------------
     rule #checkInRangeNum256(VALUE)
-        => #if notBool(VALUE >=Int @minNum andBool VALUE <=Int @maxNum)
-             #then @dynamicException("Number is out of the range of num.") #fi
+        => #If notBool(VALUE >=Int @minNum andBool VALUE <=Int @maxNum)
+             #Then @dynamicException("Number is out of the range of num.") #Endif
 
 
     syntax KItem ::= "#checkInRangeNum256" "(" Int ")"
  // --------------------------------------------------
     rule #checkInRangeNum256(VALUE)
-        => #if notBool(VALUE >=Int 0 andBool VALUE <=Int @maxNum256)
-             #then @dynamicException("Number is out of the range of num256.") #fi
+        => #If notBool(VALUE >=Int 0 andBool VALUE <=Int @maxNum256)
+             #Then @dynamicException("Number is out of the range of num256.") #Endif
 
 
 // Size of List
