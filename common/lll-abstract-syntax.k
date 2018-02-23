@@ -108,6 +108,7 @@ module LLL-ABSTRACT-SYNTAX
                     | "$selfdestruct"  "(" LLLExp ")"
 
     syntax Id     ::= "$_stloc"  [token] | "$_mloc" [token]  // augassign
+                    | "$_loc1"   [token] | "$_loc2" [token]  //concat
                     // return
                     | "$_loc" [token]
                     // arithmetic

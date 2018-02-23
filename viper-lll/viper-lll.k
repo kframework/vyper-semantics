@@ -1797,8 +1797,8 @@ module VIPER-LLL
 
     rule #assignNone(@tlll(T:Type, LOC:LLLExp, @locattr(@storage, _)))
          => $with($_opos, $sha3_32(LOC),
-                $repeat(@freeLoopIndexPos, 0, (#sizeOfType(T) +Int 31) /Int 32,
-                        $sstore($add($_opos, $mload(@freeLoopIndexPos)),
+                $repeat(@freeLoopIndexPos, 0, #sizeOfType(T) /Int 32,
+                        $sstore($add($_opos, $mul($mload(@freeLoopIndexPos), 32)),
                                 0))),.LLLExps
 
 
@@ -2631,6 +2631,113 @@ module VIPER-LLL
                                             $mstore($_opos, $_length),
                                             $_opos,.LLLExps)))), @locattr(@memory, true))
 
+    // concat
+    //---------------------
+    rule #compileExpr(%concat(Es:Exprs)) => #concat(#compileExprs(Es))
+
+    syntax CTypedLLLExp  ::= "#concat"    "(" CTypedLLLExps ")"    [seqstrict]
+ // ------------------------------------------------------------------------
+    //#concat is divided into allocation of space for final array, then appending arguments to this space one by one.
+    //Required to optimize gas consumption.
+    rule #concat(Args:TypedLLLExps) => #appendByteArray(#alloc(0, Args), Args, $pass)
+
+    syntax CTypedLLLExp  ::= "#alloc"    "(" Int "," TypedLLLExps ")"
+ // ------------------------------------------------------------------------
+    rule #alloc(SIZE:Int => SIZE +Int NextSize, @tlll(%bytesT(NextSize:Int), _,_) Rest:TypedLLLExps => Rest )
+
+    rule #alloc(SIZE:Int => SIZE +Int 32, @tlll(%bytes32, _,_) Rest:TypedLLLExps => Rest )
+
+    rule <k> #alloc(SIZE:Int, .TypedLLLExps) => @tlll(%bytesT(SIZE), REZ, @locattr(@memory, true)) ...</k>
+         <nextMem> REZ:Int => REZ +Int #sizeOfType(%bytesT(SIZE)) </nextMem>
+
+
+    /*Algorighm of concat(A,B) (Outdated, was used before for concat of strictly 2 byte arrays)
+        - Allocate into Rez a number of bytes = 32 (for array len) + A.{static len} padded to multiple of 32
+                                       + B.{static len} padded to multiple of 32 (to avoid overflow later)
+            Cannot allocate dynamic length because LLL alloc macro is not implemented.
+        - Set [Rez] = A.len + B.len
+        - Copy into [Rez+32] -> [Rez+32+A.len] sequence [A+32] -> [A+32+A.len], in pieces of 32 bytes.
+        - Copy into [Rez+32+A.len] -> [Rez+32+A.len+B.len] sequence [B+32] -> [B+32+B.len], in pieces of 32 bytes.
+        - Return Rez, as a @memory value.
+
+        Some hacks used because LLL-EVM doesnt' support memory allocation and loops with non-const number of iteration.
+        We'll alloc and copy data based on static arrays sizes, rather than actual dynamic sizes.
+
+        New comments:
+        Arguments: allocated location wrapped into @tlll(), arguments to append, resulting code.
+    */
+    syntax CTypedLLLExp  ::= "#appendByteArray"    "(" CTypedLLLExp "," TypedLLLExps "," LLLExp ")"    [strict(1)]
+ // ------------------------------------------------------------------------
+
+    //Appends one %bytes32 argument from memory.
+    rule #appendByteArray(@tlll(%bytesT(_), REZLoc:Int, _),
+                     @tlll(%bytes32, CODE:LLLExp, @locattr(@memory, _)) Rest:TypedLLLExps => Rest,
+                     RezCode:LLLExp => $%seq(RezCode,
+             $with($_loc1, CODE, // _loc1 = CODE
+                       $%seq(
+                           //copy the bytes
+                           $mstore($add(REZLoc +Int 32, $mload(REZLoc)),
+                                   $mload($_loc1)),
+
+                           //update result size
+                           $mstore(REZLoc, $add($mload(REZLoc), 32)),
+                       .LLLExps)
+                  ), .LLLExps)
+         )
+
+    //Appends one %bytes32 argument from storage.
+    rule #appendByteArray(@tlll(%bytesT(_), REZLoc:Int, _),
+                     @tlll(%bytes32, CODE:LLLExp, @locattr(@storage, _)) Rest:TypedLLLExps => Rest,
+                     RezCode:LLLExp => $%seq(RezCode,
+             $with($_loc1, CODE, // _loc1 = CODE
+                       $%seq(
+                           //copy the bytes
+                           $mstore($add(REZLoc +Int 32, $mload(REZLoc)),
+                                   $sload($_loc1)),
+
+                           //update result size
+                           $mstore(REZLoc, $add($mload(REZLoc), 32)),
+                       .LLLExps)
+                  ), .LLLExps)
+         )
+
+    //Appends just one argument to the already allocated result. From memory.
+    rule #appendByteArray(@tlll(%bytesT(_), REZLoc:Int, _),
+                     @tlll(%bytesT(SIZE:Int), CODE:LLLExp, @locattr(@memory, _)) Rest:TypedLLLExps => Rest,
+                     RezCode:LLLExp => $%seq(RezCode,
+             $with($_loc1, CODE, // _loc1 = CODE
+                       $%seq(
+                           //copy the bytes
+                           $repeat(@freeLoopIndexPos, 0, #ceil32(SIZE) /Int 32,
+                                   $mstore($add($add(REZLoc +Int 32, $mload(REZLoc)), $mul($mload(@freeLoopIndexPos), 32)),
+                                           $mload($add($add($_loc1, 32), $mul($mload(@freeLoopIndexPos), 32))))),
+
+                           //update result size
+                           $mstore(REZLoc, $add($mload(REZLoc), $mload($_loc1))),
+                           .LLLExps)
+                       ), .LLLExps)
+                     )
+
+    //Appends just one argument to the already allocated result. From storage.
+    rule #appendByteArray(@tlll(%bytesT(_), REZLoc:Int, _),
+                     @tlll(%bytesT(SIZE:Int), CODE:LLLExp, @locattr(@storage, _)) Rest:TypedLLLExps => Rest,
+                     RezCode:LLLExp => $%seq(RezCode,
+             $with($_loc1, $sha3_32(CODE), // _loc1 = CODE
+                       $%seq(
+                           //copy the bytes
+                           $repeat(@freeLoopIndexPos, 0, #ceil32(SIZE) /Int 32,
+                                   $mstore($add($add(REZLoc +Int 32, $mload(REZLoc)), $mul($mload(@freeLoopIndexPos), 32)),
+                                           $sload($add($add($_loc1, 1), $mload(@freeLoopIndexPos))))),
+
+                           //update result size
+                           $mstore(REZLoc, $add($mload(REZLoc), $sload($_loc1))),
+                           .LLLExps)
+                       ), .LLLExps)
+                     )
+
+    rule #appendByteArray(@tlll(%bytesT(RezSize:Int), REZLoc:Int, LA:LocAttr), .TypedLLLExps, CODE:LLLExp)
+         => @tlll(%bytesT(RezSize), $%seq(CODE, REZLoc), LA)
+
 
     // bytes_to_num
     syntax CTypedLLLExp  ::= "#bytes_to_num"    "(" CTypedLLLExp ")"    [strict]
@@ -2638,7 +2745,7 @@ module VIPER-LLL
  // ------------------------------------------------------------------------
     rule #compileExpr(%bytes_to_num(EXPR)) => #bytes_to_num(#compileExpr(EXPR))
 
-    rule #bytes_to_num(@tlll(T, LOC, _))
+    rule #bytes_to_num(@tlll(T, LOC, @locattr(@memory, _)))
         => #ifThenElse(isByteArrayType(T),
                        #bytes_to_num_Aux(LOC),
                        #exception("Function arg type does not match expected type."))
@@ -3163,6 +3270,7 @@ module VIPER-LLL
  // ---------------------------------------------------------
     rule #sizeOfType(T:BaseType) => 32
 
+    //Should not be +64. +32 is sufficient. (Except if extra 32 bytes are allocated for return in ABI format.)
     rule #sizeOfType(%bytesT(L)) => #ceil32(L) +Int 64
 
     rule #sizeOfType(%listT(SUBTYPE, N)) => #sizeOfType(SUBTYPE) *Int N
