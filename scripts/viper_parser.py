@@ -58,9 +58,12 @@ def parseList(nodeList, parseElement: types.FunctionType, separator, initSeparat
 # syntax NumericType   ::= PureNumType
 #                        | UnitType
 # syntax PureNumType   ::= "%num" | "%decimal"
-def parseBaseType(name):  # value is Str. NumericType not yet supported
+def parseBaseType(name: ast.Name):  # value is Str. NumericType not yet supported
     if type(name) == ast.Name:
-        return "%" + name.id
+        if name.id == "num128":
+            return "%num"
+        else:
+            return "%" + name.id
     else:
         raise ParserException("BaseType parsing not yet implemented for: " + str(id))
 
@@ -336,6 +339,12 @@ def parseCallExpr(expr: ast.Call):
                                                   expr.args[1].s if type(expr.args[1]) == ast.Str else expr.args[1].id)
         elif expr.func.id == "concat":
             return "%concat({})".format(parseArgs(expr.args + expr.keywords))
+        elif expr.func.id == "extract32":
+            if len(expr.keywords) == 0:
+                typeArg = "%bytes32"
+            else:
+                typeArg = parseBaseType(expr.keywords[0].value)
+            return "%extract32({}, {}, {})".format(parseArg(expr.args[0]), parseArg(expr.args[1]), typeArg)
         else:
             return "%{}({})".format(expr.func.id, parseArgs(expr.args + expr.keywords, ", "))
     elif type(expr.func) == ast.Attribute and type(expr.func.value) == ast.Name and expr.func.value.id == "self":

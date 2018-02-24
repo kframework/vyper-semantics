@@ -212,7 +212,7 @@ module VIPER-ABSTRACT-SYNTAX
                            | "%ecrecover"           "(" Argument ")"
                            | "%ecadd"               "(" Argument "," Argument ")"
                            | "%ecmul"               "(" Argument "," Argument ")"
-                           | "%extract32"           "(" Argument "," Argument "," Id ")"
+                           | "%extract32"           "(" Argument "," Argument "," Type ")"
                            | "%bytes_to_num"        "(" Argument ")"
                            | "%as_wei_value"        "(" Argument "," Id   ")"
                         // | "%raw_call"            "(" Argument "," Argument "," Argument "," Argument "," Argument ")"

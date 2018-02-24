@@ -2547,6 +2547,7 @@ module VIPER-LLL
                                                @tlll(%num256, I, @none),
                                                #exception("Number out of range"))
 
+    //Denis: not sure if this clamp is required. Throws exception if argument is %bytes32.
     rule #asNum256LLLExp(CODE) => @tlll(%num256, $clampge(CODE, 0), @none)
 
 
@@ -2752,7 +2753,33 @@ module VIPER-LLL
          => @tlll(%bytesT(RezSize), $%seq(CODE, REZLoc), LA)
 
 
+    // extract32
+    //---------------------
+    rule #compileExpr(%extract32(BExp, IExp, %num)) => #compileExpr(%as_num128(%extract32(BExp, IExp, %bytes32)))
+
+    rule #compileExpr(%extract32(BExp, IExp, %address))
+         => #toAddress(#extract32(#compileExpr(BExp), #compileExpr(IExp), %bytes32))
+
+    rule #compileExpr(%extract32(BExp, IExp, T:Type)) => #extract32(#compileExpr(BExp), #compileExpr(IExp), T)
+      when T ==K %bytes32 orBool T ==K %num256
+
+    syntax CTypedLLLExp  ::= "#extract32" "(" CTypedLLLExp "," CTypedLLLExp "," Type ")"    [seqstrict(1,2)]
+ // ------------------------------------------------------------------------
+    rule #extract32(@tlll(%bytesT(_), BCode:LLLExp, @locattr(@memory, _)), @tlll(%num, ICode:LLLExp, @none), T:Type)
+         => @tlll(T, $mload($add($add(BCode, 32), ICode)), @none)
+
+    rule #extract32(@tlll(%bytesT(L), BCode:LLLExp, @locattr(@storage, MUT)), INDEX:TypedLLLExp, T:Type)
+         => #extract32(#slice(@tlll(%bytesT(L), BCode, @locattr(@storage, MUT)), INDEX, @tlll(%num, 32, @none)),
+                       @tlll(%num, 0, @none), T)
+
+    //Checks that value produced by CODE is inside the range for %address.
+    syntax CTypedLLLExp  ::= "#toAddress" "(" CTypedLLLExp ")"    [strict]
+ // ------------------------------------------------------------------------
+    rule #toAddress(@tlll(T, CODE, @none)) => @tlll(%address, $uclamplt(CODE, $mload(@addrSizePos)), @none)
+
+
     // bytes_to_num
+    //---------------------
     syntax CTypedLLLExp  ::= "#bytes_to_num"    "(" CTypedLLLExp ")"    [strict]
     syntax CTypedLLLExp  ::= "#bytes_to_num_Aux" "(" LLLExp ")"
  // ------------------------------------------------------------------------
@@ -3283,7 +3310,9 @@ module VIPER-LLL
  // ---------------------------------------------------------
     rule #sizeOfType(T:BaseType) => 32
 
-    //Should not be +64. +32 is sufficient. (Except if extra 32 bytes are allocated for return in ABI format.)
+    //Size #ceil32(L) +Int 32 is sufficient.
+    // (The extra 32 bytes are useful when performing conversions/extractions and result have to be padded with 0x00.)
+    // Such as slice()/extract32().
     rule #sizeOfType(%bytesT(L)) => #ceil32(L) +Int 64
 
     rule #sizeOfType(%listT(SUBTYPE, N)) => #sizeOfType(SUBTYPE) *Int N
