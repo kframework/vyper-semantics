@@ -2631,6 +2631,19 @@ module VIPER-LLL
                                             $mstore($_opos, $_length),
                                             $_opos,.LLLExps)))), @locattr(@memory, true))
 
+    // len - byte array length
+    //---------------------
+    rule #compileExpr(%len(E:Expr)) => #len(#compileExpr(E))
+
+    syntax CTypedLLLExp  ::= "#len"    "(" CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------
+    rule #len(@tlll(%bytesT(L), BYTESCODE:LLLExp, @locattr(@memory, _)))
+         => @tlll(%num, $mload(BYTESCODE), @none)
+
+    rule #len(@tlll(%bytesT(L), BYTESCODE:LLLExp, @locattr(@storage, _)))
+         => @tlll(%num, $sload($sha3_32(BYTESCODE)), @none)
+
+
     // concat
     //---------------------
     rule #compileExpr(%concat(Es:Exprs)) => #concat(#compileExprs(Es))
