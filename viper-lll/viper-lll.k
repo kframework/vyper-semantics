@@ -627,12 +627,12 @@ module VIPER-LLL
 
     syntax CLLLExps  ::= "#compileStmts" "(" Stmts "," LLLExps ")"
  // --------------------------------------------------------------
-    rule #compileStmts(.Stmts, RESULTCODE) => RESULTCODE
-
     rule #compileStmts(STMT STMTS, RESULTCODE) => #compileStmt(STMT) ~> #compileStmts(STMTS, RESULTCODE)
 
     rule (STMTCODE:LLLExps ~> #compileStmts(STMTS, RESULTCODE))
         => #compileStmts(STMTS, RESULTCODE ++LLL STMTCODE)
+
+    rule #compileStmts(.Stmts, RESULTCODE) => RESULTCODE
 
 
     syntax CLLLExps  ::= "#compileStmt" "(" Stmt ")"
@@ -1258,14 +1258,13 @@ module VIPER-LLL
          <nextMem> LOC </nextMem>
 
 
-    syntax CLLLExps  ::= "#returnListT" "(" TypedLLLExp ","
-                                            Type        ")"
+    syntax CLLLExps  ::= "#returnListT" "(" TypedLLLExp "," //returned value
+                                            Type            //expected type
+                                        ")"
  // -------------------------------------------------------
     rule #returnListT(@tlll(%listT(SUBTYPE1, N), CODE, EXPRATTR), %listT(SUBTYPE2, N))
-        => #ifThenElse(#isInMemory(EXPRATTR) andBool
-                       (SUBTYPE1 ==K SUBTYPE2) andBool
-                       (notBool(isMultiLLLExp(CODE))),
-                       $return(CODE, #sizeOfType(%listT(SUBTYPE2, N))),
+        => #ifThenElse(#isInMemory(EXPRATTR) andBool (SUBTYPE1 ==K SUBTYPE2) andBool notBool isMultiLLLExp(CODE),
+                       ($return(CODE, #sizeOfType(%listT(SUBTYPE2, N))), .LLLExps),
                        #returnListTByCopy(#newPlaceholder(%listT(SUBTYPE2, N)),
                                           @tlll(%listT(SUBTYPE1, N), CODE, EXPRATTR),
                                           %listT(SUBTYPE2, N)))
