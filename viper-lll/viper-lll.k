@@ -2014,18 +2014,15 @@ module VIPER-LLL
         ~> @unittuple(RM, false)
 
     // exp
-    rule #newUnitTuple(%, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
-        => #exception("Cannot use unit values as exponential arguments!")
+    rule #newUnitTuple(**, _, %unitT(_, RM:Map, RPOS), _)
+        => #exception("Cannot use unit values as exponents")
 
-    rule #newUnitTuple(%, %unitT(LT, LM:Map, LPOS), RT:PureNumType, POW:Int)
-        ~> @unittuple(#computeUnitPow(LM, POW), false)
+    rule #newUnitTuple(**, %unitT(LT, LM:Map, LPOS), %num, POW:Int)
+        => @unittuple(#computeUnitPow(LM, POW), false)
 
-    rule #newUnitTuple(%, %unitT(LT, LM:Map, LPOS), RT:PureNumType, CODE)
-        ~> #exception("The exponent of a unit value must be integer.")
+    rule #newUnitTuple(**, %unitT(LT, LM:Map, LPOS), RT:PureNumType, CODE)
+        => #exception("Only whole number exponents are supported")
       requires notBool isInt(CODE)
-
-    rule #newUnitTuple(%, LT:PureNumType, %unitT(RT, RM:Map, RPOS), _)
-        => #exception("Cannot use unit values as exponential arguments!")
 
 
     syntax CTypedLLLExp  ::= "#binOpPure"    "(" BinOp "," TypedLLLExp "," TypedLLLExp ")"
