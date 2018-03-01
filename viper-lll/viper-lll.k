@@ -791,7 +791,7 @@ module VIPER-LLL
                                                      LLLExps      ")"  // result code
  // -------------------------------------------------------------------------------
     rule #mkSetterListTLiteral(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, $multi(TEXPR TEXPRS), RESULTCODE)
-        => #mkSetter(#addVarOffset(LTTOKENCODE, @tlll(%num, INDEX, @none)), TEXPR)
+        => #mkSetter(#lookupVarElement(LTTOKENCODE, @tlll(%num, INDEX, @none)), TEXPR)
         ~> #mkSetterListTLiteral(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, $multi(TEXPRS), RESULTCODE)
       requires INDEX <Int N
 
@@ -812,8 +812,8 @@ module VIPER-LLL
                                                  LLLExps     ")"  // result code
   // --------------------------------------------------------------------------------
      rule #mkSetterListTVar(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, RCODE, RTTOKENCODE, RESULTCODE)
-         => #mkSetter(#addVarOffset(LTTOKENCODE, @tlll(%num, INDEX, @none)),
-                      #addVarOffset(RTTOKENCODE, @tlll(%num, INDEX, @none)))
+         => #mkSetter(#lookupVarElement(LTTOKENCODE, @tlll(%num, INDEX, @none)),
+                      #lookupVarElement(RTTOKENCODE, @tlll(%num, INDEX, @none)))
          ~> #mkSetterListTVar(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, RCODE, RTTOKENCODE, RESULTCODE)
        requires INDEX <Int N
 
@@ -882,7 +882,7 @@ module VIPER-LLL
         => $with($_L, LCODE, $%seq(RESULTCODE)), .LLLExps
 
     rule #mkSetterStructTLiteral(%annvar(NAME, T) ANNVARS, LCODE, LTTOKENCODE, $multi(TEXPR TEXPRS), RESULTCODE)
-        => #mkSetter(#addVarOffset(LTTOKENCODE, @tlll(%void, NAME, @none)), TEXPR)
+        => #mkSetter(#lookupVarElement(LTTOKENCODE, @tlll(%void, NAME, @none)), TEXPR)
         ~> #mkSetterStructTLiteral(ANNVARS, LCODE, LTTOKENCODE, $multi(TEXPRS), RESULTCODE)
 
     rule CODE:LLLExps ~> #mkSetterStructTLiteral(ANNVARS, LCODE, LTTOKENCODE, RCODE, RESULTCODE)
@@ -900,8 +900,8 @@ module VIPER-LLL
         => $with($_L, LCODE, $with($_R, RCODE, $%seq(RESULTCODE))),.LLLExps
 
     rule #mkSetterStructTVar(%annvar(NAME, T) ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
-        => #mkSetter(#addVarOffset(LTTOKENCODE, @tlll(%void, NAME, @none)),
-                     #addVarOffset(RTTOKENCODE, @tlll(%void, NAME, @none)))
+        => #mkSetter(#lookupVarElement(LTTOKENCODE, @tlll(%void, NAME, @none)),
+                     #lookupVarElement(RTTOKENCODE, @tlll(%void, NAME, @none)))
         ~> #mkSetterStructTVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
 
     rule CODE:LLLExps ~> #mkSetterStructTVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
@@ -3774,65 +3774,76 @@ module VIPER-LLL
       requires notBool %svar(NAME) in_keys(GLOBAL)
 
     rule #lookupVar(%subscript(V, EXPR))
-        => #lookupSubscriptVar(#lookupVar(V), #compileValueExpr(EXPR))
+        => #lookupVarElement(#lookupVar(V), #compileValueExpr(EXPR))
 
-    rule #lookupVar(%attribute(V, NAME))
-        => #lookupAttributeVar(#lookupVar(V), NAME)
+    rule #lookupVar(%attribute(V, FIELD:Id))
+        => #lookupVarElement(#lookupVar(V), @tlll(%void, FIELD, @none))
 
-
-    /*  Init expr: V[EXPR]. V can represent either lists or maps.
-        Arg 1: #lookupVar(V)
-        Arg 2: #compileValueExpr(EXPR)
-    */
-    syntax CTypedLLLExp  ::= "#lookupSubscriptVar" "(" CTypedLLLExp ","
-                                                       CTypedLLLExp
-                                                   ")"      [seqstrict]
- // -------------------------------------------------------------------
-    rule #lookupSubscriptVar(SUBEXPR, INDEXEXPR)
-        => #addVarOffset(SUBEXPR, INDEXEXPR)
-
-
-    /* Init expr: V.NAME
-        Arg 1: #lookupVar(V)
-        Arg 2: NAME
-    */
-    syntax CTypedLLLExp  ::= "#lookupAttributeVar" "(" CTypedLLLExp ","
-                                                       Id
-                                                   ")"      [strict(1)]
- // -------------------------------------------------------------------
-    rule #lookupAttributeVar(QUALIFIER, FIELD:Id)
-        => #addVarOffset(QUALIFIER, @tlll(%void, FIELD, @none))
 
     /*  Computes the location for a subscript or attribute expression: base[index] or base.index.
         For attributes, index is of the form @tlll(%void, FIELD, @none)
     */
-    syntax CTypedLLLExp  ::= "#addVarOffset" "(" TypedLLLExp ","  // base
-                                                 TypedLLLExp      // index
-                                             ")"
+    syntax CTypedLLLExp  ::= "#lookupVarElement" "(" CTypedLLLExp ","  // base
+                                                     CTypedLLLExp      // index
+                                                 ")"            [seqstrict]
  // ------------------------------------------------------------
     // List
-    rule #addVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, LOCATTR), INDEXTlll:TypedLLLExp)
-        => #addListVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, LOCATTR),
+    rule #lookupVarElement(@tlll(%listT(SUBTYPE, N), BASELOC, LOCATTR), INDEXTlll:TypedLLLExp)
+        => #lookupListElement(@tlll(%listT(SUBTYPE, N), BASELOC, LOCATTR),
                              #baseTypeConvert(INDEXTlll, %num))
 
     // Map, index is not byte array
-    rule #addVarOffset(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
+    rule #lookupVarElement(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
                        @tlll(INDEXT, INDEX, EXPRATTR))
-        => #addMapVarOffset(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
+        => #lookupMapElement(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
                             #baseTypeConvert(@tlll(INDEXT, INDEX, EXPRATTR), KT))
       requires notBool(isByteArrayType(INDEXT))
 
     // Map, index is byte array
-    rule #addVarOffset(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
+    rule #lookupVarElement(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
                        @tlll(INDEXT, INDEX, EXPRATTR))
-        => #addMapVarOffset(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
+        => #lookupMapElement(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
                             #mapKeyByteArrayConvert(@tlll(INDEXT, INDEX, EXPRATTR), KT))
       requires isByteArrayType(INDEXT)
 
     // Struct
-    rule #addVarOffset(@tlll(%structT(ANNVARS), BASELOC, LOCATTR), @tlll(_, INDEXNAME:Id, _))
-        => #addStructVarOffset(@tlll(%structT(ANNVARS), BASELOC, LOCATTR),
-                               ANNVARS, 0, INDEXNAME)
+    rule #lookupVarElement(@tlll(%structT(ANNVARS), BASELOC, LOCATTR), @tlll(_, FIELD:Id, _))
+        => #lookupStructElement(@tlll(%structT(ANNVARS), BASELOC, LOCATTR),
+                                ANNVARS, 0, FIELD)
+
+
+    /* Computes location(List[I]), I converted to %num
+    */
+    syntax CTypedLLLExp  ::= "#lookupListElement" "(" TypedLLLExp  ","
+                                                      CTypedLLLExp ")"  [strict(2)]
+ // ------------------------------------------------------------------------------
+    rule #lookupListElement(@tlll(%listT(ELEMTYPE, N), BASELOC, @locattr(@storage, MUTABLE)),
+                           @tlll(_, INDEX, _))
+        => @tlll(ELEMTYPE, $add($sha3_32(BASELOC), $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
+
+    rule #lookupListElement(@tlll(%listT(SUBTYPE, N), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
+                          @tlll(_, INDEX, _))
+        => @tlll(SUBTYPE, $add(BASELOC, $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
+
+    rule #lookupListElement(@tlll(%listT(SUBTYPE, N), BASELOC, @locattr(@memory, MUTABLE)),
+                           @tlll(_, INDEX, _))
+        => @tlll(SUBTYPE, $add($mul(#sizeOfType(SUBTYPE), $uclamplt(INDEX, N)), BASELOC), @locattr(@memory, MUTABLE))
+
+
+    syntax CTypedLLLExp  ::= "#lookupMapElement" "(" TypedLLLExp  ","
+                                                     CTypedLLLExp ")"  [strict(2)]
+ // -----------------------------------------------------------------------------
+    rule #lookupMapElement(@tlll(%mapT(KeyT, ValueT), BASELOC, @locattr(@storage, MUTABLE)),
+                          @tlll(_, INDEX, _))
+        => @tlll(ValueT, $add($sha3_32(BASELOC), INDEX), @locattr(@storage, MUTABLE))
+
+    rule #lookupMapElement(@tlll(%mapT(KT, VT), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
+                          @tlll(_, INDEX, _))
+        => @tlll(VT, $add(BASELOC, INDEX), @locattr(@storage, MUTABLE))
+
+    rule #lookupMapElement(@tlll(%mapT(KT, VT), _, @locattr(@memory, _)), _)
+        => #exception("Can only have fixed-side arrays in memory, not mappings")
+
 
     /* Converts a byte array that is used as key in a map to the expected type of the map key.
         D: Unsure if this method is what's needed to support byte array map keys.
@@ -3842,85 +3853,51 @@ module VIPER-LLL
     // TODO: finish map key conversion
 
 
-    /* Computes location(List[I]), I converted to %num
-    */
-    syntax CTypedLLLExp  ::= "#addListVarOffset" "(" TypedLLLExp  ","
-                                                     CTypedLLLExp ")"  [strict(2)]
- // ------------------------------------------------------------------------------
-    rule #addListVarOffset(@tlll(%listT(ELEMTYPE, N), BASELOC, @locattr(@storage, MUTABLE)),
-                           @tlll(_, INDEX, _))
-        => @tlll(ELEMTYPE, $add($sha3_32(BASELOC), $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
-
-    rule #addListVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
-                          @tlll(_, INDEX, _))
-        => @tlll(SUBTYPE, $add(BASELOC, $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
-
-    rule #addListVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, @locattr(@memory, MUTABLE)),
-                           @tlll(_, INDEX, _))
-        => @tlll(SUBTYPE, $add($mul(#sizeOfType(SUBTYPE), $uclamplt(INDEX, N)), BASELOC), @locattr(@memory, MUTABLE))
-
-
-    syntax CTypedLLLExp  ::= "#addMapVarOffset" "(" TypedLLLExp  ","
-                                                    CTypedLLLExp ")"  [strict(2)]
- // -----------------------------------------------------------------------------
-    rule #addMapVarOffset(@tlll(%mapT(KeyT, ValueT), BASELOC, @locattr(@storage, MUTABLE)),
-                          @tlll(_, INDEX, _))
-        => @tlll(ValueT, $add($sha3_32(BASELOC), INDEX), @locattr(@storage, MUTABLE))
-
-    rule #addMapVarOffset(@tlll(%mapT(KT, VT), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
-                          @tlll(_, INDEX, _))
-        => @tlll(VT, $add(BASELOC, INDEX), @locattr(@storage, MUTABLE))
-
-    rule #addMapVarOffset(@tlll(%mapT(KT, VT), _, @locattr(@memory, _)), _)
-        => #exception("Can only have fixed-side arrays in memory, not mappings")
-
-
-    syntax CTypedLLLExp  ::= "#addStructVarOffset" "(" TypedLLLExp ","  // parent
-                                                       AnnVars     ","  // struct fields
-                                                       Int         ","  // offset
-                                                       LLLExp           // index name
-                                                   ")"
+    syntax CTypedLLLExp  ::= "#lookupStructElement" "(" TypedLLLExp ","  // parent
+                                                        AnnVars     ","  // struct fields
+                                                        Int         ","  // offset
+                                                        Id               // field name
+                                                    ")"
  // ------------------------------------------------------------------
     // storage
-    rule #addStructVarOffset(@tlll(_, BASELOC, @locattr(@storage, MUTABLE)),
-                             %annvar(INDEXNAME:Id, FIELDT) ANNVARS, OFFSET:Int,
-                             INDEXNAME:Id)
+    rule #lookupStructElement(@tlll(_, BASELOC, @locattr(@storage, MUTABLE)),
+                             %annvar(INDEX:Id, FIELDT) ANNVARS, OFFSET:Int,
+                             INDEX)
         => @tlll(FIELDT, $add($sha3_32(BASELOC), OFFSET), @locattr(@storage, MUTABLE))
 
 
-    rule #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@storage, MUTABLE)),
-                             %annvar(FIELDNAME:Id, FIELDT:Type) ANNVARS, OFFSET,
-                             INDEXNAME)
-        => #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@storage, MUTABLE)),
-                               ANNVARS, OFFSET +Int 1, INDEXNAME)
-      requires INDEXNAME =/=K FIELDNAME
+    rule #lookupStructElement(@tlll(BASET, BASELOC, @locattr(@storage, MUTABLE)),
+                             %annvar(FIELD:Id, FIELDT:Type) ANNVARS, OFFSET,
+                             INDEX:Id)
+        => #lookupStructElement(@tlll(BASET, BASELOC, @locattr(@storage, MUTABLE)),
+                               ANNVARS, OFFSET +Int 1, INDEX)
+      requires INDEX =/=K FIELD
 
     // storage prehashed
-    rule #addStructVarOffset(@tlll(_, BASELOC, @locattr(@storage_prehashed, MUTABLE)),
-                             %annvar(INDEXNAME:Id, FIELDT) ANNVARS, OFFSET,
-                             INDEXNAME)
+    rule #lookupStructElement(@tlll(_, BASELOC, @locattr(@storage_prehashed, MUTABLE)),
+                             %annvar(INDEX:Id, FIELDT) ANNVARS, OFFSET,
+                             INDEX)
         => @tlll(FIELDT, $add(BASELOC, OFFSET), @locattr(@storage, MUTABLE))
 
-    rule #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@storage_prehashed, MUTABLE)),
-                             %annvar(FIELDNAME, FIELDT) ANNVARS, OFFSET,
-                             INDEXNAME)
-        => #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@storage_prehashed, MUTABLE)),
-                               ANNVARS, OFFSET +Int 1, INDEXNAME)
-      requires INDEXNAME =/=K FIELDNAME
+    rule #lookupStructElement(@tlll(BASET, BASELOC, @locattr(@storage_prehashed, MUTABLE)),
+                             %annvar(FIELD:Id, FIELDT) ANNVARS, OFFSET,
+                             INDEX:Id)
+        => #lookupStructElement(@tlll(BASET, BASELOC, @locattr(@storage_prehashed, MUTABLE)),
+                               ANNVARS, OFFSET +Int 1, INDEX)
+      requires INDEX =/=K FIELD
 
     // memory
-    rule #addStructVarOffset(@tlll(_, BASELOC, @locattr(@memory, MUTABLE)),
-                             %annvar(FIELDNAME, FIELDT) ANNVARS, OFFSET,
-                             INDEXNAME)
+    rule #lookupStructElement(@tlll(_, BASELOC, @locattr(@memory, MUTABLE)),
+                             %annvar(INDEX:Id, FIELDT) ANNVARS, OFFSET,
+                             INDEX:Id)
         => @tlll(FIELDT, $add(OFFSET, BASELOC), @locattr(@memory, MUTABLE))
-      requires INDEXNAME ==K FIELDNAME
 
-    rule #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@memory, MUTABLE)),
-                             %annvar(FIELDNAME, FIELDT) ANNVARS, OFFSET,
-                             INDEXNAME)
-        => #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@memory, MUTABLE)),
-                               ANNVARS, OFFSET +Int #sizeOfType(FIELDT), INDEXNAME)
-      requires INDEXNAME =/=K FIELDNAME
+    rule #lookupStructElement(@tlll(BASET, BASELOC, @locattr(@memory, MUTABLE)),
+                             %annvar(FIELD:Id, FIELDT) ANNVARS, OFFSET,
+                             INDEX:Id)
+        => #lookupStructElement(@tlll(BASET, BASELOC, @locattr(@memory, MUTABLE)),
+                               ANNVARS, OFFSET +Int #sizeOfType(FIELDT), INDEX)
+      requires INDEX =/=K FIELD
 
 
     //defines a new variable of given name in <env>
