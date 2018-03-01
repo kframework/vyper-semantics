@@ -111,9 +111,11 @@ module VIPER-ABSTRACT-SYNTAX
                   | SubscriptVar
                   | AttributeVar
 
-    syntax SubscriptVar  ::= "%subscript" "(" Var "," Expr ")"  // list or map element
+    // Var[Expr]: list or map element
+    syntax SubscriptVar  ::= "%subscript" "(" Var "," Expr ")"
 
-    syntax AttributeVar  ::= "%attribute" "(" Var "," Id   ")"  // struct field access
+    // Var.Id: struct field access
+    syntax AttributeVar  ::= "%attribute" "(" Var "," Id   ")"
 
     syntax ListExpr  ::= "%list" "(" Exprs ")"
 

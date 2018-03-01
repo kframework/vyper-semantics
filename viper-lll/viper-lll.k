@@ -51,8 +51,9 @@ module VIPER-LLL
 
     syntax LocAttr     ::= "@locattr" "(" LocTarget "," Bool /*mutable?*/ ")"
 
+    // @none means an LLLExp represents a value rather than a storage/memory location
     syntax LLLExpAttr  ::= LocAttr
-                         | "@none"  // @none means an LLLExp represents a value rather than a storage/memory location
+                         | "@none"
 
     syntax TypedAddr   ::= "@taddr" "(" Type ","
                                         LLLExp /*loc*/    ","
@@ -3385,7 +3386,7 @@ module VIPER-LLL
                        #baseTypeConvertNoUnit(CODE, #dropUnit(FROMT), #dropUnit(TOT)),
                        #exception("Typecasting unavailable due to incompatible units"))
 
-    rule #baseTypeConvertNoUnit(CODE, FROMT, TOT)
+    rule #baseTypeConvertNoUnit(CODE:LLLExp, FROMT:Type, TOT:Type)
         => #ifThenElse(notBool(isBaseType(FROMT)) orBool notBool(isBaseType(TOT)),
                        #exception("Base type conversion from or to non-base type."),
              #ifThenElse(FROMT ==K TOT,
@@ -3779,6 +3780,10 @@ module VIPER-LLL
         => #lookupAttributeVar(#lookupVar(V), NAME)
 
 
+    /*  Init expr: V[EXPR]. V can represent either lists or maps.
+        Arg 1: #lookupVar(V)
+        Arg 2: #compileValueExpr(EXPR)
+    */
     syntax CTypedLLLExp  ::= "#lookupSubscriptVar" "(" CTypedLLLExp ","
                                                        CTypedLLLExp
                                                    ")"      [seqstrict]
@@ -3787,21 +3792,28 @@ module VIPER-LLL
         => #addVarOffset(SUBEXPR, INDEXEXPR)
 
 
+    /* Init expr: V.NAME
+        Arg 1: #lookupVar(V)
+        Arg 2: NAME
+    */
     syntax CTypedLLLExp  ::= "#lookupAttributeVar" "(" CTypedLLLExp ","
                                                        Id
                                                    ")"      [strict(1)]
  // -------------------------------------------------------------------
-    rule #lookupAttributeVar(SUBEXPR, FILEDNAME)
-        => #addVarOffset(SUBEXPR, @tlll(%void, FILEDNAME, @none))
+    rule #lookupAttributeVar(QUALIFIER, FIELD:Id)
+        => #addVarOffset(QUALIFIER, @tlll(%void, FIELD, @none))
 
-
+    /*  Computes the location for a subscript or attribute expression: base[index] or base.index.
+        For attributes, index is of the form @tlll(%void, FIELD, @none)
+    */
     syntax CTypedLLLExp  ::= "#addVarOffset" "(" TypedLLLExp ","  // base
-                                                 TypedLLLExp ")"  // index
+                                                 TypedLLLExp      // index
+                                             ")"
  // ------------------------------------------------------------
     // List
-    rule #addVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, LOCATTR), TINDEX)
+    rule #addVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, LOCATTR), INDEXTlll:TypedLLLExp)
         => #addListVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, LOCATTR),
-                             #baseTypeConvert(TINDEX, %num))
+                             #baseTypeConvert(INDEXTlll, %num))
 
     // Map, index is not byte array
     rule #addVarOffset(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
@@ -3818,22 +3830,26 @@ module VIPER-LLL
       requires isByteArrayType(INDEXT)
 
     // Struct
-    rule #addVarOffset(@tlll(%structT(ANNVARS), BASELOC, LOCATTR), @tlll(_, INDEXNAME, _))
+    rule #addVarOffset(@tlll(%structT(ANNVARS), BASELOC, LOCATTR), @tlll(_, INDEXNAME:Id, _))
         => #addStructVarOffset(@tlll(%structT(ANNVARS), BASELOC, LOCATTR),
                                ANNVARS, 0, INDEXNAME)
 
-
+    /* Converts a byte array that is used as key in a map to the expected type of the map key.
+        D: Unsure if this method is what's needed to support byte array map keys.
+    */
     syntax CTypedLLLExp  ::= "#mapKeyByteArrayConvert" "(" TypedLLLExp "," Type ")"
  // -------------------------------------------------------------------------------
     // TODO: finish map key conversion
 
 
+    /* Computes location(List[I]), I converted to %num
+    */
     syntax CTypedLLLExp  ::= "#addListVarOffset" "(" TypedLLLExp  ","
                                                      CTypedLLLExp ")"  [strict(2)]
  // ------------------------------------------------------------------------------
-    rule #addListVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, @locattr(@storage, MUTABLE)),
+    rule #addListVarOffset(@tlll(%listT(ELEMTYPE, N), BASELOC, @locattr(@storage, MUTABLE)),
                            @tlll(_, INDEX, _))
-        => @tlll(SUBTYPE, $add($sha3_32(BASELOC), $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
+        => @tlll(ELEMTYPE, $add($sha3_32(BASELOC), $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
 
     rule #addListVarOffset(@tlll(%listT(SUBTYPE, N), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
                           @tlll(_, INDEX, _))
@@ -3847,9 +3863,9 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#addMapVarOffset" "(" TypedLLLExp  ","
                                                     CTypedLLLExp ")"  [strict(2)]
  // -----------------------------------------------------------------------------
-    rule #addMapVarOffset(@tlll(%mapT(KT, VT), BASELOC, @locattr(@storage, MUTABLE)),
+    rule #addMapVarOffset(@tlll(%mapT(KeyT, ValueT), BASELOC, @locattr(@storage, MUTABLE)),
                           @tlll(_, INDEX, _))
-        => @tlll(VT, $add($sha3_32(BASELOC), INDEX), @locattr(@storage, MUTABLE))
+        => @tlll(ValueT, $add($sha3_32(BASELOC), INDEX), @locattr(@storage, MUTABLE))
 
     rule #addMapVarOffset(@tlll(%mapT(KT, VT), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
                           @tlll(_, INDEX, _))
@@ -3862,17 +3878,18 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#addStructVarOffset" "(" TypedLLLExp ","  // parent
                                                        AnnVars     ","  // struct fields
                                                        Int         ","  // offset
-                                                       LLLExp      ")"  // index name
+                                                       LLLExp           // index name
+                                                   ")"
  // ------------------------------------------------------------------
     // storage
     rule #addStructVarOffset(@tlll(_, BASELOC, @locattr(@storage, MUTABLE)),
-                             %annvar(FIELDNAME, FIELDT) ANNVARS, OFFSET,
-                             INDEXNAME)
+                             %annvar(INDEXNAME:Id, FIELDT) ANNVARS, OFFSET:Int,
+                             INDEXNAME:Id)
         => @tlll(FIELDT, $add($sha3_32(BASELOC), OFFSET), @locattr(@storage, MUTABLE))
-      requires INDEXNAME ==K FIELDNAME
+
 
     rule #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@storage, MUTABLE)),
-                             %annvar(FIELDNAME, FIELDT) ANNVARS, OFFSET,
+                             %annvar(FIELDNAME:Id, FIELDT:Type) ANNVARS, OFFSET,
                              INDEXNAME)
         => #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@storage, MUTABLE)),
                                ANNVARS, OFFSET +Int 1, INDEXNAME)
@@ -3880,10 +3897,9 @@ module VIPER-LLL
 
     // storage prehashed
     rule #addStructVarOffset(@tlll(_, BASELOC, @locattr(@storage_prehashed, MUTABLE)),
-                             %annvar(FIELDNAME, FIELDT) ANNVARS, OFFSET,
+                             %annvar(INDEXNAME:Id, FIELDT) ANNVARS, OFFSET,
                              INDEXNAME)
         => @tlll(FIELDT, $add(BASELOC, OFFSET), @locattr(@storage, MUTABLE))
-      requires INDEXNAME ==K FIELDNAME
 
     rule #addStructVarOffset(@tlll(BASET, BASELOC, @locattr(@storage_prehashed, MUTABLE)),
                              %annvar(FIELDNAME, FIELDT) ANNVARS, OFFSET,
