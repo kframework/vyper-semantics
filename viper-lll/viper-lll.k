@@ -665,36 +665,41 @@ module VIPER-LLL
                                       ")"                         [strict(2)]
  // ---------------------------------------------------------------------------
     rule #assign(V, @tlll(T, CODE, EXPRATTR))
-        => #mkSetter(#getTarget(V, #lookupOrNewVar(V, T)),
+        => #assignImpl(#getTarget(V, #lookupOrNewVar(V, T)),
                       @tlll(T, CODE, EXPRATTR))
-      requires notBool T ==K %NoneType
+      requires T =/=K %NoneType
 
 
-    syntax CTypedLLLExp  ::= "#getTarget" "(" Var "," CTypedLLLExp ")"  [strict(2)]
-    syntax CTypedLLLExp  ::= "#getTargetAux" "(" TypedLLLExp ")"
+    /*  Checks that var is not used in a loop, then makes some more checks inside #getTargetAux(), 
+        then rewrites into arg 2*/
+    syntax CTypedLLLExp  ::= "#getTarget" "(" Var ","       //raw var 
+                                              CTypedLLLExp  //same var compiled to TypedLLLExp. 
+                                          ")"  [strict(2)]
  // -------------------------------------------------------------------------------
-    rule <k> #getTarget(%var(NAME), TCODE)
+    rule <k> #getTarget(%var(NAME), _)
             => #exception("Altering iterator which is in use!") ... </k>
-         <forvar> FORVARS </forvar>
-      requires NAME in FORVARS
+         <forvar>... SetItem(NAME) ...</forvar>
 
-    rule <k> #getTarget(%var(NAME), TCODE) => #getTargetAux(TCODE) ... </k>
+    rule <k> #getTarget(%var(NAME), TCODE:TypedLLLExp) => #getTargetAux(TCODE) ... </k>
          <forvar> FORVARS </forvar>
       requires notBool NAME in FORVARS
 
-    rule #getTarget(%svar(NAME), TCODE) => #getTargetAux(TCODE)
+    rule #getTarget(%svar(_), TCODE:TypedLLLExp) => #getTargetAux(TCODE)
 
-    rule #getTarget(%attribute(V, FIELD), TCODE) => #getTargetAux(TCODE)
+    rule #getTarget(%attribute(_,_), TCODE:TypedLLLExp) => #getTargetAux(TCODE)
 
-    rule <k> #getTarget(%subscript(V, INDEX), TCODE)
+    rule <k> #getTarget(%subscript(V, _), _)
             => #exception("Altering list while being iterated!") ... </k>
-         <inLoop> INLOOP </inLoop>
-      requires V in INLOOP
+         <inLoop>... SetItem(V) ...</inLoop>
 
-    rule <k> #getTarget(%subscript(V, INDEX), TCODE) => #getTargetAux(TCODE) ... </k>
+    rule <k> #getTarget(%subscript(V, _), TCODE) => #getTargetAux(TCODE) ... </k>
          <inLoop> INLOOP </inLoop>
       requires notBool V in INLOOP
 
+
+    //Performs a number of checks then rewrites into the argument.
+    syntax CTypedLLLExp  ::= "#getTargetAux" "(" TypedLLLExp ")"
+ // -------------------------------------------------------------------------------
     rule <k> #getTargetAux(@tlll(T, LOC, @locattr(TARGET, MUTABLE)))
             => #ifThen(TARGET ==K @storage andBool CONSTANT ==K true,
                        #exception("Cannot modify storage inside a constant function!"))
@@ -705,36 +710,37 @@ module VIPER-LLL
          <constant> CONSTANT </constant>
 
 
-    // Assignment expression: V = E.
-    syntax CLLLExps  ::= "#mkSetter" "(" CTypedLLLExp  /*left variable loc*/  ","
-                                         CTypedLLLExp /*right compiled Expr*/ ")"  [seqstrict]
+    /*  Assignment expression: V = E. 
+        After all checks have been performed and memory was allocated. */
+    syntax CLLLExps  ::= "#assignImpl" "(" CTypedLLLExp  /*left variable loc*/   ","
+                                           CTypedLLLExp  /*right compiled Expr*/ ")"  [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #mkSetter(@tlll(LT, LOC, LOCATTR), RTCODE)
+    rule #assignImpl(@tlll(LT, LOC, LOCATTR), RTCODE)
         => #mkSetterBase(@tlll(LT, LOC, LOCATTR),
                          #baseTypeConvert(RTCODE, LT))
       requires isBaseType(LT)
 
-    rule #mkSetter(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+    rule #assignImpl(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
         => #ifThen(notBool(isByteArrayType(RT)),
                    #exception("Setter type mismatch: left side is byte array but right side is not."))
         ~> #mkSetterBytesT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
       requires isByteArrayType(LT)
 
     // Can't copy mappings
-    rule #mkSetter(@tlll(LT, LOC, LOCATTR), RTCODE)
+    rule #assignImpl(@tlll(LT, LOC, LOCATTR), RTCODE)
         => #exception("Cannot copy mappings; can only copy individual elements.")
       requires isMappingType(LT)
 
-    rule #mkSetter(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+    rule #assignImpl(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
         => #ifThen(notBool(isListType(RT)),
                    #exception("Setter type mismatch: left side is array but right side is not."))
-        ~> #mkSetterListT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+        ~> #assignList(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
       requires isListType(LT)
 
-    rule #mkSetter(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+    rule #assignImpl(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
         => #ifThen(notBool(isStructType(RT)),
                    #exception("Setter type mismatch: left side is struct but right side is not."))
-        ~> #mkSetterStructT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+        ~> #assignStruct(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
       requires isStructType(LT)
 
 
@@ -754,158 +760,161 @@ module VIPER-LLL
     rule #mkSetterBytesT(LTCODE, RTCODE) => #mkByteArrayCopier(LTCODE, RTCODE)
 
 
-    // List
-    syntax CLLLExps  ::= "#mkSetterListT" "(" TypedLLLExp "," TypedLLLExp ")"
+    // foo = [1, 2, 3] : Assign entire lists.
+    syntax CLLLExps  ::= "#assignList" "(" TypedLLLExp "," TypedLLLExp ")"
 
-    syntax CLLLExps  ::= "#mkSetterListTAux" "(" TypedLLLExp ","  // left
-                                                 TypedLLLExp ","  // left token
-                                                 TypedLLLExp ")"  // right
+    syntax CLLLExps  ::= "#assignListAux" "(" TypedLLLExp ","  // left
+                                              TypedLLLExp ","  // left token
+                                              TypedLLLExp      // right
+                                          ")"
  // ------------------------------------------------------------
-    rule #mkSetterListT(@tlll(LT, LCODE, @locattr(LTARGET, LMUTABLE)),
+    rule #assignList(@tlll(LT, LCODE, @locattr(LTARGET, LMUTABLE)),
                         @tlll(RT, RCODE, REXPRATTR))
         => #ifThen(#getListTCount(LT) =/=K #getListTCount(RT),
                    #exception("Mismatched number of elements in left and right side arrays."))
         ~> #ifThenElse(LTARGET ==K @storage,
-                       #mkSetterListTAux(@tlll(LT, $sha3_32(LCODE), @locattr(@storage_prehashed, LMUTABLE)),
-                                         @tlll(LT, $_L, @locattr(@storage_prehashed, LMUTABLE)),
-                                         @tlll(RT, RCODE, REXPRATTR)),
-                       #mkSetterListTAux(@tlll(LT, LCODE, @locattr(LTARGET, LMUTABLE)),
-                                         @tlll(LT, $_L, @locattr(LTARGET, LMUTABLE)),
-                                         @tlll(RT, RCODE, REXPRATTR)))
+                       #assignListAux(@tlll(LT, $sha3_32(LCODE), @locattr(@storage_prehashed, LMUTABLE)),
+                                      @tlll(LT, $_L, @locattr(@storage_prehashed, LMUTABLE)),
+                                      @tlll(RT, RCODE, REXPRATTR)),
+                       #assignListAux(@tlll(LT, LCODE, @locattr(LTARGET, LMUTABLE)),
+                                      @tlll(LT, $_L, @locattr(LTARGET, LMUTABLE)),
+                                      @tlll(RT, RCODE, REXPRATTR)))
 
-    rule #mkSetterListTAux(@tlll(LT, LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, REXPRATTR))
-        => #mkSetterListTLiteral(LT, LCODE, LTTOKENCODE, 0, RCODE, .LLLExps)
+    rule #assignListAux(@tlll(LT, LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, REXPRATTR))
+        => #assignListLiteral(LT, LCODE, LTTOKENCODE, 0, RCODE, .LLLExps)
       requires isMultiLLLExp(RCODE)
 
-    rule #mkSetterListTAux(@tlll(LT, LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
-        => #mkSetterListTVar(LT, LCODE, LTTOKENCODE, 0, RCODE,
-                             @tlll(RT, $_R, RLOCATTR), .LLLExps)
+    rule #assignListAux(@tlll(LT:Type, LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
+        => #assignListVar(LT, LCODE, LTTOKENCODE, 0, RCODE,
+                          @tlll(RT, $_R, RLOCATTR), .LLLExps)
       requires notBool isMultiLLLExp(RCODE)
 
 
-    syntax CLLLExps  ::= "#mkSetterListTLiteral" "(" Type         ","  // left list type
-                                                     LLLExp       ","  // left code
-                                                     TypedLLLExp  ","  // left token
-                                                     Int          ","  // index
-                                                     LLLExp       ","  // right code
-                                                     LLLExps      ")"  // result code
+    syntax CLLLExps  ::= "#assignListLiteral" "(" Type         ","  // left list type
+                                                  LLLExp       ","  // left code
+                                                  TypedLLLExp  ","  // left token
+                                                  Int          ","  // index
+                                                  LLLExp       ","  // right code
+                                                  LLLExps           // result code
+                                              ")"
  // -------------------------------------------------------------------------------
-    rule #mkSetterListTLiteral(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, $multi(TEXPR TEXPRS), RESULTCODE)
-        => #mkSetter(#lookupVarElement(LTTOKENCODE, @tlll(%num, INDEX, @none)), TEXPR)
-        ~> #mkSetterListTLiteral(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, $multi(TEXPRS), RESULTCODE)
+    rule #assignListLiteral(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, $multi(TEXPR TEXPRS), RESULTCODE)
+        => #assignImpl(#lookupVarElement(LTTOKENCODE, @tlll(%num, INDEX, @none)), TEXPR)
+        ~> #assignListLiteral(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, $multi(TEXPRS), RESULTCODE)
       requires INDEX <Int N
 
-    rule #mkSetterListTLiteral(%listT(SUBTYPE, N), LCODE, _, INDEX, _, RESULTCODE)
+    rule #assignListLiteral(%listT(SUBTYPE, N), LCODE, _, INDEX, _, RESULTCODE)
         => $with($_L, LCODE, $%seq(RESULTCODE)),.LLLExps
       requires INDEX ==Int N
 
-    rule CODE:LLLExps ~> #mkSetterListTLiteral(LT, LCODE, LTTOKENCODE, INDEX, RCODE, RESULTCODE)
-        => #mkSetterListTLiteral(LT, LCODE, LTTOKENCODE, INDEX +Int 1, RCODE, RESULTCODE ++LLL CODE)
+    rule CODE:LLLExps ~> #assignListLiteral(LT, LCODE, LTTOKENCODE, INDEX, RCODE, RESULTCODE)
+        => #assignListLiteral(LT, LCODE, LTTOKENCODE, INDEX +Int 1, RCODE, RESULTCODE ++LLL CODE)
 
 
-    syntax CLLLExps  ::= "#mkSetterListTVar" "(" Type        ","  // left list type
-                                                 LLLExp      ","  // left code
-                                                 TypedLLLExp ","  // left token
-                                                 Int         ","  // index
-                                                 LLLExp      ","  // right code
-                                                 TypedLLLExp ","  // right token
-                                                 LLLExps     ")"  // result code
+    syntax CLLLExps  ::= "#assignListVar" "(" Type        ","  // left list type
+                                              LLLExp      ","  // left code
+                                              TypedLLLExp ","  // left token
+                                              Int         ","  // index
+                                              LLLExp      ","  // right code
+                                              TypedLLLExp ","  // right token
+                                              CLLLExps         // result code
+                                          ")"           [strict(7)]
   // --------------------------------------------------------------------------------
-     rule #mkSetterListTVar(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, RCODE, RTTOKENCODE, RESULTCODE)
-         => #mkSetter(#lookupVarElement(LTTOKENCODE, @tlll(%num, INDEX, @none)),
-                      #lookupVarElement(RTTOKENCODE, @tlll(%num, INDEX, @none)))
-         ~> #mkSetterListTVar(%listT(SUBTYPE, N), LCODE, LTTOKENCODE, INDEX, RCODE, RTTOKENCODE, RESULTCODE)
+    rule #assignListVar(%listT(SUBTYPE, N:Int), LCODE, LTOKEN:TypedLLLExp, INDEX => INDEX +Int 1,
+                        RCODE, RTOKEN:TypedLLLExp,
+                        RESULTCODE:LLLExps
+                        => #seq(RESULTCODE,
+                                #assignImpl(#lookupVarElement(LTOKEN, @tlll(%num, INDEX, @none)),
+                                            #lookupVarElement(RTOKEN, @tlll(%num, INDEX, @none))))
+         )
        requires INDEX <Int N
 
-     rule #mkSetterListTVar(%listT(SUBTYPE, N), LCODE, _, INDEX, RCODE, _, RESULTCODE)
+    rule #assignListVar(%listT(SUBTYPE, N:Int), LCODE, _, INDEX, RCODE, _, RESULTCODE:LLLExps)
          => $with($_L, LCODE, $with($_R, RCODE, $%seq(RESULTCODE))),.LLLExps
        requires INDEX ==Int N
 
-     rule CODE:LLLExps ~> #mkSetterListTVar(LT, LCODE, LTTOKENCODE, INDEX, RCODE, RTTOKENCODE, RESULTCODE)
-         => #mkSetterListTVar(LT, LCODE, LTTOKENCODE, INDEX +Int 1, RCODE, RTTOKENCODE, RESULTCODE ++LLL CODE)
-
 
     // Struct
-    syntax CLLLExps  ::= "#mkSetterStructT" "(" TypedLLLExp "," TypedLLLExp ")"
+    syntax CLLLExps  ::= "#assignStruct" "(" TypedLLLExp "," TypedLLLExp ")"
 
-    syntax CLLLExps  ::= "#mkSetterStructTAux" "(" TypedLLLExp ","  // left
+    syntax CLLLExps  ::= "#assignStructAux" "(" TypedLLLExp ","  // left
                                                    TypedLLLExp ","  // left token
                                                    TypedLLLExp ")"  // right
  // ---------------------------------------------------------------------------
-    rule #mkSetterStructT(@tlll(%structT(LANNVARS), LCODE, @locattr(LTARGET, LMUTABLE)),
+    rule #assignStruct(@tlll(%structT(LANNVARS), LCODE, @locattr(LTARGET, LMUTABLE)),
                           @tlll(%structT(RANNVARS), RCODE, REXPRATTR))
         => #checkStructFieldNameMatch(LANNVARS, RANNVARS)
         ~> #ifThenElse(LTARGET ==K @storage,
-                       #mkSetterStructTAux(@tlll(%structT(LANNVARS), $sha3_32(LCODE), @locattr(@storage_prehashed, LMUTABLE)),
+                       #assignStructAux(@tlll(%structT(LANNVARS), $sha3_32(LCODE), @locattr(@storage_prehashed, LMUTABLE)),
                                            @tlll(%structT(LANNVARS), $_L, @locattr(@storage_prehashed, LMUTABLE)),
                                            @tlll(%structT(RANNVARS), RCODE, REXPRATTR)),
-                       #mkSetterStructTAux(@tlll(%structT(LANNVARS), LCODE, @locattr(LTARGET, LMUTABLE)),
+                       #assignStructAux(@tlll(%structT(LANNVARS), LCODE, @locattr(LTARGET, LMUTABLE)),
                                            @tlll(%structT(LANNVARS), $_L, @locattr(LTARGET, LMUTABLE)),
                                            @tlll(%structT(RANNVARS), RCODE, REXPRATTR)))
 
-    rule #mkSetterStructTAux(@tlll(%structT(LANNVARS), LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, REXPRATTR))
-        => #mkSetterStructTLiteral(LANNVARS, LCODE, LTTOKENCODE, RCODE, .LLLExps)
+    rule #assignStructAux(@tlll(%structT(LANNVARS), LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, REXPRATTR))
+        => #assignStructLiteral(LANNVARS, LCODE, LTTOKENCODE, RCODE, .LLLExps)
       requires isMultiLLLExp(RCODE)
 
-    rule #mkSetterStructTAux(@tlll(%structT(LANNVARS), LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
-        => #mkSetterStructTVar(LANNVARS, LCODE, LTTOKENCODE, RCODE,
+    rule #assignStructAux(@tlll(%structT(LANNVARS), LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
+        => #assignStructVar(LANNVARS, LCODE, LTTOKENCODE, RCODE,
                                @tlll(RT, $_R, RLOCATTR), .LLLExps)
       requires notBool isMultiLLLExp(RCODE)
 
 
     syntax KItem  ::= "#checkStructFieldNameMatch" "(" AnnVars "," AnnVars ")"
  // -----------------------------------------------------------------------
+    rule #checkStructFieldNameMatch((%annvar(NAME, _) LANNVARS => LANNVARS),
+                                    (%annvar(NAME, _) RANNVARS => RANNVARS))
+
     rule #checkStructFieldNameMatch(.AnnVars, .AnnVars) => .
 
-    rule #checkStructFieldNameMatch(%annvar(LNAME, _) LANNVARS, %annvar(RNAME, _) RANNVARS)
-        => #checkStructFieldNameMatch(LANNVARS, RANNVARS)
-      requires LNAME ==K RNAME
-
-    rule #checkStructFieldNameMatch(%annvar(LNAME, _) LANNVARS, %annvar(RNAME, _) RANNVARS)
-        => #exception("Keys don't match for structs.")
+    rule (. => #exception("Keys don't match for structs."))
+         ~> #checkStructFieldNameMatch(%annvar(LNAME, _) LANNVARS, %annvar(RNAME, _) RANNVARS)
       requires LNAME =/=K RNAME
 
-    rule #checkStructFieldNameMatch(%annvar(LNAME, _) LANNVARS, .AnnVars)
-        => #exception("Keys don't match for structs.")
+    rule (. => #exception("Keys don't match for structs."))
+         ~> #checkStructFieldNameMatch(%annvar(_,_) _, .AnnVars)
 
-    rule #checkStructFieldNameMatch(.AnnVars, %annvar(RNAME, _) RANNVARS)
-        => #exception("Keys don't match for structs.")
+    rule (. => #exception("Keys don't match for structs."))
+         ~> #checkStructFieldNameMatch(.AnnVars, %annvar(_,_) _)
 
 
-    syntax CLLLExps  ::= "#mkSetterStructTLiteral" "(" AnnVars     ","  // left struct fields
-                                                       LLLExp      ","  // left code
-                                                       TypedLLLExp ","  // left token
-                                                       LLLExp      ","  // right code
-                                                       LLLExps     ")"  // result code
+    syntax CLLLExps  ::= "#assignStructLiteral" "(" AnnVars     ","  // left struct fields
+                                                    LLLExp      ","  // left code
+                                                    TypedLLLExp ","  // left token
+                                                    LLLExp      ","  // right code
+                                                    LLLExps          // result code
+                                                ")"
  // ------------------------------------------------------------------
-    rule #mkSetterStructTLiteral(.AnnVars, LCODE, _, _, RESULTCODE)
+    rule #assignStructLiteral(.AnnVars, LCODE, _, _, RESULTCODE)
         => $with($_L, LCODE, $%seq(RESULTCODE)), .LLLExps
 
-    rule #mkSetterStructTLiteral(%annvar(NAME, T) ANNVARS, LCODE, LTTOKENCODE, $multi(TEXPR TEXPRS), RESULTCODE)
-        => #mkSetter(#lookupVarElement(LTTOKENCODE, @tlll(%void, NAME, @none)), TEXPR)
-        ~> #mkSetterStructTLiteral(ANNVARS, LCODE, LTTOKENCODE, $multi(TEXPRS), RESULTCODE)
+    rule #assignStructLiteral(%annvar(NAME, T) ANNVARS, LCODE, LTTOKENCODE, $multi(TEXPR TEXPRS), RESULTCODE)
+        => #assignImpl(#lookupVarElement(LTTOKENCODE, @tlll(%void, NAME, @none)), TEXPR)
+        ~> #assignStructLiteral(ANNVARS, LCODE, LTTOKENCODE, $multi(TEXPRS), RESULTCODE)
 
-    rule CODE:LLLExps ~> #mkSetterStructTLiteral(ANNVARS, LCODE, LTTOKENCODE, RCODE, RESULTCODE)
-        => #mkSetterStructTLiteral(ANNVARS, LCODE, LTTOKENCODE, RCODE, RESULTCODE ++LLL CODE)
+    rule CODE:LLLExps ~> #assignStructLiteral(ANNVARS, LCODE, LTTOKENCODE, RCODE, RESULTCODE)
+        => #assignStructLiteral(ANNVARS, LCODE, LTTOKENCODE, RCODE, RESULTCODE ++LLL CODE)
 
 
-    syntax CLLLExps  ::= "#mkSetterStructTVar" "(" AnnVars     ","  // left struct fields
+    syntax CLLLExps  ::= "#assignStructVar" "(" AnnVars     ","  // left struct fields
                                                    LLLExp      ","  // left code
                                                    TypedLLLExp ","  // left token
                                                    LLLExp      ","  // right code
                                                    TypedLLLExp ","  // right token
                                                    LLLExps     ")"  // result code
  // -------------------------------------------------------------
-    rule #mkSetterStructTVar(.AnnVars, LCODE, _, RCODE, _, RESULTCODE)
+    rule #assignStructVar(.AnnVars, LCODE, _, RCODE, _, RESULTCODE)
         => $with($_L, LCODE, $with($_R, RCODE, $%seq(RESULTCODE))),.LLLExps
 
-    rule #mkSetterStructTVar(%annvar(NAME, T) ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
-        => #mkSetter(#lookupVarElement(LTTOKENCODE, @tlll(%void, NAME, @none)),
+    rule #assignStructVar(%annvar(NAME, T) ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
+        => #assignImpl(#lookupVarElement(LTTOKENCODE, @tlll(%void, NAME, @none)),
                      #lookupVarElement(RTTOKENCODE, @tlll(%void, NAME, @none)))
-        ~> #mkSetterStructTVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
+        ~> #assignStructVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
 
-    rule CODE:LLLExps ~> #mkSetterStructTVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
-        => #mkSetterStructTVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE ++LLL CODE)
+    rule CODE:LLLExps ~> #assignStructVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
+        => #assignStructVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE ++LLL CODE)
 
 
 // Aug Assignment
@@ -1273,7 +1282,7 @@ module VIPER-LLL
                                                  ")"      [strict(1)]
  // -----------------------------------------------------------------
     rule #returnListTByCopy(@tlll(T, LOC, LOCATTR), TCODE, RETURNTYPE)
-        => #returnListTByCopyAux(#mkSetter(@tlll(T, LOC, LOCATTR), TCODE),
+        => #returnListTByCopyAux(#assignImpl(@tlll(T, LOC, LOCATTR), TCODE),
                                LOC, RETURNTYPE)
 
     rule #returnListTByCopyAux(SETTER, LOC, RETURNTYPE)
@@ -1792,14 +1801,16 @@ module VIPER-LLL
 
     rule #assignNone(@tlll(T:Type, LOC:LLLExp, @locattr(@memory, _)))
          => $with($_opos, LOC,
-                $repeat(@freeLoopIndexPos, 0, (#sizeOfType(T) +Int 31) /Int 32,
+                $repeat(@freeLoopIndexPos, 0, #sizeOfType(T) /Int 32,
                         $mstore($add($_opos, $mul(32, $mload(@freeLoopIndexPos))),
                                 0))),.LLLExps
 
+    //WARN: Storage nullification will only work for first level of composite data types.
+    //Are None assignments allowed for multi-level composites? Like:  a:num[2][2] a=None
     rule #assignNone(@tlll(T:Type, LOC:LLLExp, @locattr(@storage, _)))
          => $with($_opos, $sha3_32(LOC),
                 $repeat(@freeLoopIndexPos, 0, #sizeOfType(T) /Int 32,
-                        $sstore($add($_opos, $mul($mload(@freeLoopIndexPos), 32)),
+                        $sstore($add($_opos, $mload(@freeLoopIndexPos)),
                                 0))),.LLLExps
 
 
@@ -2378,7 +2389,7 @@ module VIPER-LLL
                                                  TypedLLLExp  ")"  // typed arg value
  // -------------------------------------------------------------
     rule #packArgumentBase(@tlll(PARAMT, LOC, LOCATTR), TARGCODE)
-        => #mkSetter(@tlll(PARAMT, LOC, LOCATTR), TARGCODE)
+        => #assignImpl(@tlll(PARAMT, LOC, LOCATTR), TARGCODE)
 
 
     syntax CLLLExps  ::= "#packArgumentBytesT" "(" TypedLLLExp  ","  // typed arg loc

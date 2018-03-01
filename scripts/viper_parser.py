@@ -52,6 +52,21 @@ def parseList(nodeList, parseElement: types.FunctionType, separator, initSeparat
     return rez if rez != "" else emptyCase
 
 
+def parseDict(nodeDict: ast.Dict, parseElement: types.FunctionType, separator, initSeparator="", emptyCase=""):
+    rez = ""
+    first = True
+    for i in range(0, len(nodeDict.keys)):
+        key = nodeDict.keys[i]
+        value = nodeDict.values[i]
+        if first:
+            first = False
+            rez += initSeparator
+        else:
+            rez += separator
+        rez += parseElement(key, value)
+    return rez if rez != "" else emptyCase
+
+
 # syntax BaseType      ::= "%bool"
 #                         | NumericType | "%num256"  | "%signed256"
 #                         | "%bytes32" | "%address"
@@ -537,23 +552,16 @@ def parseAugAssignOp(op: ast.operator):
 #
 # ex: %annvar(a, %listT(%num, 5))
 def parseAnnVar(stmt: ast.AnnAssign):
-    return parseAnnVarAux(stmt.target, stmt.annotation)
+    return parseAnnVarKeyValue(stmt.target, stmt.annotation)
 
 
-def parseAnnVarAux(key, value):
+def parseAnnVarKeyValue(key, value):
     return "%annvar({}, {})".format(key.id, parseType(value))
 
 
 # syntax AnnVars ::= List{AnnVar, ""}
 def parseAnnVars(annVars: ast.Dict):
-    rez = ""
-    annVars_zipped = zip(annVars.keys, annVars.values)
-    annVars_sorted = sorted(annVars_zipped, key=lambda entry: entry[0].id)
-    for key, value in annVars_sorted:
-        if rez != "":
-            rez += " "
-        rez += parseAnnVarAux(key, value)
-    return rez
+    return parseDict(annVars, parseAnnVarKeyValue, " ")
 
 
 # syntax Stmt     ::= AnnVar
