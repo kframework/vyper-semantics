@@ -2742,6 +2742,7 @@ module VIPER-LLL
                            .LLLExps)
                        ), .LLLExps)
                      )
+      requires SIZE >Int 0
 
     //Appends just one argument to the already allocated result. From storage.
     rule #appendByteArray(@tlll(%bytesT(_), REZLoc:Int, _),
@@ -2759,6 +2760,10 @@ module VIPER-LLL
                            .LLLExps)
                        ), .LLLExps)
                      )
+      requires SIZE >Int 0
+
+    //appending empty string results in no action
+    rule #appendByteArray(_, @tlll(%bytesT(0), _,_) Rest:TypedLLLExps => Rest, _)
 
     rule #appendByteArray(@tlll(%bytesT(RezSize:Int), REZLoc:Int, LA:LocAttr), .TypedLLLExps, CODE:LLLExp)
          => @tlll(%bytesT(RezSize), $%seq(CODE, REZLoc), LA)
