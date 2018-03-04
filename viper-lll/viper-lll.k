@@ -2847,20 +2847,19 @@ module VIPER-LLL
  // ------------------------------------------------------------------------
     rule #compileExpr(%as_wei_value(EXPR, UNIT)) => #asWeiValue(EXPR, #convertToWei(UNIT))
 
-    rule #asWeiValue(NUM, DENOMINATION)
+    rule #asWeiValue(NUM:Const, DENOMINATION)
         => #asWeiValueNumber(NUM, DENOMINATION)
-      requires isInt(NUM) orBool isFixedPoint(NUM)
 
     rule #asWeiValue(EXPR, DENOMINATION)
         => #asWeiValueLLLExp(#compileValueExpr(EXPR), DENOMINATION)
-      requires notBool(isInt(EXPR) orBool isFixedPoint(EXPR))
+      requires notBool isConst(EXPR)
 
 
-    syntax CTypedLLLExp  ::= "#asWeiValueNumber" "(" Expr         "," Int ")"
+    syntax CTypedLLLExp  ::= "#asWeiValueNumber" "(" Const        "," Int ")"
     syntax CTypedLLLExp  ::= "#asWeiValueLLLExp" "(" CTypedLLLExp "," Int ")"  [strict(1)]
  // --------------------------------------------------------------------------------------
-    rule #asWeiValueNumber(NUM:Int, DENOMINATION)
-        => @tlll(%unitT(%num, %wei |-> 1, false), NUM, @none)
+    rule #asWeiValueNumber(NUM:Int, DENOMINATION:Int)
+        => @tlll(%unitT(%num, %wei |-> 1, false), NUM *Int DENOMINATION, @none)
 
     rule #asWeiValueNumber(%fixed10(NUM, DEN), DENOMINATION)
         => #ifThen((DENOMINATION modInt DEN) =/=Int 0,

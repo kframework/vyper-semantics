@@ -21,6 +21,16 @@ def get_original_if_0x_prefixed(expr):
     return context_slice[:t + 2]
 
 
+def get_number_as_fraction(expr):
+    context_slice = inputLines[expr.lineno - 1][expr.col_offset:]
+    t = 0
+    while t < len(context_slice) and context_slice[t] in '0123456789.':
+        t += 1
+    top = int(context_slice[:t].replace('.', ''))
+    bottom = 1 if '.' not in context_slice[:t] else 10 ** (t - context_slice[:t].index('.') - 1)
+    return top, bottom
+
+
 def resolve_negative_literals(_ast):
     class RewriteUnaryOp(ast.NodeTransformer):
         def visit_UnaryOp(self, node):
@@ -219,6 +229,7 @@ def parseParam(arg: ast.arg):
 
 # syntax Params   ::= List{Param, ""}
 def parseParams(args: List[ast.arg]):
+    # noinspection PyTypeChecker
     return parseList(args, parseParam, " ")
 
 
@@ -256,14 +267,9 @@ def parseVar(var):
 DECIMAL_DIVISOR = 10000000000
 
 
-def parseFixed10Const(node):
-    # num = Decimal(node.n) - leads to weird digits many places after "." in simple numbers like 2.1
-    num = node.n
-    divisor = 1
-    while num % 1 != 0 and divisor < DECIMAL_DIVISOR:
-        num *= 10
-        divisor *= 10
-    return "%fixed10({0:.0f}, {1})".format(num, divisor)
+def parseFixed10Const(node: ast.Num):
+    num, den = get_number_as_fraction(node)
+    return "%fixed10({}, {})".format(num, den)
 
 
 # syntax Const    ::= Int
