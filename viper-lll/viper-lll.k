@@ -2965,6 +2965,49 @@ module VIPER-LLL
                             $exp(CODE1, CODE2),.LLLExps), @none)
 
 
+    // num256_mod
+    syntax CTypedLLLExp  ::= "#num256Mod" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #compileExpr(%num256_mod(EXPR1, EXPR2)) => #num256Mod(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+
+    // ['mod', args[0], args[1]]
+    rule #num256Mod(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
+        => @tlll(%num256, $mod(CODE1, CODE2), @none)
+
+
+    // num256_addmod
+    syntax CTypedLLLExp  ::= "#num256Addmod" "(" CTypedLLLExp "," CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #compileExpr(%num256_addmod(EXPR1, EXPR2, EXPR3)) 
+         => #num256Addmod(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2), #compileValueExpr(EXPR3))
+
+    /*return LLLnode.from_list(['seq',
+                                  ['assert', ['or', ['iszero', args[1]], ['gt', ['add', args[0], args[1]], args[0]]]],
+                                  ['addmod', args[0], args[1], args[2]]], typ=BaseType('num256'), pos=getpos(expr))    
+    */
+    rule #num256Addmod(@tlll(%num256, CODE0, _), @tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
+        => @tlll(%num256, $%seq(
+                            $assert($or($iszero(CODE1), $gt($add(CODE0, CODE1), CODE0))),
+                            $addmod(CODE0, CODE1, CODE2),.LLLExps), @none)
+                            
+                            
+    // num256_mulmod
+    syntax CTypedLLLExp  ::= "#num256Mulmod" "(" CTypedLLLExp "," CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #compileExpr(%num256_mulmod(EXPR1, EXPR2, EXPR3))
+         => #num256Mulmod(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2), #compileValueExpr(EXPR3))
+
+    /*return LLLnode.from_list(['seq',
+                            ['assert', ['or', ['iszero', args[0]],
+                            ['eq', ['div', ['mul', args[0], args[1]], args[0]], args[1]]]],
+                            ['mulmod', args[0], args[1], args[2]]], typ=BaseType('num256'), pos=getpos(expr))    
+    */
+    rule #num256Mulmod(@tlll(%num256, CODE0, _), @tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
+        => @tlll(%num256, $%seq($assert($or($iszero(CODE0),
+                                            $eq($div($mul(CODE0, CODE1), CODE0), CODE1))),
+                                $mulmod(CODE0, CODE1, CODE2)), @none)
+
+
     // num256_gt
     syntax CTypedLLLExp  ::= "#num256Gt" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // -----------------------------------------------------------------------------------------
