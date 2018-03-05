@@ -1580,15 +1580,7 @@ module VIPER-LLL
 
     syntax CLLLExps  ::= "#icallNoReturn" "(" Exprs "," FuncRecord ")"
  // ----------------------------------------------------------------------
-    rule #stmtExpr(%icall(_, ARGS:Arguments => toExprs(ARGS)))
-      when notBool isExprs(ARGS)
-
-    syntax Arguments ::= "toExprs" "(" Arguments ")"                        [function]
-    rule toExprs(EXP:Expr ARGS:Arguments) => EXP toExprs(ARGS)
-    rule toExprs(%kwarg(_, EXP:Expr) ARGS:Arguments) => EXP toExprs(ARGS)
-    rule toExprs(.Arguments) => .Exprs
-
-    rule <k> #stmtExpr(%icall(FNAME, ArgExprs:Exprs)) => #icallNoReturn(ArgExprs, FUNCRECORD) ... </k>
+    rule <k> #stmtExpr(%icall(FNAME, EXPRS)) => #icallNoReturn(EXPRS, FUNCRECORD) ... </k>
          <internalSig> FNAME |-> FUNCRECORD SIGS </internalSig>
 
     // TODO: Is it necessary to enforce that functions cannot call functions defined later than themselves?
@@ -1676,10 +1668,9 @@ module VIPER-LLL
 
 
     // Compile an expression that results in a value
-    syntax CTypedLLLExp  ::= "#compileValueExpr"    "(" Argument ")"
+    syntax CTypedLLLExp  ::= "#compileValueExpr"    "(" Expr ")"
     syntax CTypedLLLExp  ::= "#compileValueExprAux" "(" CTypedLLLExp ")"  [strict]
  // ------------------------------------------------------------------------------
-    rule #compileValueExpr(%kwarg(_, EXP:Expr) => EXP)
     rule #compileValueExpr(EXPR:Expr) => #compileValueExprAux(#compileExpr(EXPR))
 
     rule #compileValueExprAux(TCODE) => #unwrapLoc(TCODE)
@@ -1697,10 +1688,8 @@ module VIPER-LLL
                        @tlll(T, CODE, EXPRATTR))
 
 
-    syntax CTypedLLLExp  ::= "#compileExpr" "(" Argument ")"
+    syntax CTypedLLLExp  ::= "#compileExpr" "(" Expr ")"
  // ----------------------------------------------------
-
-    rule #compileExpr(%kwarg(_, EXP:Expr) => EXP)
 
 // Number
 // ======
@@ -2578,8 +2567,8 @@ module VIPER-LLL
                                              CTypedLLLExp      // placeholder
                                          ")"      [strict(4)]
  // -----------------------------------------------------------------------------------------------------
-    rule #compileExpr(%slice(ARG:Argument, STARTARG:Argument, LENARG:Argument))
-        => #slice(#compileExpr(ARG), #compileValueExpr(STARTARG), #compileValueExpr(LENARG))
+    rule #compileExpr(%slice(EXPR, STARTEXPR, LENEXPR))
+        => #slice(#compileExpr(EXPR), #compileValueExpr(STARTEXPR), #compileValueExpr(LENEXPR))
 
     rule #slice(@tlll(%bytesT(L), BYTESCODE, EXPRATTR), @tlll(%num, START, _), @tlll(%num, LEN, _))
         => #sliceAux(@tlll(%bytesT(L), BYTESCODE, EXPRATTR), START, LEN,

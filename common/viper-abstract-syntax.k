@@ -89,8 +89,8 @@ module VIPER-ABSTRACT-SYNTAX
                    | "%compareop" "(" CompareOp "," Expr "," Expr ")"
                    | "%boolop"    "(" BoolOp    "," Expr "," Expr ")"
                    | "%unaryop"   "(" UnaryOp   "," Expr ")"
-                   | "%icall"     "(" Id /*func name*/ "," Arguments ")"  // internal contract call
-                   | "%ecall"     "(" Argument /*address*/ "," Id /*func name*/ "," Arguments ")"  // external contract call
+                   | "%icall"     "(" Id /*func name*/ "," Exprs ")"  // internal contract call
+                   | "%ecall"     "(" Expr /*address*/ "," Id /*func name*/ "," Exprs ")"  // external contract call
                    | ReservedExpr
                    | ReservedFunc  // expr dispatch table
 
@@ -123,12 +123,6 @@ module VIPER-ABSTRACT-SYNTAX
 
     syntax StructItem  ::= "%item" "(" Id "," Expr ")"
     syntax StructItems ::= List{StructItem, ""}
-
-    syntax Argument  ::= Expr
-                       | "%kwarg" "(" Id "," Expr ")"
-
-    syntax Arguments ::= List{Argument, ""}
-                       | Exprs
 
     syntax BinOp         ::= "+" | "-" | "*" | "/" | "%" | "**"
 
@@ -200,47 +194,47 @@ module VIPER-ABSTRACT-SYNTAX
                            | "%block.difficulty" | "%block.timestamp" | "%block.coinbase" | "%block.number" | "%block.prevhash"
                            | "%tx.origin"
 
-    syntax ReservedFunc  ::= "%floor"               "(" Argument ")"
-                           | "%decimal"             "(" Argument ")"
-                           | "%as_unitless_number"  "(" Argument ")"
-                           | "%as_num128"           "(" Argument ")"
-                           | "%as_num256"           "(" Argument ")"
-                           | "%as_bytes32"          "(" Argument ")"
-                           | "%slice"               "(" Argument "," Argument "," Argument ")"
-                           | "%len"                 "(" Argument ")"
+    syntax ReservedFunc  ::= "%floor"               "(" Expr ")"
+                           | "%decimal"             "(" Expr ")"
+                           | "%as_unitless_number"  "(" Expr ")"
+                           | "%as_num128"           "(" Expr ")"
+                           | "%as_num256"           "(" Expr ")"
+                           | "%as_bytes32"          "(" Expr ")"
+                           | "%slice"               "(" Expr "," Expr "," Expr ")"
+                           | "%len"                 "(" Expr ")"
                            | "%concat"              "(" Exprs ")"                      //byte arrays concatenation
-                           | "%keccak256"           "(" Argument ")"
-                           | "%method_id"           "(" Argument ")"
-                           | "%ecrecover"           "(" Argument ")"
-                           | "%ecadd"               "(" Argument "," Argument ")"
-                           | "%ecmul"               "(" Argument "," Argument ")"
-                           | "%extract32"           "(" Argument "," Argument "," Type ")"
-                           | "%bytes_to_num"        "(" Argument ")"
-                           | "%as_wei_value"        "(" Argument "," Id   ")"
-                        // | "%raw_call"            "(" Argument "," Argument "," Argument "," Argument "," Argument ")"
-                           | "%RLPlist"             "(" Argument "," Argument ")"
-                           | "%blockhash"           "(" Argument ")"
-                           | "%bitwise_and"         "(" Argument "," Argument ")"
-                           | "%bitwise_or"          "(" Argument "," Argument ")"
-                           | "%bitwise_xor"         "(" Argument "," Argument ")"
-                           | "%bitwise_not"         "(" Argument ")"
-                           | "%num256_add"          "(" Argument "," Argument ")"
-                           | "%num256_sub"          "(" Argument "," Argument ")"
-                           | "%num256_mul"          "(" Argument "," Argument ")"
-                           | "%num256_div"          "(" Argument "," Argument ")"
-                           | "%num256_exp"          "(" Argument "," Argument ")"
-                           | "%num256_mod"          "(" Argument "," Argument ")"
-                           | "%num256_addmod"       "(" Argument "," Argument "," Argument ")"
-                           | "%num256_mulmod"       "(" Argument "," Argument "," Argument ")"
-                           | "%num256_gt"           "(" Argument "," Argument ")"
-                           | "%num256_ge"           "(" Argument "," Argument ")"
-                           | "%num256_lt"           "(" Argument "," Argument ")"
-                           | "%num256_le"           "(" Argument "," Argument ")"
-                           | "%shift"               "(" Argument "," Argument ")"
-                        // | "%create_with_code_of" "(" Argument "," Argument ")"
-                           | "%min"                 "(" Argument "," Argument ")"
-                           | "%max"                 "(" Argument "," Argument ")"
-                           | "%sha3"                "(" Argument ")"
+                           | "%keccak256"           "(" Expr ")"
+                           | "%method_id"           "(" Expr ")"
+                           | "%ecrecover"           "(" Expr ")"
+                           | "%ecadd"               "(" Expr "," Expr ")"
+                           | "%ecmul"               "(" Expr "," Expr ")"
+                           | "%extract32"           "(" Expr "," Expr "," Type ")"
+                           | "%bytes_to_num"        "(" Expr ")"
+                           | "%as_wei_value"        "(" Expr "," Id   ")"
+                        // | "%raw_call"            "(" Expr "," Expr "," Expr "," Expr "," Expr ")"
+                           | "%RLPlist"             "(" Expr "," Expr ")"
+                           | "%blockhash"           "(" Expr ")"
+                           | "%bitwise_and"         "(" Expr "," Expr ")"
+                           | "%bitwise_or"          "(" Expr "," Expr ")"
+                           | "%bitwise_xor"         "(" Expr "," Expr ")"
+                           | "%bitwise_not"         "(" Expr ")"
+                           | "%num256_add"          "(" Expr "," Expr ")"
+                           | "%num256_sub"          "(" Expr "," Expr ")"
+                           | "%num256_mul"          "(" Expr "," Expr ")"
+                           | "%num256_div"          "(" Expr "," Expr ")"
+                           | "%num256_exp"          "(" Expr "," Expr ")"
+                           | "%num256_mod"          "(" Expr "," Expr ")"
+                           | "%num256_addmod"       "(" Expr "," Expr "," Expr ")"
+                           | "%num256_mulmod"       "(" Expr "," Expr "," Expr ")"
+                           | "%num256_gt"           "(" Expr "," Expr ")"
+                           | "%num256_ge"           "(" Expr "," Expr ")"
+                           | "%num256_lt"           "(" Expr "," Expr ")"
+                           | "%num256_le"           "(" Expr "," Expr ")"
+                           | "%shift"               "(" Expr "," Expr ")"
+                        // | "%create_with_code_of" "(" Expr "," Expr ")"
+                           | "%min"                 "(" Expr "," Expr ")"
+                           | "%max"                 "(" Expr "," Expr ")"
+                           | "%sha3"                "(" Expr ")"
 
 
 endmodule

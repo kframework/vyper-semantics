@@ -539,7 +539,7 @@ def parseExprs(exprs, separator=" "):
 #                    | "%kwarg" "(" Id "," Expr ")"
 def parseArg(node):
     if type(node) == ast.keyword:
-        return "%kwarg({}, {})".format(node.arg, parseExpr(node.value))
+        return parseExpr(node.value)
     else:
         return parseExpr(node)
 
