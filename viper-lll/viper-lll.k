@@ -3093,13 +3093,59 @@ module VIPER-LLL
     rule #ifLLLExp(K1, K2, K3) => #if K1 #then K2 #else K3 #fi
 
 
-    // sha3
+    /* sha3
+      impl: functions.py : _sha3
+    */
     syntax CTypedLLLExp  ::= "#sha3" "(" CTypedLLLExp ")"    [strict]
  // -----------------------------------------------------------------------------------------
-    rule #compileExpr(%sha3(EXPR)) => #sha3(#compileValueExpr(EXPR))
+    rule #compileExpr(%sha3(EXPR)) => #sha3(#compileExpr(EXPR))
 
-    rule #sha3(@tlll(%bytes32, CODE, _))
-        => @tlll(%bytes32, $sha3_32(CODE), @none)
+    rule #sha3(@tlll(T:Type, CODE, LocAttr:LLLExpAttr))
+        => #ifThenElse(T ==K %bytes32,
+              @tlll(%bytes32, $sha3_32(CODE), @none),
+              #ifThenElse(isByteArrayType(T),
+                #ifThenElse(#isInMemory(LocAttr),
+                  // ['with', '_sub', sub, ['sha3', ['add', '_sub', 32], ['mload', '_sub']]], typ=BaseType('bytes32')
+                  @tlll(%bytes32,
+                        $with($_sub, CODE, $sha3($add($_sub, 32), $mload($_sub))),
+                        @none),
+                  #ifThenElse(#isStorage(LocAttr),
+                    #sha3_ByteArray_storage(@tlll(T, CODE, LocAttr), #newPlaceholder(T)),
+                    #exception("sha3: Unsupported location.") ~> #sha3(@tlll(T:Type, CODE, LocAttr))
+                  )
+                ),
+                #exception("sha3: unsupported argument type.") ~> #sha3(@tlll(T:Type, CODE, LocAttr))
+              )
+           )
+
+    /* lengetter = LLLnode.from_list(['sload', ['sha3_32', '_sub']], typ=BaseType('num'))
+       placeholder = context.new_placeholder(sub.typ) (already allocated above)
+       placeholder_node = LLLnode.from_list(placeholder, typ=sub.typ, location='memory')
+       copier = make_byte_array_copier(placeholder_node, LLLnode.from_list('_sub', typ=sub.typ, location=sub.location))
+       return:
+        ['with', '_sub', sub, ['seq', copier, ['sha3', ['add', placeholder, 32], lengetter]]], typ=BaseType('bytes32')
+    */
+    syntax CTypedLLLExp  ::= "#sha3_ByteArray_storage" "(" TypedLLLExp  //%sha3 argument code
+                                                       "," CTypedLLLExp //placeholder - allocated temp memory buffer
+                                                       ")"    [strict]
+                           | "#sha3_ByteArray_storageAux" "(" TypedLLLExp   //%sha3 argument code
+                                                          "," TypedLLLExp   //placeholder - allocated temp memory buffer
+                                                          "," CLLLExps      //make_byte_array_copier(...)
+                                                          ")" [strict]
+
+    rule #sha3_ByteArray_storage(@tlll(T:Type, CODE, LocAttr:LLLExpAttr), Placeholder:TypedLLLExp)
+         => #sha3_ByteArray_storageAux(@tlll(T, CODE, LocAttr),
+                                       Placeholder,
+                                       #mkByteArrayCopier(Placeholder, @tlll(T, $_sub, LocAttr)))
+
+    rule #sha3_ByteArray_storageAux(@tlll(_, CODE:LLLExp, _), @tlll(_, PL:LLLExp, _), CopierCODE:LLLExps)
+         => @tlll(%bytes32,
+              $with($_sub, CODE,
+                $%seq(
+                  CopierCODE ++LLL
+                  $sha3($add(PL, 32), $sload($sha3_32($_sub))), .LLLExps
+                )
+              ), @none)
 
 //////////////////////////////////////////////////////////////////////////////
 // Utils
@@ -3142,6 +3188,17 @@ module VIPER-LLL
     rule #isInMemory(@locattr(@storage_prehashed, _)) => false
 
     rule #isInMemory(@none) => false
+
+
+    syntax Bool  ::= "#isStorage" "(" LLLExpAttr ")"    [function]
+ // ---------------------------------------------------------------
+    rule #isStorage(@locattr(@memory, _)) => false
+
+    rule #isStorage(@locattr(@storage, _)) => true
+
+    rule #isStorage(@locattr(@storage_prehashed, _)) => false
+
+    rule #isStorage(@none) => false
 
 
     syntax Bool  ::= "#isNumLiteral" "(" LLLExp ")"  [function]
@@ -3365,6 +3422,8 @@ module VIPER-LLL
 
     rule #sizeOfType(%structT(%annvar(_, T) ANNVARS)) => #sizeOfType(T) +Int #sizeOfType(%structT(ANNVARS))
 
+    syntax Type  ::= "#getType" "(" TypedLLLExp ")"     [function]
+    rule #getType(@tlll(T,_,_)) => T
 
     syntax KItem  ::= "#canonicalizeType" "(" Type "," Bool /*event?*/ ")"
  // ------------------------------------------------------------------------
@@ -4081,7 +4140,7 @@ module VIPER-LLL
     rule #mkByteArrayCopierAux(@tlll(DESTT, DESTCODE, @locattr(@memory, _)),
                                @tlll(SOURCET, SOURCECODE, @locattr(@memory, _)))
         => $with($_source, SOURCECODE,
-             $with($_sz, $add(32, $mload($_source)),
+             $with($_sz/*_pos*/, $add(32, $mload($_source)),
                $assert($call($add(18, $div($_sz, 10)), 4, 0, $_source, $_sz, DESTCODE, $_sz)))),.LLLExps
 
     // storage to memory
