@@ -1688,6 +1688,9 @@ module VIPER-LLL
                        @tlll(T, CODE, EXPRATTR))
 
 
+    /*  Produces @none locations only for constants.
+        Otherwise producs @memory/@storage lcoations, regardless of expression type.
+    */
     syntax CTypedLLLExp  ::= "#compileExpr" "(" Expr ")"
  // ----------------------------------------------------
 
@@ -3102,7 +3105,13 @@ module VIPER-LLL
 
     rule #sha3(@tlll(T:Type, CODE, LocAttr:LLLExpAttr))
         => #ifThenElse(T ==K %bytes32,
-              @tlll(%bytes32, $sha3_32(CODE), @none),
+              #ifThenElse(LocAttr ==K @none,
+                //This implementation is not equivalent to below. test_sha3.py fails. Why??
+                //@tlll(%bytes32, $sha3_32(CODE), @none),
+                //['seq', ['mstore', MemoryPositions.FREE_VAR_SPACE, sub], ['sha3', MemoryPositions.FREE_VAR_SPACE, 32]]
+                @tlll(%bytes32, $%seq($mstore(@freeVarPos, CODE), $sha3(@freeVarPos, 32)), @none),
+                #sha3(#unwrapLoc(@tlll(T, CODE, LocAttr)))
+              ),
               #ifThenElse(isByteArrayType(T),
                 #ifThenElse(#isInMemory(LocAttr),
                   // ['with', '_sub', sub, ['sha3', ['add', '_sub', 32], ['mload', '_sub']]], typ=BaseType('bytes32')
