@@ -1173,7 +1173,7 @@ module VIPER-LLL
          <return> T </return>
 
     rule <k> #compileStmt(%return(E)) => #ifThenElse(T =/=K %void,
-                                                     #return(#compileToLoc(E), T),
+                                                     #return(#compileToVal(E), T),
                                                      #exception("Not expecting to return a value")) ... </k>
          <return> T </return>
 
@@ -1181,18 +1181,16 @@ module VIPER-LLL
     syntax CLLLExps  ::= "#return" "(" CTypedLLLExp "," Type /*return type*/ ")"  [strict(1)]
  // -----------------------------------------------------------------------------------------
     // Base Type
-    rule #return(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
+    rule #return(@tlll(T:BaseType, CODE, EXPRATTR), RETURNTYPE)
         => #ifThen(notBool(isBaseType(RETURNTYPE)),
                    #exception("Trying to return base type but output expecting non base type."))
-        ~> #returnBase(#unwrapLoc(@tlll(T, CODE, EXPRATTR)), RETURNTYPE)
-      requires isBaseType(T)
+        ~> #returnBase(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
 
     // Byte Array Type
-    rule #return(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
+    rule #return(@tlll(T:ByteArrayType, CODE, EXPRATTR), RETURNTYPE)
         => #ifThen(notBool(isByteArrayType(RETURNTYPE)),
                    #exception("Trying to return byte array type but it not matching the expected return type."))
         ~> #returnBytesT(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
-      requires isByteArrayType(T)
 
     // List Type
     rule #return(@tlll(%listT(SUBTYPE1, N1), CODE, EXPRATTR), %listT(SUBTYPE2, N2))
@@ -2098,7 +2096,7 @@ module VIPER-LLL
 // =======
 
     rule #compileToLoc(%compareop(COP, LEXP, REXP))
-        => #compareOp(COP, #compileToLoc(LEXP), #compileToLoc(REXP))
+        => #compareOp(COP, #compileToVal(LEXP), #compileToVal(REXP))
     requires COP =/=K %in
 
     rule #compileToLoc(%compareop(%in, LEXP, REXP))
@@ -2158,8 +2156,8 @@ module VIPER-LLL
              #ifThen(COP =/=K %eq andBool COP =/=K %ne,
                      #exception("Invalid type for comparison op")))
         ~> #compareOpAux(COP,
-                         #unwrapLoc(@tlll(#dropUnit(LT), LCODE, LEXPRATTR)),
-                         #unwrapLoc(@tlll(#dropUnit(RT), RCODE, REXPRATTR)))
+                         @tlll(#dropUnit(LT), LCODE, LEXPRATTR),
+                         @tlll(#dropUnit(RT), RCODE, REXPRATTR))
 
 
     // normal compare operator
@@ -3210,11 +3208,7 @@ module VIPER-LLL
 
     syntax Bool  ::= "#isNumLiteral" "(" LLLExp ")"  [function]
  // -----------------------------------------------------------
-    rule #isNumLiteral(CODE) => true
-      requires isInt(CODE) orBool isFixedPoint(CODE)
-
-    rule #isNumLiteral(CODE) => false
-      requires notBool(isInt(CODE) orBool isFixedPoint(CODE))
+    rule #isNumLiteral(CODE) => isInt(CODE) orBool isFixedPoint(CODE)
 
 
     syntax Type ::= "#joinType" "(" Type "," Type ")"              [function]
