@@ -657,7 +657,7 @@ module VIPER-LLL
 // ==========
 
 
-    rule #compileStmt(%assign(V, E)) => #assign(V, #compileExpr(E))
+    rule #compileStmt(%assign(V, E)) => #assign(V, #compileToLoc(E))
 
 
     syntax CLLLExps  ::= "#assign"    "(" Var                             ","
@@ -923,7 +923,7 @@ module VIPER-LLL
 
     rule #compileStmt(%augassign(OP, V, E)) => #augassign(OP,
                                                           #getTarget(V, #compileLocExpr(V)),
-                                                          #compileValueExpr(E))
+                                                          #compileToVal(E))
 
 
     syntax CLLLExps  ::= "#augassign"    "(" AugAssignOp  ","
@@ -997,11 +997,11 @@ module VIPER-LLL
                                    ")"      [seqstrict]
  // ---------------------------------------------------
     rule #compileStmt(%if(TEST, THENSTMTS, ELSESTMTS))
-        => #ifstmt(#compileValueExpr(TEST),
+        => #ifstmt(#compileToVal(TEST),
                    #compileStmts(THENSTMTS, .LLLExps),
                    #compileStmts(ELSESTMTS, .LLLExps))
 
-    rule #compileStmt(%if(TEST, THENSTMTS)) => #ifstmt(#compileValueExpr(TEST), #compileStmts(THENSTMTS, .LLLExps))
+    rule #compileStmt(%if(TEST, THENSTMTS)) => #ifstmt(#compileToVal(TEST), #compileStmts(THENSTMTS, .LLLExps))
 
     rule #ifstmt(@tlll(_, CODE, _), THEN:LLLExps, ELSE:LLLExps) => $if(CODE, $%seq(THEN), $%seq(ELSE)),.LLLExps
 
@@ -1024,7 +1024,7 @@ module VIPER-LLL
 
     // e.g. for i in range(x, x + 10): ...
     rule #compileStmt(%forrange(ITER, %var(V), %binop(+, %var(V), ROUNDS:Int), STMTS))
-        => #forrange(#newLoopVar(ITER, %num), #compileValueExpr(%var(V)), ROUNDS, #compileStmts(STMTS, .LLLExps))
+        => #forrange(#newLoopVar(ITER, %num), #compileToVal(%var(V)), ROUNDS, #compileStmts(STMTS, .LLLExps))
         ~> #clearIter(ITER)
 
 
@@ -1067,7 +1067,7 @@ module VIPER-LLL
 
     // e.g. for i in list(): ...
     rule #compileStmt(%forlist(ITER, VAR:Var, STMTS))
-        => #forlist(ITER, VAR, #compileExpr(VAR), STMTS)
+        => #forlist(ITER, VAR, #compileToLoc(VAR), STMTS)
 
     syntax CLLLExps  ::= "#forlist" "(" Id           "," // loop iterator
                                         Var          "," // list expr
@@ -1173,7 +1173,7 @@ module VIPER-LLL
          <return> T </return>
 
     rule <k> #compileStmt(%return(E)) => #ifThenElse(T =/=K %void,
-                                                     #return(#compileExpr(E), T),
+                                                     #return(#compileToLoc(E), T),
                                                      #exception("Not expecting to return a value")) ... </k>
          <return> T </return>
 
@@ -1292,7 +1292,7 @@ module VIPER-LLL
 // ======
 
 
-    rule #compileStmt(%assert(EXPR)) => #assert(#compileValueExpr(EXPR))
+    rule #compileStmt(%assert(EXPR)) => #assert(#compileToVal(EXPR))
 
 
     syntax CLLLExps  ::= "#assert" "(" CTypedLLLExp ")"  [strict]
@@ -1443,7 +1443,7 @@ module VIPER-LLL
  // --------------------------------------------------------------
     // Base Type
     rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T)
-        => #packArgBy32Base(LOC, #compileExpr(EXPR), T)
+        => #packArgBy32Base(LOC, #compileToLoc(EXPR), T)
       requires isBaseType(T)
 
     // Viper only allows 32-byte byte array as data.
@@ -1457,7 +1457,7 @@ module VIPER-LLL
 
     // Byte Array Variable
     rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, %bytesT(L))
-        => #packArgBy32BytesTVar(L, #compileExpr(EXPR), %bytesT(L))
+        => #packArgBy32BytesTVar(L, #compileToLoc(EXPR), %bytesT(L))
 
 
     // List Literal
@@ -1469,7 +1469,7 @@ module VIPER-LLL
 
     // List Var
     rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T)
-        => #packArgBy32ListTVar(LOC, #compileExpr(EXPR), T, .LLLExps, 0, 0)
+        => #packArgBy32ListTVar(LOC, #compileToLoc(EXPR), T, .LLLExps, 0, 0)
       requires isListType(T) andBool notBool(isListExpr(EXPR))
 
 
@@ -1532,7 +1532,7 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#packLoggingTopic" "(" Expr "," EventParams ")"
  // -------------------------------------------------------------------------
     // Base Type
-    rule #packLoggingTopic(ARG, %eparam(_, T, _)) => #packLoggingTopicBase(#compileExpr(ARG), T)
+    rule #packLoggingTopic(ARG, %eparam(_, T, _)) => #packLoggingTopicBase(#compileToLoc(ARG), T)
       requires isBaseType(T)
 
     // String Literal
@@ -1544,7 +1544,7 @@ module VIPER-LLL
 
     // Byte Array Variable
     rule #packLoggingTopic(ARG, %eparam(_, %bytesT(L), _))
-        => #packLoggingTopicBytesTVar(#compileExpr(ARG), %bytesT(L))
+        => #packLoggingTopicBytesTVar(#compileToLoc(ARG), %bytesT(L))
       requires notBool isString(ARG)
 
 
@@ -1611,7 +1611,7 @@ module VIPER-LLL
     rule <k> #compileStmt(%send(TO, VALUE))
             => #ifThenElse(CONSTANT ==K true,
                            #exception("Cannot send ether inside a constant function"),
-                           #send(#compileValueExpr(TO), #compileValueExpr(VALUE))) ... </k>
+                           #send(#compileToVal(TO), #compileToVal(VALUE))) ... </k>
          <constant> CONSTANT </constant>
 
 
@@ -1636,7 +1636,7 @@ module VIPER-LLL
          <constant> true </constant>
 
     rule <k> #compileStmt(%selfdestruct(ADDR))
-            => #selfdestruct(#compileValueExpr(ADDR))
+            => #selfdestruct(#compileToVal(ADDR))
          ... </k>
          <constant> false </constant>
 
@@ -1660,7 +1660,7 @@ module VIPER-LLL
     rule #compileExprsAux(.Exprs, RESULTCODE) => RESULTCODE
 
     rule #compileExprsAux((EXPR EXPRS), RESULTCODE)
-        => #compileExpr(EXPR)
+        => #compileToLoc(EXPR)
         ~> #compileExprsAux(EXPRS, RESULTCODE)
 
     rule TCODE:TypedLLLExp ~> #compileExprsAux(EXPRS, RESULTCODE)
@@ -1668,19 +1668,19 @@ module VIPER-LLL
 
 
     // Compile an expression that results in a value
-    syntax CTypedLLLExp  ::= "#compileValueExpr"    "(" Expr ")"
-    syntax CTypedLLLExp  ::= "#compileValueExprAux" "(" CTypedLLLExp ")"  [strict]
+    syntax CTypedLLLExp  ::= "#compileToVal"    "(" Expr ")"
+    syntax CTypedLLLExp  ::= "#compileToValAux" "(" CTypedLLLExp ")"  [strict]
  // ------------------------------------------------------------------------------
-    rule #compileValueExpr(EXPR:Expr) => #compileValueExprAux(#compileExpr(EXPR))
+    rule #compileToVal(EXPR:Expr) => #compileToValAux(#compileToLoc(EXPR))
 
-    rule #compileValueExprAux(TCODE) => #unwrapLoc(TCODE)
+    rule #compileToValAux(TCODE) => #unwrapLoc(TCODE)
 
 
     // Compile an expression that represents an address in memory or storage
     syntax CTypedLLLExp  ::= "#compileLocExpr"    "(" Expr ")"
     syntax CTypedLLLExp  ::= "#compileLocExprAux" "(" CTypedLLLExp ")"  [strict]
  // ----------------------------------------------------------------------------
-    rule #compileLocExpr(EXPR) => #compileLocExprAux(#compileExpr(EXPR))
+    rule #compileLocExpr(EXPR) => #compileLocExprAux(#compileToLoc(EXPR))
 
     rule #compileLocExprAux(@tlll(T, CODE, EXPRATTR))
         => #ifThenElse(EXPRATTR ==K @none,
@@ -1691,25 +1691,25 @@ module VIPER-LLL
     /*  Produces @none locations only for constants.
         Otherwise producs @memory/@storage lcoations, regardless of expression type.
     */
-    syntax CTypedLLLExp  ::= "#compileExpr" "(" Expr ")"
+    syntax CTypedLLLExp  ::= "#compileToLoc" "(" Expr ")"
  // ----------------------------------------------------
 
 // Number
 // ======
 
 
-    rule #compileExpr(NUM:Int) => #ifThenElse((NUM >=Int @minNum) andBool (NUM <=Int @maxNum),
+    rule #compileToLoc(NUM:Int) => #ifThenElse((NUM >=Int @minNum) andBool (NUM <=Int @maxNum),
                                               @tlll(%num, NUM, @none),
                                               #exception("Number out of range"))
 
-    rule #compileExpr(%fixed10(NUM, DEN))
+    rule #compileToLoc(%fixed10(NUM, DEN))
         => #ifThen(notBool((NUM >=Int (@minNum *Int DEN)) andBool (NUM >=Int (@minNum *Int DEN))),
                    #exception("Number out of range."))
         ~> #ifThen(@decimalDivisor <Int DEN,
                    #exception("Too many decimal places."))
         ~> @tlll(%decimal, (NUM *Int @decimalDivisor) /Int DEN, @none)
 
-    rule #compileExpr(%hex(STR))
+    rule #compileToLoc(%hex(STR))
         => #ifThenElse(lengthString(STR) ==Int 40,
                        @tlll(%address, String2Base(STR, 16), @none),
              #ifThenElse(lengthString(STR) ==Int 64,
@@ -1721,7 +1721,7 @@ module VIPER-LLL
 // ===============
 
 
-    rule #compileExpr(STR:String) => #string(#string2Bytes(STR))
+    rule #compileToLoc(STR:String) => #string(#string2Bytes(STR))
 
 
     syntax CTypedLLLExp  ::= "#string"    "(" CBytes ")"  [strict(1)]
@@ -1772,13 +1772,13 @@ module VIPER-LLL
 // ====
 
 
-    rule #compileExpr(true)  => @tlll(%bool, 1, @none)
+    rule #compileToLoc(true)  => @tlll(%bool, 1, @none)
 
-    rule #compileExpr(false)  => @tlll(%bool, 0, @none)
+    rule #compileToLoc(false)  => @tlll(%bool, 0, @none)
 
 // None Literal
 // ===============
-    rule #compileExpr(%None)  => @tlll(%NoneType, 0, @none)
+    rule #compileToLoc(%None)  => @tlll(%NoneType, 0, @none)
 
     syntax Type ::= "%NoneType"
 
@@ -1809,19 +1809,19 @@ module VIPER-LLL
 // ========
 
 
-    rule #compileExpr(%self) => @tlll(%address, $address, @none)
+    rule #compileToLoc(%self) => @tlll(%address, $address, @none)
 
-    rule #compileExpr(V:Var) => #lookupVar(V)
+    rule #compileToLoc(V:Var) => #lookupVar(V)
 
 
 // List Literal
 // =============
 
 
-    rule #compileExpr(%list(EXPRS)) => #listLiteral(EXPRS)
+    rule #compileToLoc(%list(EXPRS)) => #listLiteral(EXPRS)
       requires #numOfExprs(EXPRS) >Int 0
 
-    rule #compileExpr(%list(EXPRS)) => #exception("List must have elements")
+    rule #compileToLoc(%list(EXPRS)) => #exception("List must have elements")
       requires #numOfExprs(EXPRS) ==Int 0
 
 
@@ -1839,7 +1839,7 @@ module VIPER-LLL
 
     syntax CTypedLLLExp  ::= "#processListLiteralFirstElem" "(" Expr ")"
  // ----------------------------------------------------------------------
-    rule #processListLiteralFirstElem(EXPR) => #compileExpr(EXPR)
+    rule #processListLiteralFirstElem(EXPR) => #compileToLoc(EXPR)
 
 
     syntax CTypedLLLExp  ::= "#processListLiteralRestElems"    "(" Exprs "," TypedLLLExps ")"
@@ -1852,7 +1852,7 @@ module VIPER-LLL
         => @tlll(%listT(T, LEN), $multi(RESULTCODE), @none)
 
     rule #processListLiteralRestElemsAux(T, LEN, (EXPR EXPRS), RESULTCODE)
-        => #compileExpr(EXPR) ~> #processListLiteralRestElemsAux(T, LEN, EXPRS, RESULTCODE)
+        => #compileToLoc(EXPR) ~> #processListLiteralRestElemsAux(T, LEN, EXPRS, RESULTCODE)
 
     rule @tlll(T, CODE, EXPRATTR) ~> #processListLiteralRestElemsAux(T, LEN, EXPRS, RESULTCODE)
         => #processListLiteralRestElemsAux(T, LEN +Int 1, EXPRS,
@@ -1868,7 +1868,7 @@ module VIPER-LLL
 // ===============
 
 
-    rule #compileExpr(%struct(ITEMS)) => #structLiteral(ITEMS, .Ids, .AnnVars, .TypedLLLExps)
+    rule #compileToLoc(%struct(ITEMS)) => #structLiteral(ITEMS, .Ids, .AnnVars, .TypedLLLExps)
 
 
     syntax CTypedLLLExp  ::= "#structLiteral" "(" StructItems  ","
@@ -1886,7 +1886,7 @@ module VIPER-LLL
                    #exception("Invalid member variable for struct."))
         ~> #ifThen(#inIds(NAME, NAMES),
                    #exception("Member variable duplicated: " +String Id2String(NAME)))
-        ~> #nameWithValue(NAME, #compileExpr(EXPR))
+        ~> #nameWithValue(NAME, #compileToLoc(EXPR))
         ~> #structLiteral(ITEMS, NAMES, ANNVARS, RESULTCODE)
 
     rule #nameWithValue(NAME, @tlll(T, CODE, EXPRATTR)) ~> #structLiteral(ITEMS, NAMES, ANNVARS, RESULTCODE)
@@ -1899,8 +1899,8 @@ module VIPER-LLL
 // ==========
 
 
-    rule #compileExpr(%binop(BOP, LEXPR, REXPR))
-        => #binOp(BOP, #compileValueExpr(LEXPR), #compileValueExpr(REXPR))
+    rule #compileToLoc(%binop(BOP, LEXPR, REXPR))
+        => #binOp(BOP, #compileToVal(LEXPR), #compileToVal(REXPR))
 
 
     syntax CTypedLLLExp  ::= "#binOp" "(" BinOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
@@ -2097,12 +2097,12 @@ module VIPER-LLL
 // Compare
 // =======
 
-    rule #compileExpr(%compareop(COP, LEXP, REXP))
-        => #compareOp(COP, #compileExpr(LEXP), #compileExpr(REXP))
+    rule #compileToLoc(%compareop(COP, LEXP, REXP))
+        => #compareOp(COP, #compileToLoc(LEXP), #compileToLoc(REXP))
     requires COP =/=K %in
 
-    rule #compileExpr(%compareop(%in, LEXP, REXP))
-        => #inOperatorAux(LEXP, REXP, #compileExpr(LEXP), #compileExpr(REXP), #newVarId, #newVarId)
+    rule #compileToLoc(%compareop(%in, LEXP, REXP))
+        => #inOperatorAux(LEXP, REXP, #compileToLoc(LEXP), #compileToLoc(REXP), #newVarId, #newVarId)
 
 
 // Compare - in operator
@@ -2139,7 +2139,7 @@ module VIPER-LLL
                          %if(%compareop(%eq, LEXP, %var(LOOPID)),
                              %assign(%var(RESULTID), true)))),
                 .LLLExps),
-              #compileValueExpr(%var(RESULTID))
+              #compileToVal(%var(RESULTID))
            )
 
 
@@ -2224,7 +2224,7 @@ module VIPER-LLL
 // =================
 
 
-    rule #compileExpr(%boolop(BOP, LEXP, REXP)) => #boolOp(BOP, #compileValueExpr(LEXP), #compileExpr(REXP))
+    rule #compileToLoc(%boolop(BOP, LEXP, REXP)) => #boolOp(BOP, #compileToVal(LEXP), #compileToLoc(REXP))
 
 
     syntax CTypedLLLExp  ::= "#boolOp" "(" BoolOp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict(2,3)]
@@ -2246,7 +2246,7 @@ module VIPER-LLL
 // ===============
 
 
-    rule #compileExpr(%unaryop(UOP, EXPR)) => #unaryOp(UOP, #compileValueExpr(EXPR))
+    rule #compileToLoc(%unaryop(UOP, EXPR)) => #unaryOp(UOP, #compileToVal(EXPR))
 
 
     syntax CTypedLLLExp  ::= "#unaryOp" "(" UnaryOp "," CTypedLLLExp ")"    [strict(2)]
@@ -2265,11 +2265,11 @@ module VIPER-LLL
 
     syntax CTypedLLLExp  ::= "#icallWithReturn" "(" Exprs "," FuncRecord ")"
  // ------------------------------------------------------------------------
-    rule <k> #compileExpr(%icall(FNAME, ARGS)) => #icallWithReturn(ARGS, FUNCRECORD) ... </k>
+    rule <k> #compileToLoc(%icall(FNAME, ARGS)) => #icallWithReturn(ARGS, FUNCRECORD) ... </k>
          <internalSig> FNAME |-> FUNCRECORD SIGS </internalSig>
 
     // TODO: Is it necessary to enforce that functions cannot call functions defined later than themselves?
-    rule <k> #compileExpr(%icall(FNAME, _)) => #exception("Function not declared yet: " +String Id2String(FNAME)) ... </k>
+    rule <k> #compileToLoc(%icall(FNAME, _)) => #exception("Function not declared yet: " +String Id2String(FNAME)) ... </k>
          <internalSig> SIGS </internalSig>
       requires notBool FNAME in_keys(SIGS)
 
@@ -2419,44 +2419,44 @@ module VIPER-LLL
 // =============
 
 
-    rule #compileExpr(%balance(EXPR))    => #balance(#compileValueExpr(EXPR))
+    rule #compileToLoc(%balance(EXPR))    => #balance(#compileToVal(EXPR))
 
     syntax CTypedLLLExp  ::= "#balance" "(" CTypedLLLExp ")"  [strict]
  // ------------------------------------------------------------------
     rule #balance(@tlll(%address, ADDR, @none)) => @tlll(%unitT(%num, %wei |-> 1, false), $balance(ADDR), @none)
 
 
-    rule #compileExpr(%codesize(EXPR))   => #codesize(#compileValueExpr(EXPR))
+    rule #compileToLoc(%codesize(EXPR))   => #codesize(#compileToVal(EXPR))
 
     syntax CTypedLLLExp  ::= "#codesize" "(" CTypedLLLExp ")"   [strict]
  // --------------------------------------------------------------------
     rule #codesize(@tlll(%address, ADDR, @none)) => @tlll(%num, $extcodesize(ADDR), @none)
 
 
-    rule #compileExpr(%is_contract(EXPR)) => #is_contract(#compileValueExpr(EXPR))
+    rule #compileToLoc(%is_contract(EXPR)) => #is_contract(#compileToVal(EXPR))
 
     syntax CTypedLLLExp  ::= "#is_contract" "(" CTypedLLLExp ")"  [strict]
  // ----------------------------------------------------------------------
     rule #is_contract(@tlll(%address, ADDR, @none)) => @tlll(%bool, $extcodesize(ADDR), @none)
 
 
-    rule #compileExpr(%msg.sender)       => @tlll(%address, $caller, @none)
+    rule #compileToLoc(%msg.sender)       => @tlll(%address, $caller, @none)
 
-    rule #compileExpr(%msg.value)        => @tlll(%unitT(%num, %wei |-> 1, false), $callvalue, @none)
+    rule #compileToLoc(%msg.value)        => @tlll(%unitT(%num, %wei |-> 1, false), $callvalue, @none)
 
-    rule #compileExpr(%msg.gas)          => @tlll(%num, $gas, @none)
+    rule #compileToLoc(%msg.gas)          => @tlll(%num, $gas, @none)
 
-    rule #compileExpr(%block.difficulty) => @tlll(%num, $difficulty, @none)
+    rule #compileToLoc(%block.difficulty) => @tlll(%num, $difficulty, @none)
 
-    rule #compileExpr(%block.timestamp)  => @tlll(%unitT(%num, %sec |-> 1, true), $timestamp, @none)
+    rule #compileToLoc(%block.timestamp)  => @tlll(%unitT(%num, %sec |-> 1, true), $timestamp, @none)
 
-    rule #compileExpr(%block.coinbase)   => @tlll(%address, $coinbase, @none)
+    rule #compileToLoc(%block.coinbase)   => @tlll(%address, $coinbase, @none)
 
-    rule #compileExpr(%block.number)     => @tlll(%num, $number, @none)
+    rule #compileToLoc(%block.number)     => @tlll(%num, $number, @none)
 
-    rule #compileExpr(%block.prevhash)   => @tlll(%bytes32, $blockhash($sub($number, 1)), @none)
+    rule #compileToLoc(%block.prevhash)   => @tlll(%bytes32, $blockhash($sub($number, 1)), @none)
 
-    rule #compileExpr(%tx.origin)        => @tlll(%address, $origin, @none)
+    rule #compileToLoc(%tx.origin)        => @tlll(%address, $origin, @none)
 
 
 // Reserved Function
@@ -2466,7 +2466,7 @@ module VIPER-LLL
     // floor
     syntax CTypedLLLExp  ::= "#floor" "(" CTypedLLLExp ")"    [strict]
  // ------------------------------------------------------------------
-    rule #compileExpr(%floor(EXPR)) => #floor(#compileValueExpr(EXPR))
+    rule #compileToLoc(%floor(EXPR)) => #floor(#compileToVal(EXPR))
 
     rule #floor(@tlll(%decimal, CODE, EXPRATTR))
         => @tlll(%num, $sdiv(CODE, @decimalDivisor), EXPRATTR)
@@ -2478,7 +2478,7 @@ module VIPER-LLL
     // decimal
     syntax CTypedLLLExp  ::= "#decimal" "(" CTypedLLLExp ")"    [strict]
  // --------------------------------------------------------------------
-    rule #compileExpr(%decimal(EXPR)) => #decimal(#compileValueExpr(EXPR))
+    rule #compileToLoc(%decimal(EXPR)) => #decimal(#compileToVal(EXPR))
 
     rule #decimal(@tlll(%num, CODE, _))
         => @tlll(%decimal, $mul(CODE, @decimalDivisor), @none)
@@ -2496,7 +2496,7 @@ module VIPER-LLL
     // as_unitless_number
     syntax CTypedLLLExp  ::= "#asUnitlessNumber" "(" CTypedLLLExp ")"  [strict]
  // ---------------------------------------------------------------------------
-    rule #compileExpr(%as_unitless_number(EXPR)) => #asUnitlessNumber(#compileValueExpr(EXPR))
+    rule #compileToLoc(%as_unitless_number(EXPR)) => #asUnitlessNumber(#compileToVal(EXPR))
 
     rule #asUnitlessNumber(@tlll(%num, CODE, _)) => @tlll(%num, CODE, @none)
 
@@ -2513,7 +2513,7 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#asNum128"    "(" CTypedLLLExp ")"    [strict]
     syntax CTypedLLLExp  ::= "#asNum128Aux" "(" LLLExp ")"
  // ------------------------------------------------------------------------
-    rule #compileExpr(%as_num128(EXPR)) => #asNum128(#compileValueExpr(EXPR))
+    rule #compileToLoc(%as_num128(EXPR)) => #asNum128(#compileToVal(EXPR))
 
     rule #asNum128(@tlll(T, CODE, _))
         => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %address),
@@ -2527,7 +2527,7 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#asNum256"    "(" CTypedLLLExp ")"    [strict]
     syntax CTypedLLLExp  ::= "#asNum256Aux" "(" TypedLLLExp ")"
  // ------------------------------------------------------------------------
-    rule #compileExpr(%as_num256(EXPR)) => #asNum256(#compileValueExpr(EXPR))
+    rule #compileToLoc(%as_num256(EXPR)) => #asNum256(#compileToVal(EXPR))
 
     rule #asNum256(@tlll(T, CODE, EXPRATTR))
         => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %address),
@@ -2554,7 +2554,7 @@ module VIPER-LLL
     // as_bytes32
     syntax CTypedLLLExp  ::= "#asBytes32" "(" CTypedLLLExp ")"    [strict]
  // ----------------------------------------------------------------------
-    rule #compileExpr(%as_bytes32(EXPR)) => #asBytes32(#compileValueExpr(EXPR))
+    rule #compileToLoc(%as_bytes32(EXPR)) => #asBytes32(#compileToVal(EXPR))
 
     rule #asBytes32(@tlll(T, CODE, EXPRATTR))
         => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %address),
@@ -2570,8 +2570,8 @@ module VIPER-LLL
                                              CTypedLLLExp      // placeholder
                                          ")"      [strict(4)]
  // -----------------------------------------------------------------------------------------------------
-    rule #compileExpr(%slice(EXPR, STARTEXPR, LENEXPR))
-        => #slice(#compileExpr(EXPR), #compileValueExpr(STARTEXPR), #compileValueExpr(LENEXPR))
+    rule #compileToLoc(%slice(EXPR, STARTEXPR, LENEXPR))
+        => #slice(#compileToLoc(EXPR), #compileToVal(STARTEXPR), #compileToVal(LENEXPR))
 
     rule #slice(@tlll(%bytesT(L), BYTESCODE, EXPRATTR), @tlll(%num, START, _), @tlll(%num, LEN, _))
         => #sliceAux(@tlll(%bytesT(L), BYTESCODE, EXPRATTR), START, LEN,
@@ -2634,7 +2634,7 @@ module VIPER-LLL
 
     // len - byte array length
     //---------------------
-    rule #compileExpr(%len(E:Expr)) => #len(#compileExpr(E))
+    rule #compileToLoc(%len(E:Expr)) => #len(#compileToLoc(E))
 
     syntax CTypedLLLExp  ::= "#len"    "(" CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------
@@ -2647,7 +2647,7 @@ module VIPER-LLL
 
     // concat
     //---------------------
-    rule #compileExpr(%concat(Es:Exprs)) => #concat(#compileExprs(Es))
+    rule #compileToLoc(%concat(Es:Exprs)) => #concat(#compileExprs(Es))
 
     syntax CTypedLLLExp  ::= "#concat"    "(" CTypedLLLExps ")"    [seqstrict]
  // ------------------------------------------------------------------------
@@ -2760,12 +2760,12 @@ module VIPER-LLL
 
     // extract32
     //---------------------
-    rule #compileExpr(%extract32(BExp, IExp, %num)) => #compileExpr(%as_num128(%extract32(BExp, IExp, %bytes32)))
+    rule #compileToLoc(%extract32(BExp, IExp, %num)) => #compileToLoc(%as_num128(%extract32(BExp, IExp, %bytes32)))
 
-    rule #compileExpr(%extract32(BExp, IExp, %address))
-         => #toAddress(#extract32(#compileExpr(BExp), #compileExpr(IExp), %bytes32))
+    rule #compileToLoc(%extract32(BExp, IExp, %address))
+         => #toAddress(#extract32(#compileToLoc(BExp), #compileToLoc(IExp), %bytes32))
 
-    rule #compileExpr(%extract32(BExp, IExp, T:Type)) => #extract32(#compileExpr(BExp), #compileExpr(IExp), T)
+    rule #compileToLoc(%extract32(BExp, IExp, T:Type)) => #extract32(#compileToLoc(BExp), #compileToLoc(IExp), T)
       when T ==K %bytes32 orBool T ==K %num256
 
     syntax CTypedLLLExp  ::= "#extract32" "(" CTypedLLLExp "," CTypedLLLExp "," Type ")"    [seqstrict(1,2)]
@@ -2788,7 +2788,7 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#bytes_to_num"    "(" CTypedLLLExp ")"    [strict]
     syntax CTypedLLLExp  ::= "#bytes_to_num_Aux" "(" LLLExp ")"
  // ------------------------------------------------------------------------
-    rule #compileExpr(%bytes_to_num(EXPR)) => #bytes_to_num(#compileExpr(EXPR))
+    rule #compileToLoc(%bytes_to_num(EXPR)) => #bytes_to_num(#compileToLoc(EXPR))
 
     rule #bytes_to_num(@tlll(T, LOC, @locattr(@memory, _)))
         => #ifThenElse(isByteArrayType(T),
@@ -2837,13 +2837,13 @@ module VIPER-LLL
     // as_wei_value
     syntax CTypedLLLExp  ::= "#asWeiValue" "(" Expr "," K ")"    [strict(2)]
  // ------------------------------------------------------------------------
-    rule #compileExpr(%as_wei_value(EXPR, UNIT)) => #asWeiValue(EXPR, #convertToWei(UNIT))
+    rule #compileToLoc(%as_wei_value(EXPR, UNIT)) => #asWeiValue(EXPR, #convertToWei(UNIT))
 
     rule #asWeiValue(NUM:Const, DENOMINATION)
         => #asWeiValueNumber(NUM, DENOMINATION)
 
     rule #asWeiValue(EXPR, DENOMINATION)
-        => #asWeiValueLLLExp(#compileValueExpr(EXPR), DENOMINATION)
+        => #asWeiValueLLLExp(#compileToVal(EXPR), DENOMINATION)
       requires notBool isConst(EXPR)
 
 
@@ -2868,7 +2868,7 @@ module VIPER-LLL
     // bitwise_and
     syntax CTypedLLLExp  ::= "#bitwise_and" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileExpr(%bitwise_and(EXPR1, EXPR2)) => #bitwise_and(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%bitwise_and(EXPR1, EXPR2)) => #bitwise_and(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #bitwise_and(@tlll(_, CODE1, _), @tlll(_, CODE2, _))
         => @tlll(%num256, $and(CODE1, CODE2), @none)
@@ -2877,7 +2877,7 @@ module VIPER-LLL
     // bitwise_or
     syntax CTypedLLLExp  ::= "#bitwise_or" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileExpr(%bitwise_or(EXPR1, EXPR2)) => #bitwise_or(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%bitwise_or(EXPR1, EXPR2)) => #bitwise_or(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #bitwise_or(@tlll(_, CODE1, _), @tlll(_, CODE2, _))
         => @tlll(%num256, $or(CODE1, CODE2), @none)
@@ -2886,7 +2886,7 @@ module VIPER-LLL
     // bitwise_xor
     syntax CTypedLLLExp  ::= "#bitwise_xor" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileExpr(%bitwise_xor(EXPR1, EXPR2)) => #bitwise_xor(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%bitwise_xor(EXPR1, EXPR2)) => #bitwise_xor(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #bitwise_xor(@tlll(_, CODE1, _), @tlll(_, CODE2, _))
         => @tlll(%num256, $xor(CODE1, CODE2), @none)
@@ -2895,7 +2895,7 @@ module VIPER-LLL
     // bitwise_not
     syntax CTypedLLLExp  ::= "#bitwise_not" "(" CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileExpr(%bitwise_not(EXPR1)) => #bitwise_not(#compileValueExpr(EXPR1))
+    rule #compileToLoc(%bitwise_not(EXPR1)) => #bitwise_not(#compileToVal(EXPR1))
 
     rule #bitwise_not(@tlll(_, CODE1, _))
         => @tlll(%num256, $not(CODE1), @none)
@@ -2904,7 +2904,7 @@ module VIPER-LLL
     // num256_add
     syntax CTypedLLLExp  ::= "#num256Add" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileExpr(%num256_add(EXPR1, EXPR2)) => #num256Add(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%num256_add(EXPR1, EXPR2)) => #num256Add(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Add(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq(
@@ -2915,7 +2915,7 @@ module VIPER-LLL
     // num256_sub
     syntax CTypedLLLExp  ::= "#num256Sub" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileExpr(%num256_sub(EXPR1, EXPR2)) => #num256Sub(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%num256_sub(EXPR1, EXPR2)) => #num256Sub(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Sub(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq(
@@ -2926,7 +2926,7 @@ module VIPER-LLL
     // num256_mul
     syntax CTypedLLLExp  ::= "#num256Mul" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileExpr(%num256_mul(EXPR1, EXPR2)) => #num256Mul(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%num256_mul(EXPR1, EXPR2)) => #num256Mul(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Mul(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq(
@@ -2937,7 +2937,7 @@ module VIPER-LLL
     // num256_div
     syntax CTypedLLLExp  ::= "#num256Div" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileExpr(%num256_div(EXPR1, EXPR2)) => #num256Div(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%num256_div(EXPR1, EXPR2)) => #num256Div(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Div(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq(
@@ -2948,7 +2948,7 @@ module VIPER-LLL
     // num256_exp
     syntax CTypedLLLExp  ::= "#num256Exp" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileExpr(%num256_exp(EXPR1, EXPR2)) => #num256Exp(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%num256_exp(EXPR1, EXPR2)) => #num256Exp(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Exp(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq(
@@ -2959,7 +2959,7 @@ module VIPER-LLL
     // num256_mod
     syntax CTypedLLLExp  ::= "#num256Mod" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileExpr(%num256_mod(EXPR1, EXPR2)) => #num256Mod(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%num256_mod(EXPR1, EXPR2)) => #num256Mod(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     // ['mod', args[0], args[1]]
     rule #num256Mod(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
@@ -2969,8 +2969,8 @@ module VIPER-LLL
     // num256_addmod
     syntax CTypedLLLExp  ::= "#num256Addmod" "(" CTypedLLLExp "," CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileExpr(%num256_addmod(EXPR1, EXPR2, EXPR3)) 
-         => #num256Addmod(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2), #compileValueExpr(EXPR3))
+    rule #compileToLoc(%num256_addmod(EXPR1, EXPR2, EXPR3)) 
+         => #num256Addmod(#compileToVal(EXPR1), #compileToVal(EXPR2), #compileToVal(EXPR3))
 
     /*return LLLnode.from_list(['seq',
                                   ['assert', ['or', ['iszero', args[1]], ['gt', ['add', args[0], args[1]], args[0]]]],
@@ -2985,8 +2985,8 @@ module VIPER-LLL
     // num256_mulmod
     syntax CTypedLLLExp  ::= "#num256Mulmod" "(" CTypedLLLExp "," CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileExpr(%num256_mulmod(EXPR1, EXPR2, EXPR3))
-         => #num256Mulmod(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2), #compileValueExpr(EXPR3))
+    rule #compileToLoc(%num256_mulmod(EXPR1, EXPR2, EXPR3))
+         => #num256Mulmod(#compileToVal(EXPR1), #compileToVal(EXPR2), #compileToVal(EXPR3))
 
     /*return LLLnode.from_list(['seq',
                             ['assert', ['or', ['iszero', args[0]],
@@ -3002,7 +3002,7 @@ module VIPER-LLL
     // num256_gt
     syntax CTypedLLLExp  ::= "#num256Gt" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // -----------------------------------------------------------------------------------------
-    rule #compileExpr(%num256_gt(EXPR1, EXPR2)) => #num256Gt(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%num256_gt(EXPR1, EXPR2)) => #num256Gt(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Gt(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%bool, $gt(CODE1, CODE2), @none)
@@ -3011,7 +3011,7 @@ module VIPER-LLL
     // num256_ge
     syntax CTypedLLLExp  ::= "#num256Ge" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // -----------------------------------------------------------------------------------------
-    rule #compileExpr(%num256_ge(EXPR1, EXPR2)) => #num256Ge(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%num256_ge(EXPR1, EXPR2)) => #num256Ge(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Ge(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%bool, $ge(CODE1, CODE2), @none)
@@ -3020,7 +3020,7 @@ module VIPER-LLL
     // num256_lt
     syntax CTypedLLLExp  ::= "#num256Lt" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // -----------------------------------------------------------------------------------------
-    rule #compileExpr(%num256_lt(EXPR1, EXPR2)) => #num256Lt(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%num256_lt(EXPR1, EXPR2)) => #num256Lt(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Lt(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%bool, $lt(CODE1, CODE2), @none)
@@ -3029,7 +3029,7 @@ module VIPER-LLL
     // num256_le
     syntax CTypedLLLExp  ::= "#num256Le" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // -----------------------------------------------------------------------------------------
-    rule #compileExpr(%num256_le(EXPR1, EXPR2)) => #num256Le(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%num256_le(EXPR1, EXPR2)) => #num256Le(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Le(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%bool, $le(CODE1, CODE2), @none)
@@ -3040,7 +3040,7 @@ module VIPER-LLL
     // If it is negative, divide by a power of two
     syntax CTypedLLLExp  ::= "#shift" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileExpr(%shift(EXPR1, EXPR2)) => #shift(#compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%shift(EXPR1, EXPR2)) => #shift(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #shift(@tlll(%num256, CODE1, _), @tlll(%num, CODE2, _))
         => @tlll(%num256,
@@ -3055,8 +3055,8 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#minMax"    "(" CompareOp "," CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict(2,3)]
     syntax CTypedLLLExp  ::= "#minMaxAux" "(" CompareOp ","  TypedLLLExp ","  TypedLLLExp ")"
  // -------------------------------------------------------------------------------------------
-    rule #compileExpr(%min(EXPR1, EXPR2)) => #minMax(%le, #compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
-    rule #compileExpr(%max(EXPR1, EXPR2)) => #minMax(%ge, #compileValueExpr(EXPR1), #compileValueExpr(EXPR2))
+    rule #compileToLoc(%min(EXPR1, EXPR2)) => #minMax(%le, #compileToVal(EXPR1), #compileToVal(EXPR2))
+    rule #compileToLoc(%max(EXPR1, EXPR2)) => #minMax(%ge, #compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #minMax(OP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
         => #ifThen(notBool(#isTypeOf(LT, %num) orBool #isTypeOf(LT, %decimal) orBool #isTypeOf(LT, %num256)) orBool
@@ -3101,7 +3101,7 @@ module VIPER-LLL
     */
     syntax CTypedLLLExp  ::= "#sha3" "(" CTypedLLLExp ")"    [strict]
  // -----------------------------------------------------------------------------------------
-    rule #compileExpr(%sha3(EXPR)) => #sha3(#compileValueExpr(EXPR))
+    rule #compileToLoc(%sha3(EXPR)) => #sha3(#compileToVal(EXPR))
 
     rule #sha3(@tlll(T:Type, CODE, LocAttr:LLLExpAttr))
         => #ifThenElse(T ==K %bytes32,
@@ -3883,7 +3883,7 @@ module VIPER-LLL
       requires notBool %svar(NAME) in_keys(GLOBAL)
 
     rule #lookupVar(%subscript(V, EXPR))
-        => #lookupVarElement(#lookupVar(V), #compileValueExpr(EXPR))
+        => #lookupVarElement(#lookupVar(V), #compileToVal(EXPR))
 
     rule #lookupVar(%attribute(V, FIELD:Id))
         => #lookupVarElement(#lookupVar(V), @tlll(%void, FIELD, @none))
