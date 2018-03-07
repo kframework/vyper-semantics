@@ -3101,17 +3101,15 @@ module VIPER-LLL
     */
     syntax CTypedLLLExp  ::= "#sha3" "(" CTypedLLLExp ")"    [strict]
  // -----------------------------------------------------------------------------------------
-    rule #compileExpr(%sha3(EXPR)) => #sha3(#compileExpr(EXPR))
+    rule #compileExpr(%sha3(EXPR)) => #sha3(#compileValueExpr(EXPR))
 
     rule #sha3(@tlll(T:Type, CODE, LocAttr:LLLExpAttr))
         => #ifThenElse(T ==K %bytes32,
-              #ifThenElse(LocAttr ==K @none,
-                //This implementation is not equivalent to below. test_sha3.py fails. Why??
-                //@tlll(%bytes32, $sha3_32(CODE), @none),
-                //['seq', ['mstore', MemoryPositions.FREE_VAR_SPACE, sub], ['sha3', MemoryPositions.FREE_VAR_SPACE, 32]]
-                @tlll(%bytes32, $%seq($mstore(@freeVarPos, CODE), $sha3(@freeVarPos, 32)), @none),
-                #sha3(#unwrapLoc(@tlll(T, CODE, LocAttr)))
-              ),
+              //This implementation is not equivalent to below. But should be. test_sha3.py fails. Why??
+              //@tlll(%bytes32, $sha3_32(CODE), @none),
+              //['seq', ['mstore', MemoryPositions.FREE_VAR_SPACE, sub], ['sha3', MemoryPositions.FREE_VAR_SPACE, 32]]
+              @tlll(%bytes32, $%seq($mstore(@freeVarPos, CODE), $sha3(@freeVarPos, 32)), @none),
+
               #ifThenElse(isByteArrayType(T),
                 #ifThenElse(#isInMemory(LocAttr),
                   // ['with', '_sub', sub, ['sha3', ['add', '_sub', 32], ['mload', '_sub']]], typ=BaseType('bytes32')
@@ -3893,6 +3891,8 @@ module VIPER-LLL
 
     /*  Computes the location for a subscript or attribute expression: base[index] or base.index.
         For attributes, index is of the form @tlll(%void, FIELD, @none)
+
+        source: parser_utils.py - add_variable_offset()
     */
     syntax CTypedLLLExp  ::= "#lookupVarElement" "(" CTypedLLLExp ","  // base
                                                      CTypedLLLExp      // index
@@ -3914,7 +3914,7 @@ module VIPER-LLL
     rule #lookupVarElement(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
                        @tlll(INDEXT, INDEX, EXPRATTR))
         => #lookupMapElement(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
-                            #mapKeyByteArrayConvert(@tlll(INDEXT, INDEX, EXPRATTR), KT))
+                            #mapOffsetFromByteArray(@tlll(INDEXT, INDEX, EXPRATTR), KT))
       requires isByteArrayType(INDEXT)
 
     // Struct
@@ -3956,12 +3956,36 @@ module VIPER-LLL
         => #exception("Can only have fixed-side arrays in memory, not mappings")
 
 
-    /* Converts a byte array that is used as key in a map to the expected type of the map key.
-        D: Unsure if this method is what's needed to support byte array map keys.
+    /* Converts a byte array that is used as key in a map to memory offset.
+
+      if not isinstance(typ.keytype, ByteArrayType) or (typ.keytype.maxlen < key.typ.maxlen):
+          raise TypeMismatchException('Mapping keys of bytes cannot be cast, use exact same bytes type of: %s',
+                                      str(typ.keytype))
+      subtype = typ.valuetype
+      if len(key.args[0].args) == 3:  # handle bytes literal. Not covering this case
+          sub = LLLnode.from_list([
+              'seq',
+              key,
+              ['sha3', ['add', key.args[0].args[-1], 32], ceil32(key.typ.maxlen)]
+          ])
+      else:
+          sub = LLLnode.from_list(['sha3', ['add', key.args[0].value, 32], ceil32(key.typ.maxlen)])
+
+      fixme possible compiler bug: what if the key is in storage. Then it should be loaded to memory first.
+        Tests don't cover this case.
     */
-    syntax CTypedLLLExp  ::= "#mapKeyByteArrayConvert" "(" TypedLLLExp "," Type ")"
+    syntax CTypedLLLExp  ::= "#mapOffsetFromByteArray" "(" TypedLLLExp "," Type ")"
  // -------------------------------------------------------------------------------
-    // TODO: finish map key conversion
+
+    //Case: arg2 not byte array type not covered, should throw exception anyway.
+    //Attempt to define a getMaxlen(Type) function (that would help here)
+    //  leads to weird exceptions at runtime. K bug probably.
+    rule #mapOffsetFromByteArray(@tlll(%bytesT(IMaxLen:Int), INDEX, EXPRATTR), %bytesT(BMaxLen:Int))
+        => #ifThenElse(BMaxLen <Int IMaxLen,
+              #exception("Mapping keys of bytes cannot be cast, use exact same bytes type of key type")
+                ~> #mapOffsetFromByteArray(@tlll(%bytesT(IMaxLen), INDEX, EXPRATTR), %bytesT(BMaxLen)),
+              @tlll(%bytes32, $sha3($add(INDEX, 32), #ceil32(IMaxLen)), @none)
+           )
 
 
     syntax CTypedLLLExp  ::= "#lookupStructElement" "(" TypedLLLExp ","  // parent
@@ -4077,13 +4101,18 @@ module VIPER-LLL
 // ======
 
 
+    //Unwrap expressions of type BaseType into final values. Leave composite types unchanged.
+    //fixme cleanup: remove #unwrapLoc() transformation from all places where it is redundant
     syntax TypedLLLExp ::= "#unwrapLoc" "(" TypedLLLExp ")"  [function]
  // -------------------------------------------------------------------
-    rule #unwrapLoc(@tlll(T, CODE, @locattr(@memory, _)))  => @tlll(T, $mload(CODE), @none)
+    rule #unwrapLoc(@tlll(T:BaseType, CODE, @locattr(@memory, _)))  => @tlll(T, $mload(CODE), @none)
 
-    rule #unwrapLoc(@tlll(T, CODE, @locattr(@storage, _))) => @tlll(T, $sload(CODE), @none)
+    rule #unwrapLoc(@tlll(T:BaseType, CODE, @locattr(@storage, _))) => @tlll(T, $sload(CODE), @none)
 
-    rule #unwrapLoc(@tlll(T, CODE, @none))                 => @tlll(T, CODE, @none)
+    rule #unwrapLoc(@tlll(T:BaseType, CODE, @none))                 => @tlll(T, CODE, @none)
+
+    rule #unwrapLoc(@tlll(T:Type, CODE, LocAttr))                   => @tlll(T, CODE, LocAttr)
+      requires notBool isBaseType(T)
 
 
     syntax KItem  ::= "#convertToWei" "(" Id ")"
