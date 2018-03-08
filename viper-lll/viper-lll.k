@@ -968,12 +968,12 @@ module VIPER-LLL
                                                     CTypedLLLExp
                                                 ")"      [strict(2)]
 
-    syntax CLLLExps  ::= "#desugarAugAssignAux" "(" Int  /*loc*/ ","
+    syntax CLLLExps  ::= "#desugarAugAssignAux" "(" LLLExp       ","  /*loc*/
                                                     LocTarget    ","
                                                     CTypedLLLExp
                                                 ")"      [strict(3)]
  // ----------------------------------------------------------------
-    rule #desugarAugAssign(@tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
+    rule #desugarAugAssign(@tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE:TypedLLLExp)
         => #desugarAugAssignAux(LOC, TARGET, #baseTypeConvert(RTCODE, LT))
 
     rule #desugarAugAssignAux(LOC, @storage, @tlll(_, CODE, _))
