@@ -371,8 +371,12 @@ def parseCallExpr(expr: ast.Call):
             return "%extract32({}, {}, {})".format(parseArg(expr.args[0]), parseArg(expr.args[1]), typeArg)
         else:
             return "%{}({})".format(expr.func.id, parseArgs(expr.args + expr.keywords, ", "))
-    elif type(expr.func) == ast.Attribute and type(expr.func.value) == ast.Name and expr.func.value.id == "self":
-        return "%icall({}, {})".format(expr.func.attr, parseArgs(expr.args + expr.keywords))
+    elif type(expr.func) == ast.Attribute:
+        if type(expr.func.value) == ast.Name and expr.func.value.id == "self":
+            return "%icall({}, {})".format(expr.func.attr, parseArgs(expr.args + expr.keywords))
+        else:
+            return "%ecall({}, {}, {})" \
+                .format(parseExpr(expr.func.value), expr.func.attr, parseArgs(expr.args + expr.keywords))
     else:
         raise ParserException("Unsupported Call Expr format: " + str(expr))
 

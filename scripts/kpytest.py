@@ -25,4 +25,7 @@ if __name__ == '__main__':
     # disabling gas estimation
     compiler.Compiler.gas_estimate = lambda self, code, *args, **kwargs: gas_estimate(code, args, kwargs)
 
+    # changing working directory to viper repo. Required for tests that load other files.
+    os.chdir("../viper")
+
     py.test.cmdline.main()  # invoking pytest with args received from command line
