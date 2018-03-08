@@ -150,12 +150,19 @@ module VIPER-ABSTRACT-SYNTAX
 
     syntax NumericType  ::= PureNumType
                           | UnitType
+                          | CastType
 
     syntax PureNumType  ::= "%num" | "%decimal"
 
     syntax UnitType  ::= "%unitT" "(" PureNumType "," Unit "," Bool /*positional*/ ")"
                        | "%timestamp"      | "%timedelta"
                        | "%currency_value" | "%currency1_value" | "%currency2_value" | "%wei_value"
+
+    /*Type cast inside parameter declaration:
+          def _num256_to_num(x: num(num256))
+      In fact only %castT(%num, %num256) is considered.
+    */
+    syntax CastType  ::= "%castT" "(" BaseType "," BaseType ")"
 
     syntax Unit  ::= BaseUnit
                    | "%umul" "(" Unit "," Unit ")"

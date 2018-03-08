@@ -3457,6 +3457,8 @@ module VIPER-LLL
  
     rule #canonicalizeType(%bytes32, _) => "bytes32"
 
+    rule #canonicalizeType(%castT(%num, %num256), _) => "uint256"
+
 
     syntax KItem  ::= "#canonicalizeListType" "(" K "," Int ")"  [strict(1)]
  // ------------------------------------------------------------------------
@@ -3582,6 +3584,8 @@ module VIPER-LLL
     rule #parseType(%currency2_value, _) => %unitT(%num, %currency2 |-> 1, false)
 
     rule #parseType(%wei_value, _)       => %unitT(%num, %wei |-> 1, false)
+
+    rule #parseType(%castT(%num, %num256), _) => %num
 
 
     syntax CType  ::= "#parseListType" "(" CType "," Int ")"    [strict(1)]

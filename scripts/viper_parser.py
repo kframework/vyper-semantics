@@ -155,7 +155,10 @@ def parseType(node):
             positional = "true"
         else:
             positional = "false"
-        return "%unitT({}, {}, {})".format(parseType(node.func), parseUnit(node.args[0]), positional)
+        if type(node.args[0]) == ast.Name and node.args[0].id == "num256":
+            return "%castT({}, {})".format(parseType(node.func), parseUnit(node.args[0]))
+        else:
+            return "%unitT({}, {}, {})".format(parseType(node.func), parseUnit(node.args[0]), positional)
     else:
         raise ParserException("Type parsing not yet implemented for: " + str(node))
 
