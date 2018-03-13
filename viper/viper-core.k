@@ -164,7 +164,7 @@ module VIPER-CORE-SEMANTICS
 
     syntax KItem ::= "#loadProgramAndInit" "(" Int "," Pgm ")"
  // ----------------------------------------------------------
-    rule <k> #loadProgramAndInit(ACCTID, %pgm(ES, GS, DEFS))
+    rule <k> #loadProgramAndInit(ACCTID, %pgm(ES, GS, DEFS, _))
             => #addEvents(ACCTID, ES) ~> #addGlobals(ACCTID, GS)
             ~> #addFuncs(ACCTID, (DEFS ++Def #mkPublicGetters(GS, .Defs)), 0)
          ... </k>
@@ -177,7 +177,7 @@ module VIPER-CORE-SEMANTICS
 
     syntax KItem ::= "#loadProgramWithoutInit" "(" Int "," Pgm ")"
  // --------------------------------------------------------------
-    rule <k> #loadProgramWithoutInit(ACCTID, %pgm(ES, GS, DEFS))
+    rule <k> #loadProgramWithoutInit(ACCTID, %pgm(ES, GS, DEFS, _))
             => #addEvents(ACCTID, ES)
             ~> #addFuncs(ACCTID, (DEFS ++Def #mkPublicGetters(GS, .Defs)), 0)
          ... </k>

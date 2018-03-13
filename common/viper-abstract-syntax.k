@@ -3,8 +3,8 @@ requires "domains.k"
 module VIPER-ABSTRACT-SYNTAX
     imports DOMAINS
 
-    syntax Pgm  ::= "%pgm" "(" Events "," Globals "," Defs ")"
-                  | "%pgm" "(" Events "," Globals "," Def /*Init function*/ "," Defs ")"
+    syntax Pgm  ::= "%pgm" "(" Events "," Globals "," Defs "," Contracts ")"
+                  | "%pgm" "(" Events "," Globals "," Def /*Init function*/ "," Defs "," Contracts ")"
 
 
 // Event
@@ -41,6 +41,19 @@ module VIPER-ABSTRACT-SYNTAX
     syntax Param  ::= "%param" "(" Id "," Type ")"
     syntax Params ::= List{Param, ""}  [klabel(Params)]
 
+
+// Contracts
+// ======
+
+           /*Syntax is that of class declaration:
+
+              class Foo():
+                  def foo(arg1: num) -> num: pass
+           */
+    syntax Contract ::= "%contract" "(" Id   //contract name
+                                    "," Defs //contract functions
+                                    ")"
+    syntax Contracts ::= List{Contract, ""}  [klabel(Contracts)]
 
 // Statement
 // =========
@@ -90,7 +103,18 @@ module VIPER-ABSTRACT-SYNTAX
                    | "%boolop"    "(" BoolOp    "," Expr "," Expr ")"
                    | "%unaryop"   "(" UnaryOp   "," Expr ")"
                    | "%icall"     "(" Id /*func name*/ "," Exprs ")"  // internal contract call
+
+                      //example: self.token_address.balanceOf(_owner)
                    | "%ecall"     "(" Expr /*address*/ "," Id /*func name*/ "," Exprs ")"  // external contract call
+
+                      /*example: class Foo():...
+                                 Foo(arg1).foo(arg2)
+                      */
+                   | "%ecall"     "(" Id      //contract name
+                                  "," Expr    //cotnract address
+                                  "," Id      //function name
+                                  "," Exprs   //function args
+                                  ")"  // external contract call
                    | ReservedExpr
                    | ReservedFunc  // expr dispatch table
 

@@ -49,7 +49,8 @@ def parse(code):
     return o.body
 
 
-def parseList(nodeList, parseElement: types.FunctionType, separator, initSeparator="", emptyCase=""):
+def parseList(nodeList, parseElement: types.FunctionType, separator, initSeparator="", emptyCase="",
+              doubleIndent=False):
     rez = ""
     first = True
     for node in nodeList:
@@ -58,7 +59,7 @@ def parseList(nodeList, parseElement: types.FunctionType, separator, initSeparat
             rez += initSeparator
         else:
             rez += separator
-        rez += parseElement(node)
+        rez += parseElement(node, doubleIndent) if doubleIndent else parseElement(node)
     return rez if rez != "" else emptyCase
 
 
@@ -374,9 +375,15 @@ def parseCallExpr(expr: ast.Call):
     elif type(expr.func) == ast.Attribute:
         if type(expr.func.value) == ast.Name and expr.func.value.id == "self":
             return "%icall({}, {})".format(expr.func.attr, parseArgs(expr.args + expr.keywords))
-        else:
+        elif type(expr.func.value) == ast.Call:
+            return "%ecall({}, {}, {}, {})" \
+                .format(expr.func.value.func.id, parseExpr(expr.func.value.args[0]), expr.func.attr,
+                        parseArgs(expr.args + expr.keywords))
+        elif type(expr.func.value) == ast.Attribute:
             return "%ecall({}, {}, {})" \
                 .format(parseExpr(expr.func.value), expr.func.attr, parseArgs(expr.args + expr.keywords))
+        else:
+            raise ParserException("Unsupported Call Expr format: " + str(expr))
     else:
         raise ParserException("Unsupported Call Expr format: " + str(expr))
 
@@ -687,8 +694,14 @@ def parseStmts(body):
 #  %fdecl(%@public %@payable, deposit, ,%void,
 #    %assign(%var(_value), %as_num256(%msg.value))
 #    ...)
-def parseDef(node):
-    return "  %fdecl({}, {}, {}, {},{})".format(
+def parseDef(node: ast.FunctionDef, doubleIndent=False):
+    template = "  %fdecl({}, {}, {}, {},{})"
+    if doubleIndent:
+        global stmtsIndent
+        stmtsIndent = "    "
+        template = "  " + template
+
+    return template.format(
         parseDecorators(node.decorator_list),
         node.name,
         parseParams(node.args.args),
@@ -697,12 +710,29 @@ def parseDef(node):
     )
 
 
+#    syntax Contract ::= "%contract" "(" Id   //contract name
+#                                    "," Defs //contract functions
+#                                    ")"
+# noinspection PyTypeChecker
+def parseContract(contract: ast.ClassDef):
+    _contractname = contract.name
+    _contract_defs = contract.body
+    _defnames = [_def.name for _def in _contract_defs]
+    if len(set(_defnames)) < len(_contract_defs):
+        raise ParserException(
+            "Duplicate function name: %s" % [name for name in _defnames if _defnames.count(name) > 1][0])
+    fdecls = parseList(_contract_defs, parseDef, "\n", "\n", " ", True)
+    return "  %contract({},{}\n  )".format(_contractname, fdecls)
+
+
 # Pgm ::= "%pgm" "(" Events "," Globals "," Defs ")"
+# noinspection PyTypeChecker
 def parseProgram(nodeList):
     _events = []
     _globals = []
     _init = []
     _defs = []
+    _contracts = []
     for node in nodeList:
         if type(node) == ast.AnnAssign and type(node.annotation) == ast.Call and node.annotation.func.id == "__log__":
             _events.append(node)
@@ -713,20 +743,24 @@ def parseProgram(nodeList):
                 _init.append(node)
             else:
                 _defs.append(node)
+        elif type(node) == ast.ClassDef:
+            _contracts.append(node)
         else:
             raise ParserException("Unsupported top level node: " + str(node))
 
     if _init:
-        return "%pgm({},{},{},{}\n)".format(
+        return "%pgm({},{},{},{},{}\n)".format(
             parseList(_events, parseEvent, "\n", "\n"),
             parseList(_globals, parseGlobal, "\n", "\n", " "),
             parseList(_init, parseDef, "\n", "\n", " "),
-            parseList(_defs, parseDef, "\n", "\n", " "))
+            parseList(_defs, parseDef, "\n", "\n", " "),
+            parseList(_contracts, parseContract, "\n", "\n", " "))
     else:
-        return "%pgm({},{},{}\n)".format(
+        return "%pgm({},{},{},{}\n)".format(
             parseList(_events, parseEvent, "\n", "\n"),
             parseList(_globals, parseGlobal, "\n", "\n", " "),
-            parseList(_defs, parseDef, "\n", "\n", " "))
+            parseList(_defs, parseDef, "\n", "\n", " "),
+            parseList(_contracts, parseContract, "\n", "\n", " "))
 
 
 inputLines: List[str]

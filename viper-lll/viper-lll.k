@@ -135,20 +135,22 @@ module VIPER-LLL
                                                   CLLLExps /*regular func*/
                                               ")"                   [seqstrict]
  // ---------------------------------------------------------------------------
-    rule #compileViperToLLL(%pgm(ES, GS, INIT, DEFS)) => #addEvents(ES)
-                                                      ~> #addGlobals(GS)
-                                                      ~> #addFuncs((INIT .Defs) ++Def DEFS ++Def #mkPublicGetters(GS, .Defs))
-                                                      ~> #compileViperToLLLAux(
-                                                             #initializer_lll,
-                                                             #compileFunc(INIT),
-                                                             #compileFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs), .LLLExps))
+    rule #compileViperToLLL(%pgm(ES, GS, INIT, DEFS, _))
+         => #addEvents(ES)
+            ~> #addGlobals(GS)
+            ~> #addFuncs((INIT .Defs) ++Def DEFS ++Def #mkPublicGetters(GS, .Defs))
+            ~> #compileViperToLLLAux(
+                   #initializer_lll,
+                   #compileFunc(INIT),
+                   #compileFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs), .LLLExps))
 
-    rule #compileViperToLLL(%pgm(ES, GS, DEFS)) => #addEvents(ES)
-                                                ~> #addGlobals(GS)
-                                                ~> #addFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs))
-                                                ~> #compileViperToLLLAux(
-                                                       #initializer_lll,
-                                                       #compileFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs), .LLLExps))
+    rule #compileViperToLLL(%pgm(ES, GS, DEFS, _))
+         => #addEvents(ES)
+            ~> #addGlobals(GS)
+            ~> #addFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs))
+            ~> #compileViperToLLLAux(
+                   #initializer_lll,
+                   #compileFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs), .LLLExps))
 
     rule <k> #compileViperToLLLAux(INITIALIZER, INITFUNC, OTHERFUNCS) => . ... </k>
          <lll> _ => $%seq(
