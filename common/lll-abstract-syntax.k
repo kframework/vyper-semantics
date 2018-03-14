@@ -106,6 +106,7 @@ module LLL-ABSTRACT-SYNTAX
                     | "$invalid"
                     | "$suicide"       "(" LLLExp ")"
                     | "$selfdestruct"  "(" LLLExp ")"
+                    | "$staticcall"    "(" LLLExp "," LLLExp "," LLLExp "," LLLExp "," LLLExp "," LLLExp ")"
 
     syntax Id     ::= "$_stloc"  [token] | "$_mloc" [token]  // augassign
                     | "$_loc1"   [token] | "$_loc2" [token]  //concat

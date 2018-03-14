@@ -662,7 +662,8 @@ def parseStmt(node):
     elif type(node) == ast.Expr and type(node.value) == ast.Name and node.value.id == "throw":
         return "%throw"
     elif type(node) == ast.Expr and type(node.value) == ast.Call:
-        if type(node.value.func) == ast.Attribute and node.value.func.value.id == "log":
+        if type(node.value.func) == ast.Attribute and type(node.value.func.value) == ast.Name \
+                and node.value.func.value.id == "log":
             return "%log({}, {})".format(node.value.func.attr, parseArgs(node.value.args))
         elif type(node.value.func) == ast.Name and node.value.func.id == "send":
             return "%send({})".format(parseArgs(node.value.args, ", "))

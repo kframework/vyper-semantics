@@ -85,8 +85,9 @@ module VIPER-LLL
     syntax PackedArgBy32      ::= "@argby32" "(" LLLExps ","  // code
                                                  Int     ")"  // size
 
-    syntax PackedArgData      ::= "@argdata" "(" LLLExp ","  // code
-                                                 Int    ")"  // size
+    syntax PackedArgData      ::= "@argdata" "(" LLLExp      // code
+                                             "," Int         // size
+                                             ")"
 
     // Convention: C'Sort' is a one-one corresponding supersort of Sort. C'Sort'
     //             requires for evaluation (i.e. not KResult).
@@ -2432,9 +2433,130 @@ module VIPER-LLL
                                  ($set($_poz, $add(32, $add($_poz, GETLENGTH))),.LLLExps))),.LLLExps)
 
 
-// External Contract Call
+// External Contract Call - expression
+//  reference: def external_contract_call_expr()
 // ======================
-//fixme
+
+    rule <k> (. => #exception("Contract not declared yet: " +String Id2String(CONTR)))
+             ~> #compileToLoc(%ecall(CONTR:Id, ADDRE:Expr, FNAME:Id, PARAMS:Exprs)) ...</k>
+         <contracts> CONTRACTS </contracts>
+      requires notBool CONTR in keys(CONTRACTS)
+
+    rule <k> (. => #exception("Function not declared yet: " +String Id2String(FNAME)
+                              +String "(reminder: function must be declared in the correct contract)"))
+             ~> #compileToLoc(%ecall(CONTR:Id, ADDRE:Expr, FNAME:Id, PARAMS:Exprs)) ...</k>
+         <contracts>... CONTR |-> FUNCS ...</contracts>
+      requires notBool FNAME in keys(FUNCS)
+
+    /*  inargs, inargsize = pack_arguments(sig, [parse_expr(arg, context) for arg in expr.args], context)
+        output_placeholder = context.new_placeholder(typ=sig.output_type)
+        if isinstance(sig.output_type, BaseType):
+            returner = output_placeholder
+        elif isinstance(sig.output_type, ByteArrayType):
+            returner = output_placeholder + 32
+        else:
+            raise TypeMismatchException("Invalid output type: %r" % sig.output_type, expr)
+    */
+    rule <k> #compileToLoc(%ecall(CONTR:Id, ADDRE:Expr, FNAME:Id, ARGS:Exprs))
+             => #ifThen(notBool(isBaseType(RETT) orBool isByteArrayType(RETT)),
+                        #exception("Invalid output type"))
+                ~> #ecallExpr(#packArguments(#compileExprs(ARGS), FUNCID, PARAMS),
+                              #newPlaceholder(RETT), #compileToVal(ADDRE), RETT)
+         ...</k>
+         <contracts>... CONTR |-> ((FNAME |-> @func(FUNCID:Int, _, PARAMS:Params, RETT:Type, _,_,_)) _) ...</contracts>
+
+    /*  sub = ['seq', ['assert', ['extcodesize', contract_address]],
+                        ['assert', ['ne', 'address', contract_address]]]
+        if context.is_constant:
+            sub.append(['assert', ['staticcall', 'gas', contract_address, inargs, inargsize,
+                        output_placeholder, get_size_of_type(sig.output_type) * 32]])
+        else:
+            sub.append(['assert', ['call', 'gas', contract_address, 0, inargs, inargsize,
+                output_placeholder, get_size_of_type(sig.output_type) * 32]])
+        sub.extend([0, returner])
+        o = LLLnode.from_list(sub, typ=sig.output_type, location='memory', pos=getpos(expr))
+    */
+    syntax CTypedLLLExp ::= "#ecallExpr" "(" CPackedArgData //result of #packArguments() : inargs, inargsize
+                                         "," CTypedLLLExp   //output_placeholder
+                                         "," CTypedLLLExp   //address
+                                         "," Type           //return type
+                                         ")"    [seqstrict]
+
+    rule <k> #ecallExpr(@argdata(CODE, SIZE), @tlll(_, PLACEHOLDERLoc:Int, _), @tlll(_, ADDR, @none), RETT:Type)
+             => @tlll(RETT,
+                      $%seq($assert($extcodesize(ADDR)),
+                            $assert($ne($address, ADDR)),
+                            $assert($staticcall($gas, ADDR, CODE, SIZE, PLACEHOLDERLoc, #sizeOfType(RETT))),
+
+                            //sub.extend([0, returner])
+                            0, #ifLLLExp(isBaseType(RETT), PLACEHOLDERLoc, PLACEHOLDERLoc +Int 32), .LLLExps
+                      ),
+                      @locattr(@memory, false))
+         ...</k>
+         <constant> true </constant>
+
+    rule <k> #ecallExpr(@argdata(CODE, SIZE), @tlll(_, PLACEHOLDERLoc:Int, _), @tlll(_, ADDR, @none), RETT:Type)
+             => @tlll(RETT,
+                      $%seq($assert($extcodesize(ADDR)),
+                            $assert($ne($address, ADDR)),
+                            $assert($call($gas, ADDR, 0, CODE, SIZE, PLACEHOLDERLoc, #sizeOfType(RETT))),
+
+                            //sub.extend([0, returner])
+                            0, #ifLLLExp(isBaseType(RETT), PLACEHOLDERLoc, PLACEHOLDERLoc +Int 32), .LLLExps
+                      ),
+                      @locattr(@memory, false))
+         ...</k>
+         <constant> false </constant>
+
+
+// External Contract Call - expression statement
+//  reference: external_contract_call_stmt()
+// ======================
+
+    rule <k> (. => #exception("Contract not declared yet: " +String Id2String(CONTR)))
+             ~> #stmtExpr(%ecall(CONTR:Id, ADDRE:Expr, FNAME:Id, PARAMS:Exprs)) ...</k>
+         <contracts> CONTRACTS </contracts>
+      requires notBool CONTR in keys(CONTRACTS)
+
+    rule <k> (. => #exception("Function not declared yet: " +String Id2String(FNAME)
+                              +String "(reminder: function must be declared in the correct contract)"))
+             ~> #stmtExpr(%ecall(CONTR:Id, ADDRE:Expr, FNAME:Id, PARAMS:Exprs)) ...</k>
+         <contracts>... CONTR |-> FUNCS ...</contracts>
+      requires notBool FNAME in keys(FUNCS)
+
+    rule <k> #stmtExpr(%ecall(CONTR:Id, ADDRE:Expr, FNAME:Id, ARGS:Exprs))
+             => #ecallStmt(#packArguments(#compileExprs(ARGS), FUNCID, PARAMS), #compileToVal(ADDRE))
+         ...</k>
+         <contracts>... CONTR |-> ((FNAME |-> @func(FUNCID:Int, _, PARAMS:Params, _,_,_,_)) _) ...</contracts>
+
+    /*  inargs, inargsize = pack_arguments(sig, [parse_expr(arg, context) for arg in stmt.args], context)
+        sub = ['seq', ['assert', ['extcodesize', contract_address]],
+                        ['assert', ['ne', 'address', contract_address]]]
+        if context.is_constant:
+            sub.append(['assert', ['staticcall', 'gas', contract_address, inargs, inargsize, 0, 0]])
+        else:
+            sub.append(['assert', ['call', 'gas', contract_address, 0, inargs, inargsize, 0, 0]])
+        o = LLLnode.from_list(sub, typ=sig.output_type, location='memory', pos=getpos(stmt))
+    */
+    syntax CLLLExps ::= "#ecallStmt" "(" CPackedArgData //result of #packArguments() : inargs, inargsize
+                                     "," CTypedLLLExp   //address
+                                     ")"    [seqstrict]
+
+    rule <k> #ecallStmt(@argdata(CODE, SIZE), @tlll(_, ADDR, @none))
+             => $%seq($assert($extcodesize(ADDR)),
+                      $assert($ne($address, ADDR)),
+                      $assert($staticcall($gas, ADDR, CODE, SIZE, 0, 0)), .LLLExps
+                     ), .LLLExps
+         ...</k>
+         <constant> true </constant>
+
+    rule <k> #ecallStmt(@argdata(CODE, SIZE), @tlll(_, ADDR, @none))
+             => $%seq($assert($extcodesize(ADDR)),
+                      $assert($ne($address, ADDR)),
+                      $assert($call($gas, ADDR, 0, CODE, SIZE, 0, 0)), .LLLExps
+                     ), .LLLExps
+         ...</k>
+         <constant> false </constant>
 
 
 // Reserved Expr

@@ -231,4 +231,5 @@ module EVM-CORE-SYNTAX
                   | "INVALID"
                   | "SUICIDE"
                   | "SELFDESTRUCT"
+                  | "STATICCALL"
 endmodule

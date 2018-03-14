@@ -90,6 +90,7 @@ module LLL-XEVM
     rule $invalid                                      =>                                    INVALID
     rule $suicide       ( A )                          => do( A )                         ~> SUICIDE
     rule $selfdestruct  ( A )                          => do( A )                         ~> SELFDESTRUCT
+    rule $staticcall    ( A , B , C , D , E , F )      => do( F   E   D   C   B   A )     ~> STATICCALL
 
 //// LLLExp
 
@@ -391,6 +392,7 @@ module LLL-XEVM
     rule valency($invalid                                      )  =>   0
     rule valency($suicide       ( A )                          )  =>   0   when valency(A) ==K 1
     rule valency($selfdestruct  ( A )                          )  =>   0   when valency(A) ==K 1
+    rule valency($staticcall    ( A , B , C , D , E , F )      )  =>   1   when valency(A) ==K 1 andBool valency(B) ==K 1 andBool valency(C) ==K 1 andBool valency(D) ==K 1 andBool valency(E) ==K 1 andBool valency(F) ==K 1
 
 //// Utils
 
