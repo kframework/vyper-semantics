@@ -29,7 +29,7 @@ module VIPER-LLL
         <global> .Map </global>  // Global variables. Var |-> TypedAddr
         <nextStorage> 0 </nextStorage>
         <internalSig> .Map </internalSig>  // internal ABI objects.   (Event, Func)Name |-> (Event, Func)Record
-        <externalSig> .Map </externalSig>  // external ABI objects.
+        <contracts> .Map </contracts>      // external ABI objects. Map from contract names to sets of signatures.
         <currentContract> .K </currentContract> //Current contract, preprocessing phase only.
         <forvar> .Set </forvar>  // Variables defined in for loops, eg. for i in range(6):...
         <return> %void </return>  // Return type of the function
@@ -193,8 +193,7 @@ module VIPER-LLL
     rule <k> #addEvent(%event(NAME, EPARAMS))
             => #exception("Duplicate event name: " +String Id2String(NAME))
          ... </k>
-         <internalSig> SIGS </internalSig>
-      requires NAME in_keys(SIGS)
+         <internalSig>... NAME |-> _ ...</internalSig>
 
     rule <k> #addEventAux(EID:Int, NAME, EPARAMS) => . ... </k>
          <internalSig> SIGS => SIGS[NAME <- @event(EID, NAME, EPARAMS)] </internalSig>
@@ -253,8 +252,7 @@ module VIPER-LLL
     rule <k> #addGlobal(%svdecl(NAME, T, _))
             => #exception("Cannot declare a persistent variable twice! " +String Id2String(NAME))
          ... </k>
-         <global> GLOBALS </global>
-      requires %svar(NAME) in_keys(GLOBALS)
+         <global>... %svar(NAME) |-> _ ...</global>
 
     rule <k> #addGlobalAux(NAME, T:Type) => . ... </k>
          <global> GLOBALS => GLOBALS[%svar(NAME) <- @taddr(T, LOC, @locattr(@storage, true))] </global>
@@ -432,19 +430,19 @@ module VIPER-LLL
     rule <k> (. => #addFuncs(DEFS))
              ~> #preprocessContracts(%contract(CID:Id, DEFS:Defs) CS:Contracts => CS) ...</k>
          <currentContract> _ => CID </currentContract>
-         <externalSig> CIDS => CIDS[CID <- .Map] </externalSig>
+         <contracts> CIDS => CIDS[CID <- .Map] </contracts>
       requires notBool CID in keys(CIDS)
 
     rule <k> (. => #exception("Duplicate contract name: " +String Id2String(CID)))
              ~> #preprocessContracts(%contract(CID:Id, DEFS:Defs) CS:Contracts) ...</k>
-         <externalSig>... CID |-> _ ...</externalSig>
+         <contracts>... CID |-> _ ...</contracts>
 
     rule #preprocessContracts(.Contracts) => .
 
     rule <k> #addFuncAux(FID:Int, FNAME, PARAMS, T, CONSTANT, PAYABLE, PRIVATE) => . ... </k>
-         <externalSig>... CID |-> ( SIGS => SIGS[FNAME <- @func(FID, FNAME, PARAMS, T, CONSTANT, PAYABLE, PRIVATE)
+         <contracts>... CID |-> ( SIGS => SIGS[FNAME <- @func(FID, FNAME, PARAMS, T, CONSTANT, PAYABLE, PRIVATE)
                                                 ])
-         ...</externalSig>
+         ...</contracts>
          <currentContract> CID:Id </currentContract>
 
 
@@ -497,7 +495,7 @@ module VIPER-LLL
                                FUNCID,
                                #isInitFunc(FNAME))
          ... </k>
-         <internalSig> FNAME |-> @func(FUNCID, FNAME, PARAMS, RT, CONSTANT, PAYABLE, PRIVATE) SIGS</internalSig>
+         <internalSig>... FNAME |-> @func(FUNCID, FNAME, PARAMS, RT, CONSTANT, PAYABLE, PRIVATE) ...</internalSig>
          <return> _ => RT </return>
          <constant> _ => CONSTANT </constant>
          <payable> _ => PAYABLE </payable>
@@ -1163,21 +1161,21 @@ module VIPER-LLL
     syntax KItem  ::= "#setInLoop" "(" Var ")"
  // ------------------------------------------
     rule <k> #setInLoop(VAR) => . ... </k>
-         <inLoop> (.Set => SetItem(VAR)) INLOOPS </inLoop>
+         <inLoop>... (.Set => SetItem(VAR)) ...</inLoop>
 
 
     syntax KItem  ::= "#removeInLoop" "(" Var ")"
  // ---------------------------------------------
     rule <k> CODE:LLLExps ~> (#removeInLoop(VAR) => .) ... </k>
-         <inLoop> (SetItem(VAR) => .Set) INLOOPS </inLoop>
+         <inLoop>... (SetItem(VAR) => .Set) ...</inLoop>
 
 
     // deletes the variable from <env> and <forvar>
     syntax KItem  ::= "#clearIter" "(" Id ")"
  // -------------------------------------------------
     rule <k> CODE:LLLExps ~> (#clearIter(ITER:Id) => .) ... </k>
-         <env> (%var(ITER) |-> _ => .Map) ENV </env>
-         //K bug: in this format rule gets stuck when <forvar has 2 entries> See test_repeater.py test 3.
+         <env>... (%var(ITER) |-> _ => .Map) ...</env>
+         //K bug: in this format rule gets stuck when <forvar> has 2 entries See test_repeater.py test 3.
          //<forvar> (SetItem(%var(ITER)) => .Set) FORVARS </forvar>
          <forvar>... SetItem(ITER) => .Set ...</forvar>
 
@@ -1343,7 +1341,7 @@ module VIPER-LLL
 
 
     rule <k> #compileStmt(%log(NAME, ARGS)) => #log(ARGS, EVENTRECORD) ... </k>
-         <internalSig> NAME |-> EVENTRECORD:EventRecord SIGS </internalSig>
+         <internalSig>... NAME |-> EVENTRECORD:EventRecord ...</internalSig>
 
     rule <k> #compileStmt(%log(NAME, _))
             => #exception("Event not declared yet: " +String Id2String(NAME)) ... </k>
@@ -1612,7 +1610,7 @@ module VIPER-LLL
     syntax CLLLExps  ::= "#icallNoReturn" "(" Exprs "," FuncRecord ")"
  // ----------------------------------------------------------------------
     rule <k> #stmtExpr(%icall(FNAME, EXPRS)) => #icallNoReturn(EXPRS, FUNCRECORD) ... </k>
-         <internalSig> FNAME |-> FUNCRECORD SIGS </internalSig>
+         <internalSig>... FNAME |-> FUNCRECORD ...</internalSig>
 
     // TODO: Is it necessary to enforce that functions cannot call functions defined later than themselves?
     rule <k> #stmtExpr(%icall(FNAME, _)) => #exception("Function not declared yet: " +String Id2String(FNAME)) ... </k>
@@ -2297,7 +2295,7 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#icallWithReturn" "(" Exprs "," FuncRecord ")"
  // ------------------------------------------------------------------------
     rule <k> #compileToLoc(%icall(FNAME, ARGS)) => #icallWithReturn(ARGS, FUNCRECORD) ... </k>
-         <internalSig> FNAME |-> FUNCRECORD SIGS </internalSig>
+         <internalSig>... FNAME |-> FUNCRECORD ...</internalSig>
 
     // TODO: Is it necessary to enforce that functions cannot call functions defined later than themselves?
     rule <k> #compileToLoc(%icall(FNAME, _)) => #exception("Function not declared yet: " +String Id2String(FNAME)) ... </k>
@@ -3899,7 +3897,7 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#lookupVar" "(" Var ")"
  // -------------------------------------------------------------
     rule <k> #lookupVar(%var(NAME)) => @tlll(T, LOC, LOCATTR) ... </k>
-         <env> %var(NAME) |-> @taddr(T, LOC, LOCATTR) ENV </env>
+         <env>... %var(NAME) |-> @taddr(T, LOC, LOCATTR) ...</env>
 
     rule <k> #lookupVar(%var(NAME))
             => #exception("Undeclared Variable: " +String Id2String(NAME)) ... </k>
@@ -3907,7 +3905,7 @@ module VIPER-LLL
       requires notBool %var(NAME) in_keys(ENV)
 
     rule <k> #lookupVar(%svar(NAME)) => @tlll(T, LOC, LOCATTR) ... </k>
-         <global> %svar(NAME) |-> @taddr(T, LOC, LOCATTR) GLOBAL </global>
+         <global>... %svar(NAME) |-> @taddr(T, LOC, LOCATTR) ...</global>
 
     rule <k> #lookupVar(%svar(NAME))
             => #exception("Persistent variable undeclared: " +String Id2String(NAME)) ... </k>
@@ -4076,22 +4074,21 @@ module VIPER-LLL
       requires notBool %var(NAME) in_keys(ENV)
 
     rule <k> #newVar(NAME, T)
-           => #exception("Duplicate variable name: " +String Id2String(NAME)) ...</k>
-         <env> ENV </env>
-      requires %var(NAME) in_keys(ENV)
+             => #exception("Duplicate variable name: " +String Id2String(NAME)) ...</k>
+         <env>... %var(NAME) |-> _ ...</env>
 
 
     // deletes the variable from <env>
     syntax KItem  ::= "#clearVar" "(" Id ")"
  // -------------------------------------------------
     rule <k> CODE:LLLExps ~> (#clearVar(NAME) => .) ... </k>
-         <env> (%var(NAME) |-> _ => .Map) ENV </env>
+         <env>... (%var(NAME) |-> _ => .Map) ...</env>
 
 
     syntax CTypedLLLExp  ::= "#lookupOrNewVar" "(" Var "," Type ")"
  // ---------------------------------------------------------------
     rule <k> #lookupOrNewVar(%var(NAME), _) => @tlll(T, LOC, LOCATTR) ... </k>
-         <env> %var(NAME) |-> @taddr(T, LOC, LOCATTR) ENV </env>
+         <env>... %var(NAME) |-> @taddr(T, LOC, LOCATTR) ...</env>
 
     rule <k> #lookupOrNewVar(%var(NAME), T) => #newVar(NAME, T) ... </k>
          <env> ENV </env>
@@ -4107,8 +4104,7 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#newLoopVar" "(" Id "," Type ")"
  // ----------------------------------------------------------
     rule <k> #newLoopVar(NAME, T) => #exception("Duplicate iter: " +String Id2String(NAME)) ... </k>
-         <forvar> FORVARS </forvar>
-      requires NAME in FORVARS
+         <forvar>... SetItem(NAME) ...</forvar>
 
     rule <k> #newLoopVar(NAME, T) => #newVar(NAME, T) ... </k>
          <forvar> FORVARS (.Set => SetItem(NAME)) </forvar>
