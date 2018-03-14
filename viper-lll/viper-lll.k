@@ -30,6 +30,7 @@ module VIPER-LLL
         <nextStorage> 0 </nextStorage>
         <internalSig> .Map </internalSig>  // internal ABI objects.   (Event, Func)Name |-> (Event, Func)Record
         <externalSig> .Map </externalSig>  // external ABI objects.
+        <currentContract> .K </currentContract> //Current contract, preprocessing phase only.
         <forvar> .Set </forvar>  // Variables defined in for loops, eg. for i in range(6):...
         <return> %void </return>  // Return type of the function
         <constant> false </constant>  // Is the function constant?
@@ -135,19 +136,21 @@ module VIPER-LLL
                                                   CLLLExps /*regular func*/
                                               ")"                   [seqstrict]
  // ---------------------------------------------------------------------------
-    rule #compileViperToLLL(%pgm(ES, GS, INIT, DEFS, _))
+    rule #compileViperToLLL(%pgm(ES, GS, INIT, DEFS, CONTRACTS:Contracts))
          => #addEvents(ES)
             ~> #addGlobals(GS)
             ~> #addFuncs((INIT .Defs) ++Def DEFS ++Def #mkPublicGetters(GS, .Defs))
+            ~> #preprocessContracts(CONTRACTS)
             ~> #compileViperToLLLAux(
                    #initializer_lll,
                    #compileFunc(INIT),
                    #compileFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs), .LLLExps))
 
-    rule #compileViperToLLL(%pgm(ES, GS, DEFS, _))
+    rule #compileViperToLLL(%pgm(ES, GS, DEFS, CONTRACTS:Contracts))
          => #addEvents(ES)
             ~> #addGlobals(GS)
             ~> #addFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs))
+            ~> #preprocessContracts(CONTRACTS)
             ~> #compileViperToLLLAux(
                    #initializer_lll,
                    #compileFuncs(DEFS ++Def #mkPublicGetters(GS, .Defs), .LLLExps))
@@ -258,7 +261,7 @@ module VIPER-LLL
          <nextStorage> LOC => LOC +Int 1 </nextStorage>
 
 
-// Process Funcs
+// Preprocess Functions
 // =============
 
 
@@ -293,7 +296,7 @@ module VIPER-LLL
 
     rule <k> #addFunc(FNAME, PARAMS, T, CONSTANT, PAYABLE, PRIVATE, PUBLIC)
             => #checkFuncParams(PARAMS, .Ids)
-            ~> #checkPrivatePublicMECE(PRIVATE, PUBLIC)
+            ~> #ifThen(CCONT ==K .K, #checkPrivatePublicMECE(PRIVATE, PUBLIC))
             ~> #addFuncAux(#computeFuncId(FNAME, PARAMS),
                            FNAME,
                            #parseTypeForParams(PARAMS, .Params),
@@ -301,11 +304,13 @@ module VIPER-LLL
                            CONSTANT, PAYABLE, PRIVATE)
          ... </k>
          <internalSig> SIGS </internalSig>
-      requires notBool FNAME in_keys(SIGS)
+         <currentContract> CCONT:K </currentContract>
+      requires (CCONT =/=K .K) orBool notBool FNAME in_keys(SIGS)
 
     rule <k> #addFunc(FNAME, PARAMS, T, CONSTANT, PAYABLE, PRIVATE, PUBLIC)
             => #exception("Duplicate event or function name: " +String Id2String(FNAME)) ... </k>
          <internalSig> SIGS </internalSig>
+         <currentContract> .K </currentContract>
       requires FNAME in_keys(SIGS)
 
     rule <k> #addFuncAux(FID:Int, FNAME, PARAMS, T, CONSTANT, PAYABLE, PRIVATE) => . ... </k>
@@ -317,6 +322,7 @@ module VIPER-LLL
                                              CONSTANT,
                                              PAYABLE,
                                              PRIVATE)] </internalSig>
+         <currentContract> .K </currentContract>
 
 
     syntax KItem  ::= "#checkFuncParams" "(" Params "," Ids ")"
@@ -415,6 +421,31 @@ module VIPER-LLL
 
     rule #mkPublicGetterStructT(NAME, PARAMS, %structT(.AnnVars), VAR, DEPTH)
         => .Defs
+
+
+// Preprocess Contracts
+// =============
+
+    syntax K ::= "#preprocessContracts" "(" Contracts ")"
+ // -------------------------------------------------------------------------------------------------------------
+
+    rule <k> (. => #addFuncs(DEFS))
+             ~> #preprocessContracts(%contract(CID:Id, DEFS:Defs) CS:Contracts => CS) ...</k>
+         <currentContract> _ => CID </currentContract>
+         <externalSig> CIDS => CIDS[CID <- .Map] </externalSig>
+      requires notBool CID in keys(CIDS)
+
+    rule <k> (. => #exception("Duplicate contract name: " +String Id2String(CID)))
+             ~> #preprocessContracts(%contract(CID:Id, DEFS:Defs) CS:Contracts) ...</k>
+         <externalSig>... CID |-> _ ...</externalSig>
+
+    rule #preprocessContracts(.Contracts) => .
+
+    rule <k> #addFuncAux(FID:Int, FNAME, PARAMS, T, CONSTANT, PAYABLE, PRIVATE) => . ... </k>
+         <externalSig>... CID |-> ( SIGS => SIGS[FNAME <- @func(FID, FNAME, PARAMS, T, CONSTANT, PAYABLE, PRIVATE)
+                                                ])
+         ...</externalSig>
+         <currentContract> CID:Id </currentContract>
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -3315,9 +3346,10 @@ module VIPER-LLL
  // -----------------------------------------------------------------------------
     rule #inDecorators(D, .Decorators) => false
 
-    rule #inDecorators(D, DEC DECS) => true                     requires D ==K DEC
+    rule #inDecorators(DEC, DEC DECS) => true
 
-    rule #inDecorators(D, DEC DECS) => #inDecorators(D, DECS)   requires D =/=K DEC
+    rule #inDecorators(D, (DEC DECS => DECS))
+      requires D =/=K DEC
 
 
 // Size of List
