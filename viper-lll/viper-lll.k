@@ -359,20 +359,19 @@ module VIPER-LLL
     rule #mkPublicGetters(%svdecl(_, _, %private) GS, DEFS)
         => #mkPublicGetters(GS, DEFS)
 
-    rule #mkPublicGetter(NAME, PARAMS, T, VAR, DEPTH) => #mkPublicGetterBase(NAME, PARAMS, T, VAR, DEPTH)
-      requires isBaseType(T)
+    rule #mkPublicGetter(NAME, PARAMS, T:BaseType, VAR, DEPTH) => #mkPublicGetterBase(NAME, PARAMS, T, VAR, DEPTH)
 
-    rule #mkPublicGetter(NAME, PARAMS, %bytesT(L), VAR, DEPTH)
-        => #mkPublicGetterByteArray(NAME, PARAMS, %bytesT(L), VAR, DEPTH)
+    rule #mkPublicGetter(NAME, PARAMS, T:ByteArrayType, VAR, DEPTH)
+        => #mkPublicGetterByteArray(NAME, PARAMS, T, VAR, DEPTH)
 
-    rule #mkPublicGetter(NAME, PARAMS, %listT(SUBTYPE, L), VAR, DEPTH)
-        => #mkPublicGetterListT(NAME, PARAMS, %listT(SUBTYPE, L), VAR, DEPTH)
+    rule #mkPublicGetter(NAME, PARAMS, T:ListType, VAR, DEPTH)
+        => #mkPublicGetterListT(NAME, PARAMS, T, VAR, DEPTH)
 
-    rule #mkPublicGetter(NAME, PARAMS, %mapT(VT, KT), VAR, DEPTH)
-        => #mkPublicGetterMapT(NAME, PARAMS, %mapT(VT, KT), VAR, DEPTH)
+    rule #mkPublicGetter(NAME, PARAMS, T:MappingType, VAR, DEPTH)
+        => #mkPublicGetterMapT(NAME, PARAMS, T, VAR, DEPTH)
 
-    rule #mkPublicGetter(NAME, PARAMS, %structT(ANNVARS), VAR, DEPTH)
-        => #mkPublicGetterStructT(NAME, PARAMS, %structT(ANNVARS), VAR, DEPTH)
+    rule #mkPublicGetter(NAME, PARAMS, T:StructType, VAR, DEPTH)
+        => #mkPublicGetterStructT(NAME, PARAMS, T, VAR, DEPTH)
 
 
     syntax Defs  ::= "#mkPublicGetterBase"      "(" String "," Params "," Type "," Var "," Int ")"  [function]
@@ -746,33 +745,28 @@ module VIPER-LLL
     syntax CLLLExps  ::= "#assignImpl" "(" CTypedLLLExp  /*left variable loc*/   ","
                                            CTypedLLLExp  /*right compiled Expr*/ ")"  [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #assignImpl(@tlll(LT, LOC, LOCATTR), RTCODE)
+    rule #assignImpl(@tlll(LT:BaseType, LOC, LOCATTR), RTCODE)
         => #mkSetterBase(@tlll(LT, LOC, LOCATTR),
                          #baseTypeConvert(RTCODE, LT))
-      requires isBaseType(LT)
 
-    rule #assignImpl(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+    rule #assignImpl(@tlll(LT:ByteArrayType, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
         => #ifThen(notBool(isByteArrayType(RT)),
                    #exception("Setter type mismatch: left side is byte array but right side is not."))
         ~> #mkSetterBytesT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
-      requires isByteArrayType(LT)
 
     // Can't copy mappings
-    rule #assignImpl(@tlll(LT, LOC, LOCATTR), RTCODE)
+    rule #assignImpl(@tlll(LT:MappingType, LOC, LOCATTR), RTCODE)
         => #exception("Cannot copy mappings; can only copy individual elements.")
-      requires isMappingType(LT)
 
-    rule #assignImpl(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+    rule #assignImpl(@tlll(LT:ListType, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
         => #ifThen(notBool(isListType(RT)),
                    #exception("Setter type mismatch: left side is array but right side is not."))
         ~> #assignList(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
-      requires isListType(LT)
 
-    rule #assignImpl(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+    rule #assignImpl(@tlll(LT:StructType, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
         => #ifThen(notBool(isStructType(RT)),
                    #exception("Setter type mismatch: left side is struct but right side is not."))
         ~> #assignStruct(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
-      requires isStructType(LT)
 
 
     // Basic Types
@@ -1471,9 +1465,8 @@ module VIPER-LLL
                                               ")"      [strict(1)]
  // --------------------------------------------------------------
     // Base Type
-    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T)
+    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T:BaseType)
         => #packArgBy32Base(LOC, #compileToLoc(EXPR), T)
-      requires isBaseType(T)
 
     // Viper only allows 32-byte byte array as data.
     // String Literal
@@ -1490,16 +1483,15 @@ module VIPER-LLL
 
 
     // List Literal
-    rule #packArgBy32(@tlll(_, LOC:Int, _), %list(EXPRS), T)
+    rule #packArgBy32(@tlll(_, LOC:Int, _), %list(EXPRS), T:ListType)
         => #ifThen(#numOfExprs(EXPRS) =/=Int #getListTCount(T),
                    #exception("The length of list doesn't match the expected length."))
         ~> #packArgBy32ListTLiteral(LOC, EXPRS, T, .LLLExps, 0)
-      requires isListType(T)
 
     // List Var
-    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T)
+    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T:ListType)
         => #packArgBy32ListTVar(LOC, #compileToLoc(EXPR), T, .LLLExps, 0, 0)
-      requires isListType(T) andBool notBool(isListExpr(EXPR))
+      requires notBool(isListExpr(EXPR))
 
 
     syntax CPackedArgBy32  ::= "#packArgBy32Base"    "(" Int          ","  // packing loc
@@ -1561,15 +1553,13 @@ module VIPER-LLL
     syntax CTypedLLLExp  ::= "#packLoggingTopic" "(" Expr "," EventParams ")"
  // -------------------------------------------------------------------------
     // Base Type
-    rule #packLoggingTopic(ARG, %eparam(_, T, _)) => #packLoggingTopicBase(#compileToLoc(ARG), T)
-      requires isBaseType(T)
+    rule #packLoggingTopic(ARG, %eparam(_, T, _)) => #packLoggingTopicBase(#compileToLoc(ARG), T:BaseType)
 
     // String Literal
-    rule #packLoggingTopic(ARG, %eparam(_, %bytesT(L), _))
+    rule #packLoggingTopic(ARG:String, %eparam(_, %bytesT(L), _))
         => #ifThen(lengthString(ARG) >Int L,
                    #exception("Topic input bytes are to big."))
         ~> #packLoggingTopicStringLiteral(#string2Bytes(ARG), %bytesT(L))
-      requires isString(ARG)
 
     // Byte Array Variable
     rule #packLoggingTopic(ARG, %eparam(_, %bytesT(L), _))
@@ -2322,14 +2312,12 @@ module VIPER-LLL
                                                    ")"  [seqstrict(1, 2)]
  // ---------------------------------------------------------------------
     // Base
-    rule #icallWithReturnAux(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH)
+    rule #icallWithReturnAux(PACKEDARGS, @tlll(RETT:BaseType, LOC, LOCATTR), RETWIDTH)
         => #icallWithReturner(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH, LOC)
-      requires isBaseType(RETT)
 
     // Byte Array
-    rule #icallWithReturnAux(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH)
+    rule #icallWithReturnAux(PACKEDARGS, @tlll(RETT:ByteArrayType, LOC, LOCATTR), RETWIDTH)
         => #icallWithReturner(PACKEDARGS, @tlll(RETT, LOC, LOCATTR), RETWIDTH, LOC +Int 32)
-      requires isByteArrayType(RETT)
 
 
     // TODO: List?
@@ -2385,17 +2373,17 @@ module VIPER-LLL
                       $%seq(SETTER ++LLL (ARGSSTART,.LLLExps))), ARGSWIDTH)
 
     // Base Type
-    rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T) PARAMS), ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+    rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T:BaseType) PARAMS),
+                           ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
         => #packArgumentBase(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG)
         ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
-      requires isBaseType(T)
 
     // Byte Array Type
     // TODO: Byte Array packing does not comply with ABI specification?
-    rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T) PARAMS), ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+    rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T:ByteArrayType) PARAMS),
+                           ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
         => #packArgumentBytesT(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG, ARGSSTART +Int 4)
         ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, true)
-      requires isByteArrayType(T)
 
 
     rule CODE:LLLExps ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
@@ -2442,6 +2430,11 @@ module VIPER-LLL
         => SETTER ++LLL ($with($_s, ARGCODE,
                            $%seq(COPIER ++LLL
                                  ($set($_poz, $add(32, $add($_poz, GETLENGTH))),.LLLExps))),.LLLExps)
+
+
+// External Contract Call
+// ======================
+//fixme
 
 
 // Reserved Expr
@@ -3195,8 +3188,7 @@ module VIPER-LLL
 
     syntax Bool  ::= "#isTypeOf" "(" Type "," Type /*target type*/ ")"    [function]
  // --------------------------------------------------------------------------------
-    rule #isTypeOf(T, TARGET) => #isUnitTypeOf(T, TARGET)
-      requires isUnitType(T)
+    rule #isTypeOf(T:UnitType, TARGET) => #isUnitTypeOf(T, TARGET)
 
     rule #isTypeOf(T, TARGET) => T ==K TARGET
       requires notBool isUnitType(T)
@@ -3469,9 +3461,8 @@ module VIPER-LLL
         => #canonicalizeListType(#canonicalizeType(SUBTYPE, false), N)
       requires isBaseType(SUBTYPE) orBool isListType(SUBTYPE)
 
-    rule #canonicalizeType(%listT(SUBTYPE, N), _)
+    rule #canonicalizeType(%listT(SUBTYPE:ByteArrayType, _), _)
         => #exception("List of byte arrays not allowed.")
-      requires isByteArrayType(SUBTYPE)
 
     rule #canonicalizeType(%num, _) => "int128"
 
@@ -3733,8 +3724,7 @@ module VIPER-LLL
 
     syntax UnitType  ::= "#convertToUnitIfPure" "(" NumericType "," UnitTuple ")"    [function]
  // -------------------------------------------------------------------------------------------
-    rule #convertToUnitIfPure(T, _) => T
-      requires isUnitType(T)
+    rule #convertToUnitIfPure(T:UnitType, _) => T
 
     rule #convertToUnitIfPure(%num, @unittuple(UNITMAP, POSITIONAL))
         => %unitT(%num, UNITMAP, POSITIONAL)
@@ -3757,8 +3747,8 @@ module VIPER-LLL
     rule #areUnitsCompatible(FROM, TO, false) => false
       requires notBool(isUnitType(FROM)) andBool isUnitType(TO)
 
-    rule #areUnitsCompatible(FROM, TO, _) => false
-      requires isUnitType(FROM) andBool notBool(isUnitType(TO))
+    rule #areUnitsCompatible(FROM:UnitType, TO, _) => false
+      requires notBool(isUnitType(TO))
 
     rule #areUnitsCompatible(%unitT(_, FROMMAP:Map, FROMPOSITIONAL), %unitT(_, TOMAP:Map, TOPOSITIONAL), _)
         => true
@@ -3942,10 +3932,9 @@ module VIPER-LLL
 
     // Map, index is byte array
     rule #lookupVarElement(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
-                       @tlll(INDEXT, INDEX, EXPRATTR))
+                       @tlll(INDEXT:ByteArrayType, INDEX, EXPRATTR))
         => #lookupMapElement(@tlll(%mapT(KT, VT), BASELOC, LOCATTR),
                             #mapOffsetFromByteArray(@tlll(INDEXT, INDEX, EXPRATTR), KT))
-      requires isByteArrayType(INDEXT)
 
     // Struct
     rule #lookupVarElement(@tlll(%structT(ANNVARS), BASELOC, LOCATTR), @tlll(_, FIELD:Id, _))
