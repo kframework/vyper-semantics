@@ -170,7 +170,8 @@ module VIPER-ABSTRACT-SYNTAX
 
     syntax BaseType  ::= "%bool"
                        | NumericType | "%num256"  | "%signed256"
-                       | "%bytes32"  | "%address"
+                       | "%bytes32"
+                       | AddressType
 
     syntax NumericType  ::= PureNumType
                           | UnitType
@@ -187,6 +188,9 @@ module VIPER-ABSTRACT-SYNTAX
       In fact only %castT(%num, %num256) is considered.
     */
     syntax CastType  ::= "%castT" "(" BaseType "," BaseType ")"
+
+    syntax AddressType  ::= "%address"
+                          | "%contractT" "(" Id ")"
 
     syntax Unit  ::= BaseUnit
                    | "%umul" "(" Unit "," Unit ")"

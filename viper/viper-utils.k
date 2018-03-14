@@ -279,7 +279,7 @@ module VIPER-UTILS
 
     rule #canonicalizeType(%bool, _) => "bool"
 
-    rule #canonicalizeType(%address, _) => "address"
+    rule #canonicalizeType(_:AddressType, _) => "address"
 
     rule #canonicalizeType(%bytes32, _) => "bytes32"
 

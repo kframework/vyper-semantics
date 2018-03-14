@@ -597,7 +597,7 @@ module VIPER-LLL
 
     rule #mkClamper(%bool, DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), 2),.LLLExps
 
-    rule #mkClamper(%address, DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), $mload(@addrSizePos)),.LLLExps
+    rule #mkClamper(_:AddressType, DPOS, MPOS, ISINIT) => $uclamplt(#mkDataDecl(DPOS, ISINIT), $mload(@addrSizePos)),.LLLExps
 
     rule #mkClamper(%bytesT(L), DPOS, MPOS, ISINIT)
         => $%seq(
@@ -1642,7 +1642,7 @@ module VIPER-LLL
         => #sendAux(TTOCODE,
                     @tlll(#convertToUnitIfPure(T, @unittuple((%wei |-> 1), false)), VALUECODE, EXPRATTR))
 
-    rule #sendAux(@tlll(%address, TOCODE, _), @tlll(%unitT(%num, %wei |-> 1, false), VALUECODE, _))
+    rule #sendAux(@tlll(_:AddressType, TOCODE, _), @tlll(%unitT(%num, %wei |-> 1, false), VALUECODE, _))
         => $assert($call(0, TOCODE, VALUECODE, 0, 0, 0, 0)),.LLLExps
 
 
@@ -1663,7 +1663,7 @@ module VIPER-LLL
 
     syntax CLLLExps  ::= "#selfdestruct" "(" CTypedLLLExp ")"  [strict]
  // -------------------------------------------------------------------
-    rule #selfdestruct(@tlll(%address, ADDRCODE, _)) => $selfdestruct(ADDRCODE),.LLLExps
+    rule #selfdestruct(@tlll(_:AddressType, ADDRCODE, _)) => $selfdestruct(ADDRCODE),.LLLExps
 
 
 
@@ -2433,6 +2433,34 @@ module VIPER-LLL
                                  ($set($_poz, $add(32, $add($_poz, GETLENGTH))),.LLLExps))),.LLLExps)
 
 
+// External Contract Call - typed addresses
+// ======================
+
+    //converting call over typed address to call over explicit contract
+    rule #compileToLoc(%ecall(V:Var, FNAME:Id, Es:Exprs)) => #compileEcall(#compileToLoc(V), V, FNAME, Es)
+
+    syntax CTypedLLLExp ::= "#compileEcall" "(" CTypedLLLExp
+                                            "," Expr
+                                            "," Id
+                                            "," Exprs
+                                            ")"   [strict(1)]
+
+    rule #compileEcall(@tlll(%contractT(CONTR:Id), _,_), ADDRE:Expr, FNAME:Id, Es:Exprs)
+         => #compileToLoc(%ecall(CONTR, ADDRE, FNAME, Es))
+
+
+    rule #stmtExpr(%ecall(V:Var, FNAME:Id, Es:Exprs)) => #compileEcallStmt(#compileToLoc(V), V, FNAME, Es)
+
+    syntax CTypedLLLExp ::= "#compileEcallStmt" "(" CTypedLLLExp
+                                                "," Expr
+                                                "," Id
+                                                "," Exprs
+                                                ")"   [strict(1)]
+
+    rule #compileEcallStmt(@tlll(%contractT(CONTR:Id), _,_), ADDRE:Expr, FNAME:Id, Es:Exprs)
+         => #stmtExpr(%ecall(CONTR, ADDRE, FNAME, Es))
+
+
 // External Contract Call - expression
 //  reference: def external_contract_call_expr()
 // ======================
@@ -2567,21 +2595,21 @@ module VIPER-LLL
 
     syntax CTypedLLLExp  ::= "#balance" "(" CTypedLLLExp ")"  [strict]
  // ------------------------------------------------------------------
-    rule #balance(@tlll(%address, ADDR, @none)) => @tlll(%unitT(%num, %wei |-> 1, false), $balance(ADDR), @none)
+    rule #balance(@tlll(_:AddressType, ADDR, @none)) => @tlll(%unitT(%num, %wei |-> 1, false), $balance(ADDR), @none)
 
 
     rule #compileToLoc(%codesize(EXPR))   => #codesize(#compileToVal(EXPR))
 
     syntax CTypedLLLExp  ::= "#codesize" "(" CTypedLLLExp ")"   [strict]
  // --------------------------------------------------------------------
-    rule #codesize(@tlll(%address, ADDR, @none)) => @tlll(%num, $extcodesize(ADDR), @none)
+    rule #codesize(@tlll(_:AddressType, ADDR, @none)) => @tlll(%num, $extcodesize(ADDR), @none)
 
 
     rule #compileToLoc(%is_contract(EXPR)) => #is_contract(#compileToVal(EXPR))
 
     syntax CTypedLLLExp  ::= "#is_contract" "(" CTypedLLLExp ")"  [strict]
  // ----------------------------------------------------------------------
-    rule #is_contract(@tlll(%address, ADDR, @none)) => @tlll(%bool, $extcodesize(ADDR), @none)
+    rule #is_contract(@tlll(_:AddressType, ADDR, @none)) => @tlll(%bool, $extcodesize(ADDR), @none)
 
 
     rule #compileToLoc(%msg.sender)       => @tlll(%address, $caller, @none)
@@ -2660,7 +2688,7 @@ module VIPER-LLL
     rule #compileToLoc(%as_num128(EXPR)) => #asNum128(#compileToVal(EXPR))
 
     rule #asNum128(@tlll(T, CODE, _))
-        => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %address),
+        => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %num256) orBool isAddressType(T),
                        #asNum128Aux(CODE),
                        #exception("Function arg type does not match expected type."))
 
@@ -2674,7 +2702,7 @@ module VIPER-LLL
     rule #compileToLoc(%as_num256(EXPR)) => #asNum256(#compileToVal(EXPR))
 
     rule #asNum256(@tlll(T, CODE, EXPRATTR))
-        => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %address),
+        => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool isAddressType(T),
                        #asNum256Aux(@tlll(T, CODE, EXPRATTR)),
                        #exception("Function arg type does not match expected type."))
 
@@ -2701,7 +2729,7 @@ module VIPER-LLL
     rule #compileToLoc(%as_bytes32(EXPR)) => #asBytes32(#compileToVal(EXPR))
 
     rule #asBytes32(@tlll(T, CODE, EXPRATTR))
-        => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %address),
+        => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool isAddressType(T),
                        @tlll(%bytes32, CODE, @none),
                        #exception("Function arg type does not match expected type."))
 
@@ -2906,7 +2934,7 @@ module VIPER-LLL
     //---------------------
     rule #compileToLoc(%extract32(BExp, IExp, %num)) => #compileToLoc(%as_num128(%extract32(BExp, IExp, %bytes32)))
 
-    rule #compileToLoc(%extract32(BExp, IExp, %address))
+    rule #compileToLoc(%extract32(BExp, IExp, _:AddressType))
          => #toAddress(#extract32(#compileToLoc(BExp), #compileToLoc(IExp), %bytes32))
 
     rule #compileToLoc(%extract32(BExp, IExp, T:Type)) => #extract32(#compileToLoc(BExp), #compileToLoc(IExp), T)
@@ -3598,7 +3626,7 @@ module VIPER-LLL
    
     rule #canonicalizeType(%bool, _) => "bool"
  
-    rule #canonicalizeType(%address, _) => "address"
+    rule #canonicalizeType(_:AddressType, _) => "address"
  
     rule #canonicalizeType(%bytes32, _) => "bytes32"
 
@@ -3700,6 +3728,7 @@ module VIPER-LLL
     rule #parseType(%bytes32, _) => %bytes32
 
     rule #parseType(%address, _) => %address
+    rule #parseType(%contractT(CONTRACT:Id), _) => %contractT(CONTRACT)
 
     rule #parseType(%bytesT(L), _) => %bytesT(L)
 
@@ -4241,7 +4270,6 @@ module VIPER-LLL
 
 
     //Unwrap expressions of type BaseType into final values. Leave composite types unchanged.
-    //fixme cleanup: remove #unwrapLoc() transformation from all places where it is redundant
     syntax TypedLLLExp ::= "#unwrapLoc" "(" TypedLLLExp ")"  [function]
  // -------------------------------------------------------------------
     rule #unwrapLoc(@tlll(T:BaseType, CODE, @locattr(@memory, _)))  => @tlll(T, $mload(CODE), @none)

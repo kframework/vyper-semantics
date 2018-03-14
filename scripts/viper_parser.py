@@ -88,8 +88,10 @@ def parseBaseType(name: ast.Name):  # value is Str. NumericType not yet supporte
     if type(name) == ast.Name:
         if name.id == "num128":
             return "%num"
+        elif name.id in ["bool", "num256", "signed256", "bytes32", "address", "num", "decimal"]:
+            return "%{}".format(name.id)
         else:
-            return "%" + name.id
+            return "%contractT({})".format(name.id)
     else:
         raise ParserException("BaseType parsing not yet implemented for: " + str(id))
 
@@ -158,6 +160,8 @@ def parseType(node):
             positional = "false"
         if type(node.args[0]) == ast.Name and node.args[0].id == "num256":
             return "%castT({}, {})".format(parseType(node.func), parseUnit(node.args[0]))
+        elif type(node.func) == ast.Name and node.func.id == "contract":
+            return "%contractT({})".format(node.args[0].id)
         else:
             return "%unitT({}, {}, {})".format(parseType(node.func), parseUnit(node.args[0]), positional)
     else:
