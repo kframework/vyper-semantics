@@ -86,8 +86,10 @@ def parseDict(nodeDict: ast.Dict, parseElement: types.FunctionType, separator, i
 # syntax PureNumType   ::= "%num" | "%decimal"
 def parseBaseType(name: ast.Name):  # value is Str. NumericType not yet supported
     if type(name) == ast.Name:
-        if name.id == "num128":
+        if name.id == "int128":
             return "%num"
+        if name.id == "uint256":
+            return "%num256"
         elif name.id in ["bool", "num256", "signed256", "bytes32", "address", "num", "decimal",
                          "timestamp", "timedelta", "currency_value", "currency1_value", "currency2_value", "wei_value"]:
             return "%{}".format(name.id)
@@ -576,8 +578,13 @@ def parseAugAssignOp(op: ast.operator):
 # syntax AnnVar  ::= "%annvar" "(" Id "," Type ")"
 #
 # ex: %annvar(a, %listT(%num, 5))
+# 3-arg annvar:
+#   z: int128 = x
 def parseAnnVar(stmt: ast.AnnAssign):
-    return parseAnnVarKeyValue(stmt.target, stmt.annotation)
+    if stmt.value is None:
+        return parseAnnVarKeyValue(stmt.target, stmt.annotation)
+    else:
+        return "%annvar({}, {}, {})".format(stmt.target.id, parseType(stmt.annotation), parseExpr(stmt.value))
 
 
 def parseAnnVarKeyValue(key, value):

@@ -674,14 +674,15 @@ module VYPER-LLL
 // ====================
 
 
-    rule #compileStmt(%annvar(NAME, T)) => #annassign(NAME, #parseType(T, true))
+    rule #compileStmt(%annvar(NAME, T)) => #newVar(NAME, #parseType(T, true)) ~> #deletePrev ~> $pass,.LLLExps
 
+    rule #compileStmt(%annvar(NAME, T, EXPR))
+         => #newVar(NAME, #parseType(T, true)) ~> #deletePrev ~> #compileStmt(%assign(%var(NAME), EXPR))
 
-    syntax CLLLExps  ::= "#annassign" "(" Id "," CType ")"    [strict(2)]
- // ---------------------------------------------------------------------
-    rule #annassign(NAME, T) => #newVar(NAME, T) ~> $pass,.LLLExps
-
-    rule (@tlll(T, LOC, LOCATTR) => .) ~> $pass,.LLLExps
+    //Delete the KResult item in front of #deletePrev, and the #deletePrev.
+    syntax K ::= "#deletePrev"
+ // ---------------------------------------------------------------------------
+    rule _:KResult ~> #deletePrev => .
 
 
 // Assignment
@@ -4208,14 +4209,14 @@ module VYPER-LLL
 
 
     //defines a new variable of given name in <env>
-    syntax CTypedLLLExp  ::= "#newVar" "(" Id "," Type ")"
+    syntax CTypedLLLExp  ::= "#newVar" "(" Id "," CType ")"   [strict(2)]
  // ------------------------------------------------------
-    rule <k> #newVar(NAME, T) => @tlll(T, LOC, @locattr(@memory, true)) ...</k>
+    rule <k> #newVar(NAME, T:Type) => @tlll(T, LOC, @locattr(@memory, true)) ...</k>
          <env> ENV => ENV[%var(NAME) <- @taddr(T, LOC, @locattr(@memory, true))] </env>
          <nextMem> LOC => LOC +Int #sizeOfType(T) </nextMem>
       requires notBool %var(NAME) in_keys(ENV)
 
-    rule <k> #newVar(NAME, T)
+    rule <k> #newVar(NAME, _)
              => #exception("Duplicate variable name: " +String Id2String(NAME)) ...</k>
          <env>... %var(NAME) |-> _ ...</env>
 

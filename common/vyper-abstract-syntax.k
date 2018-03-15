@@ -84,6 +84,12 @@ module VYPER-ABSTRACT-SYNTAX
     syntax Stmts    ::= List{Stmt, ""}  [klabel(Stmts)]
 
     syntax AnnVar   ::= "%annvar" "(" Id "," Type ")"
+                        /*Variable declaration with initializer.
+                          Ex:
+                            z: int128 = x
+                        */
+                      | "%annvar" "(" Id "," Type "," Expr ")"
+
     syntax AnnVars  ::= List{AnnVar, ""}  [klabel(AnnVars)]
 
     syntax AugAssignOp ::= "+=" | "-=" | "*=" | "/=" | "%="
