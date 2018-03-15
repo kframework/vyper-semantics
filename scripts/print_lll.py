@@ -1,4 +1,4 @@
-from viper.parser.parser import LLLnode
+from vyper.parser.parser import LLLnode
 
 lll_opcodes = ['if', 'repeat', 'break', 'with', 'set', 'seq', 'pass', 'assert',
                'ne', 'le', 'ge', 'sle', 'sge', 'uclamplt', 'uclample', 'uclampgt',
