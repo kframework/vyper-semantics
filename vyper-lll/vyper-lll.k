@@ -743,7 +743,10 @@ module VYPER-LLL
 
 
     /*  Assignment expression: V = E. 
-        After all checks have been performed and memory was allocated. */
+        After all checks have been performed and memory was allocated.
+
+        Also represents make_setter() from Viper compiler.
+    */
     syntax CLLLExps  ::= "#assignImpl" "(" CTypedLLLExp  /*left variable loc*/   ","
                                            CTypedLLLExp  /*right compiled Expr*/ ")"  [seqstrict]
  // ------------------------------------------------------------------------------------------
@@ -2359,13 +2362,15 @@ module VYPER-LLL
 
 
     syntax CPackedArgData  ::= "#packArgumentsAux" "(" Int          ","  // packing loc for the first arg
+                                                                         // placeholder + staticarray_offset + 32 + i * 32
                                                        TypedLLLExps ","  // typed args code
                                                        Params       ","  // params
                                                        Int          ","  // num of args
                                                        LLLExps      ","  // setter code
-                                                       Int          ","  // start of the arg block (including the funcid)
+                                                       Int          ","  // start of the arg block (including the funcid): placeholder +28
                                                        Int          ","  // packed args width
-                                                       Bool         ")"  // need pos?
+                                                       Bool              // need pos?
+                                                   ")"
  // -------------------------------------------------------------------
     rule #packArgumentsAux(_, .TypedLLLExps, .Params, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, false)
         => @argdata($%seq(SETTER ++LLL (ARGSSTART,.LLLExps)), ARGSWIDTH)
@@ -2375,9 +2380,10 @@ module VYPER-LLL
                       $%seq(SETTER ++LLL (ARGSSTART,.LLLExps))), ARGSWIDTH)
 
     // Base Type
+    // setters.append(make_setter(LLLnode.from_list(placeholder + staticarray_offset + 32 + i * 32, typ=typ), arg, 'memory'))
     rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T:BaseType) PARAMS),
                            ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
-        => #packArgumentBase(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG)
+        => #assignImpl(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG)
         ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
 
     // Byte Array Type
@@ -2387,16 +2393,23 @@ module VYPER-LLL
         => #packArgumentBytesT(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG, ARGSSTART +Int 4)
         ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, true)
 
+    // List Type
+    /*  target = LLLnode.from_list([placeholder + 32 + staticarray_offset + i * 32], typ=typ, location='memory')
+        setters.append(make_setter(target, arg, 'memory'))
+        staticarray_offset += 32 * (typ.count - 1) //typ is Param type, taken from signature.
+    */
+    rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T:ListType) PARAMS),
+                           ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+        => #ifThen(notBool isListType(#getType(TARG)),
+                   #exception("Arg expects list type but actual type is not."))
+        ~> #assignImpl(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG)
+        ~> #packArgumentsAux(
+                             ARGLOC +Int #sizeOfType(T) -Int 32, //staticarray_offset += 32 * (typ.count - 1)
+                             TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+
 
     rule CODE:LLLExps ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
         => #packArgumentsAux(ARGLOC +Int 32, TARGS, PARAMS, ARGNUM, SETTER ++LLL CODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
-
-
-    syntax CLLLExps  ::= "#packArgumentBase" "(" TypedLLLExp  ","  // typed arg loc
-                                                 TypedLLLExp  ")"  // typed arg value
- // -------------------------------------------------------------
-    rule #packArgumentBase(@tlll(PARAMT, LOC, LOCATTR), TARGCODE)
-        => #assignImpl(@tlll(PARAMT, LOC, LOCATTR), TARGCODE)
 
 
     syntax CLLLExps  ::= "#packArgumentBytesT" "(" TypedLLLExp  ","  // typed arg loc
@@ -4142,7 +4155,7 @@ module VYPER-LLL
               ['sha3', ['add', key.args[0].args[-1], 32], ceil32(key.typ.maxlen)]
           ])
       else:
-          sub = LLLnode.from_list(['sha3', ['add', key.args[0].value, 32], ceil32(key.typ.maxlen)])
+          sub = LLLnode.from_list(['sha3', ['add', key.args[0].value, 32], ['mload', key.args[0].value]])
 
       fixme possible compiler bug: what if the key is in storage. Then it should be loaded to memory first.
         Tests don't cover this case.
@@ -4157,7 +4170,7 @@ module VYPER-LLL
         => #ifThenElse(BMaxLen <Int IMaxLen,
               #exception("Mapping keys of bytes cannot be cast, use exact same bytes type of key type")
                 ~> #mapOffsetFromByteArray(@tlll(%bytesT(IMaxLen), INDEX, EXPRATTR), %bytesT(BMaxLen)),
-              @tlll(%bytes32, $sha3($add(INDEX, 32), #ceil32(IMaxLen)), @none)
+              @tlll(%bytes32, $sha3($add(INDEX, 32), $mload(INDEX)), @none)
            )
 
 
