@@ -8,5 +8,5 @@ type kompile >/dev/null || die 'kompile not in $PATH'
 dir="$(dirname "$0")"/..
 
 set -x
-kompile --syntax-module VIPER-ABSTRACT-SYNTAX "$dir"/viper-lll/viper-lll-post.k
+kompile --syntax-module VYPER-ABSTRACT-SYNTAX "$dir"/vyper-lll/vyper-lll-post.k
 kompile --syntax-module LLL-EVM-INTERFACE     "$dir"/lll-evm/lll-evm.k
