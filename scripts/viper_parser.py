@@ -88,7 +88,8 @@ def parseBaseType(name: ast.Name):  # value is Str. NumericType not yet supporte
     if type(name) == ast.Name:
         if name.id == "num128":
             return "%num"
-        elif name.id in ["bool", "num256", "signed256", "bytes32", "address", "num", "decimal"]:
+        elif name.id in ["bool", "num256", "signed256", "bytes32", "address", "num", "decimal",
+                         "timestamp", "timedelta", "currency_value", "currency1_value", "currency2_value", "wei_value"]:
             return "%{}".format(name.id)
         else:
             return "%contractT({})".format(name.id)

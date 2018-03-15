@@ -1119,7 +1119,7 @@ module VIPER-LLL
                                                 CTypedLLLExp  ","  // index var - position in list
                                                 TypedLLLExp   ","  // list var - variable storing the list literal
                                                 CLLLExps           // for body
-                                       ")"      [strict(1,2,4)]
+                                       ")"      [seqstrict(1,2,4)]
  // ------------------------------------------------------------------------------------------
     // List allocated in memory
     rule #forlistVar(@tlll(_, ITERLOC, _),
@@ -3659,10 +3659,12 @@ module VIPER-LLL
     rule #baseTypeConvert(@tlll(FROMT, CODE, EXPRATTR), TOT)
         => #baseTypeConvertAux(#unwrapLoc(@tlll(FROMT, CODE, EXPRATTR)), TOT)
 
-    rule #baseTypeConvertAux(@tlll(FROMT, CODE, _), TOT)
+    rule #baseTypeConvertAux(@tlll(FROMT, CODE, LA), TOT)
         => #ifThenElse(#areUnitsCompatible(FROMT, TOT, #isNumLiteral(CODE)),
                        #baseTypeConvertNoUnit(CODE, #dropUnit(FROMT), #dropUnit(TOT)),
-                       #exception("Typecasting unavailable due to incompatible units"))
+                       #exception("Typecasting unavailable due to incompatible units")
+                          ~> #baseTypeConvertAux(@tlll(FROMT, CODE, LA), TOT)
+                      )
 
     rule #baseTypeConvertNoUnit(CODE:LLLExp, FROMT:Type, TOT:Type)
         => #ifThenElse(notBool(isBaseType(FROMT)) orBool notBool(isBaseType(TOT)),
