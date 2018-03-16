@@ -3683,7 +3683,7 @@ module VYPER-LLL
     rule #baseTypeConvertNoUnit(CODE:LLLExp, FROMT:Type, TOT:Type)
         => #ifThenElse(notBool(isBaseType(FROMT)) orBool notBool(isBaseType(TOT)),
                        #exception("Base type conversion from or to non-base type."),
-             #ifThenElse(FROMT ==K TOT,
+             #ifThenElse(FROMT ==K TOT orBool (isAddressType(FROMT) andBool isAddressType(TOT)),
                          @tlll(TOT, CODE, @none),
                #ifThenElse(FROMT ==K %num andBool TOT ==K %decimal,
                            @tlll(TOT, $mul(CODE, @decimalDivisor), @none),

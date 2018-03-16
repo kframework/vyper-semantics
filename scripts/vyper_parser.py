@@ -3,6 +3,7 @@
 import sys
 import ast
 import types
+import os
 
 from typing import List
 
@@ -163,7 +164,7 @@ def parseType(node):
             positional = "false"
         if type(node.args[0]) == ast.Name and node.args[0].id == "uint256":
             return "%castT({}, {})".format(parseType(node.func), parseType(node.args[0]))
-        elif type(node.func) == ast.Name and node.func.id == "contract":
+        elif type(node.func) == ast.Name and (node.func.id == "contract" or node.func.id == "address"):
             return "%contractT({})".format(node.args[0].id)
         else:
             return "%unitT({}, {}, {})".format(parseType(node.func), parseUnit(node.args[0]), positional)
@@ -782,7 +783,10 @@ inputLines: List[str]
 def main(vyperPgm):
     global inputLines
     inputLines = vyperPgm.splitlines()
-    astList = parse(vyperPgm)
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "premade_contracts.v.py"), "r") as fin:
+        premadeContracts = fin.read()
+
+    astList = parse(vyperPgm + "\n" + premadeContracts)
     return parseProgram(astList)
 
 
