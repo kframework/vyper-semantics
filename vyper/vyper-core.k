@@ -142,6 +142,9 @@ module VYPER-CORE-SEMANTICS
     // _Kind is the super sort of _ and it contains term needs to be evaluated to _.
     syntax EvaledVarKind   ::= EvaledVar
     syntax EvaledExprKind  ::= EvaledExpr
+    syntax EvaledExprsKind ::= EvaledExprs
+    syntax TypedValueKind  ::= TypedValue
+    syntax ValRecordKind   ::= ValRecord
     syntax TypeKind        ::= Type
     syntax EventParamsKind ::= EventParams
     syntax ParamsKind      ::= Params
@@ -462,9 +465,9 @@ module VYPER-CORE-SEMANTICS
     rule #evalStmt(%annvar(VARNAME, T)) => #newVar(VARNAME, #parseType(T, true))
 
 
-    syntax KItem ::= "#newVar"    "(" Id "," K /*Type*/ ")"  [strict(2)]
+    syntax KItem ::= "#newVar"    "(" Id "," TypeKind ")"  [strict(2)]
     syntax KItem ::= "#newVarAux" "(" Id "," Type ")"
- // --------------------------------------------------------------------
+ // ------------------------------------------------------------------
     rule <k> #newVar(VARNAME, T)
             => #checkVarName(ACCTID, VARNAME) ~> #newVarAux(VARNAME, T)
          ... </k>
@@ -488,8 +491,8 @@ module VYPER-CORE-SEMANTICS
         => #annassign(VARNAME, #parseType(T, true), #evalExpr(EXPR))
 
 
-    syntax KItem ::= "#annassign" "(" Id "," TypeKind "," K /*EvaledExpr*/ ")"  [seqstrict(2,3)]
- // --------------------------------------------------------------------------------------------
+    syntax KItem ::= "#annassign" "(" Id "," TypeKind "," EvaledExprKind ")"  [seqstrict(2,3)]
+ // ------------------------------------------------------------------------------------------
     rule #annassign(VARNAME, VARTYPE:Type, @ee(EXPRTYPE, VALUE, LITERAL))
         => #newVar(VARNAME, VARTYPE)
         ~> #assignTo(@ee(EXPRTYPE, VALUE, LITERAL), @%var(VARNAME))
@@ -502,9 +505,10 @@ module VYPER-CORE-SEMANTICS
     rule #evalStmt(%assign(VAR, EXPR)) => #assignTo(#evalExpr(EXPR), #getAssignTarget(VAR))
 
 
-    syntax KItem ::= "#assignTo"    "(" K /*EvaledExpr*/ "," K /*EvaledVar*/ ")"          [seqstrict]
-    syntax KItem ::= "#assignToAux" "(" EvaledExpr "," EvaledVar "," K /*ValRecord*/ ")"  [strict(3)]
- // -------------------------------------------------------------------------------------------------
+    // Evaluate the Expr first and then the variable.
+    syntax KItem ::= "#assignTo"    "(" EvaledExprKind "," EvaledVarKind ")"            [seqstrict]
+    syntax KItem ::= "#assignToAux" "(" EvaledExpr "," EvaledVar "," ValRecordKind ")"  [strict(3)]
+ // -----------------------------------------------------------------------------------------------
     rule #assignTo(EEXPR:EvaledExpr, EVAR:EvaledVar)
         => #assignToAux(EEXPR, EVAR, #lookupVar(EVAR))
 
@@ -516,8 +520,8 @@ module VYPER-CORE-SEMANTICS
       requires isBaseType(TYPE)
 
 
-    syntax KItem ::= "#assignToHelper" "(" EvaledVar "," K ")"  [strict(2)]
- // -----------------------------------------------------------------------
+    syntax KItem ::= "#assignToHelper" "(" EvaledVar "," TypedValueKind ")"  [strict(2)]
+ // ------------------------------------------------------------------------------------
     rule <k> #assignToHelper(@%var(VARNAME), TVNEW:TypedValue) => . ... </k>
          <memory> MEM => MEM[VARNAME <- @val(TVNEW, true)] </memory>
 
@@ -531,23 +535,23 @@ module VYPER-CORE-SEMANTICS
 
 
     rule #assignToHelper(@%subscript(EVAR, OFFSETEXPR), TVNEW)
-        => #assignToHelper(EVAR, #updateValue(#lookupVar(EVAR), OFFSETEXPR, TVNEW))
+        => #assignToHelper(EVAR, #updateSubscriptValue(#lookupVar(EVAR), OFFSETEXPR, TVNEW))
 
 
-    syntax KItem /*TypedValue*/ ::= "#updateValue" "(" K /*ValRecord*/ "," K /*offset*/ "," TypedValue ")"  [strict(1)]
- // -------------------------------------------------------------------------------------------------------------------
-    rule #updateValue(@val(@tv(%mapT(KT, VT), MAPVALUE:Map), _), KEYEXPR:EvaledExpr, TVNEW)
-        => #updateMapValue(@tv(%mapT(KT, VT), MAPVALUE), #baseTypeConvert(KEYEXPR, KT), TVNEW)
+    syntax TypedValueKind ::= "#updateSubscriptValue" "(" ValRecordKind "," EvaledExpr "," TypedValue ")"  [strict(1)]
+ // ------------------------------------------------------------------------------------------------------------------
+    rule #updateSubscriptValue(@val(@tv(%mapT(KT, VT), MAPVALUE:Map), _), KEYEXPR, TVNEW)
+        => #updateTypedValue(@tv(%mapT(KT, VT), MAPVALUE), #baseTypeConvert(KEYEXPR, KT), TVNEW)
       requires isBaseType(KT)
 
 
-    syntax KItem /*TypedValue*/ ::= "#updateMapValue" "(" TypedValue "," K /*key*/ "," TypedValue ")"  [strict(2)]
- // --------------------------------------------------------------------------------------------------------------
-    rule #updateMapValue(@tv(T, MAP:Map), @tv(KT, OFFSET), TV) => @tv(T, MAP[OFFSET <- TV])
+    syntax TypedValueKind ::= "#updateTypedValue" "(" TypedValue "," TypedValueKind /*key*/ "," TypedValue ")"  [strict(2)]
+ // -----------------------------------------------------------------------------------------------------------------------
+    rule #updateTypedValue(@tv(T, MAP:Map), @tv(KT, KEY), TV) => @tv(T, MAP[KEY <- TV])
 
 
-    syntax KItem /*EvaledVar*/ ::= "#getAssignTarget" "(" Var ")"
- // -------------------------------------------------------------
+    syntax EvaledVarKind ::= "#getAssignTarget" "(" Var ")"
+ // -------------------------------------------------------
     rule <k> #getAssignTarget(%var(VARNAME))
             => #If %var(VARNAME) in FORVARS
                  #Then @staticException("Altering iterator which is in use!") #Endif
@@ -599,8 +603,8 @@ module VYPER-CORE-SEMANTICS
  // --------------------------
 
 
-    syntax KItem ::= "#return" "(" K "," Type ")"  [strict]
- // -------------------------------------------------------
+    syntax KItem ::= "#return" "(" EvaledExprKind "," Type ")"  [strict(1)]
+ // -----------------------------------------------------------------------
     rule #return(@ee(ACTUALTYPE, VALUE, LITERAL), EXPECTEDTYPE)
         => #If notBool #areUnitsCompatible(ACTUALTYPE, LITERAL, EXPECTEDTYPE)
              #Then @staticException("Return type units mismatch.") #Endif
@@ -624,8 +628,8 @@ module VYPER-CORE-SEMANTICS
 //////////////////////////////////////////////////////////////////////////////
 
 
-    syntax KItem /*EvaledExpr*/  ::= "#evalExpr" "(" Expr ")"
-    syntax KItem /*EvaledExprs*/ ::= "#evalExprs" "(" Exprs "," EvaledExprs ")"
+    syntax EvaledExprKind  ::= "#evalExpr" "(" Expr ")"
+    syntax EvaledExprsKind ::= "#evalExprs" "(" Exprs "," EvaledExprs ")"
  // ---------------------------------------------------------------------------
     rule #evalExprs(.Exprs, RESULT) => #revEvaledExprs(RESULT, .EvaledExprs)
 
@@ -662,10 +666,10 @@ module VYPER-CORE-SEMANTICS
     rule #varAux(@val(@tv(T, V), _)) => @ee(T, V, false)
 
 
-    syntax KItem /*EvaledVar*/ ::= "#evalVar" "(" Var ")"
-    syntax KItem /*EvaledVar*/ ::= "#evalSubscriptVar" "(" K "," K ")"   [seqstrict]
-    syntax KItem /*EvaledVar*/ ::= "#evalAttributeVar" "(" K "," Id ")"  [strict(1)]
- // --------------------------------------------------------------------------------
+    syntax EvaledVarKind ::= "#evalVar" "(" Var ")"
+    syntax EvaledVarKind ::= "#evalSubscriptVar" "(" EvaledVarKind "," EvaledExprKind ")"   [seqstrict]
+    syntax EvaledVarKind ::= "#evalAttributeVar" "(" EvaledVarKind "," Id ")"               [strict(1)]
+ // ---------------------------------------------------------------------------------------------------
     rule #evalVar(%var(VARNAME)) => @%var(VARNAME)
 
     rule #evalVar(%svar(VARNAME)) => @%svar(VARNAME)
@@ -674,7 +678,7 @@ module VYPER-CORE-SEMANTICS
 
     rule #evalVar(%attribute(VAR, FIELDNAME)) => #evalAttributeVar(#evalVar(VAR), FIELDNAME)
 
-    rule #evalSubscriptVar(EVAR:EvaledVar, EEXPR:EvaledExpr) =>  @%subscript(EVAR, EEXPR)
+    rule #evalSubscriptVar(EVAR:EvaledVar, EEXPR:EvaledExpr) => @%subscript(EVAR, EEXPR)
 
     rule #evalAttributeVar(EVAR:EvaledVar, FIELDNAME) => @%attribute(EVAR, FIELDNAME)
 
@@ -695,17 +699,17 @@ module VYPER-CORE-SEMANTICS
       requires FUNCNAME in_keys(EXTERNAL)
 
 
-    syntax KItem ::= "#ecall" "(" K  "," Id "," K ")"  [seqstrict(1, 3)]
- // --------------------------------------------------------------------
+    syntax EvaledExprKind ::= "#ecall" "(" EvaledExprKind  "," Id "," EvaledExprsKind ")"  [seqstrict(1, 3)]
+ // --------------------------------------------------------------------------------------------------------
     rule <k> #ecall(@ee(%address, ACCTTO, _), FUNCNAME, EARGS:EvaledExprs)
             => #call(ACCTFROM, ACCTTO, 0, FUNCNAME, EARGS)
          ... </k>
          <id> ACCTFROM </id>
 
 
-    syntax KItem ::= "#call" "(" Int "," Int "," Int "," Id "," EvaledExprs ")"
-    syntax KItem ::= "#callWithCode" "(" Int "," Int "," Int "," FuncRecord "," EvaledExprs ")"
- // -------------------------------------------------------------------------------------------
+    syntax EvaledExprKind ::= "#call" "(" Int "," Int "," Int "," Id "," EvaledExprs ")"
+    syntax EvaledExprKind ::= "#callWithCode" "(" Int "," Int "," Int "," FuncRecord "," EvaledExprs ")"
+ // ----------------------------------------------------------------------------------------------------
     rule <k> #call(ACCTFROM, ACCTTO, VALUE, FUNCNAME, EARGS)
             => #callWithCode(ACCTFROM, ACCTTO, VALUE, FUNCRECORD, EARGS)
          ... </k>
@@ -777,8 +781,8 @@ module VYPER-CORE-SEMANTICS
       requires VALUE <=Int ORIGFROM
 
 
-    syntax KItem ::= "#mkCall" "(" Int "," Int "," Int "," FuncRecord "," EvaledExprs ")"
- // -------------------------------------------------------------------------------------
+    syntax EvaledExprKind ::= "#mkCall" "(" Int "," Int "," Int "," FuncRecord "," EvaledExprs ")"
+ // ----------------------------------------------------------------------------------------------
     rule <k> #mkCall(ACCTFROM, ACCTTO, VALUE, @func(FUNCNAME, PARAMS, RT, STMTS, CONSTANT, PAYABLE, PRIVATE, ORDER), EARGS)
             => #initCall ~> #checkFuncPayable(PAYABLE) ~> #checkFuncPrivate(PRIVATE)
             ~> #If #numOfParams(PARAMS) =/=Int #numOfEvaledExprs(EARGS)
