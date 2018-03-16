@@ -3614,7 +3614,7 @@ module VYPER-LLL
     syntax Type  ::= "#getType" "(" TypedLLLExp ")"     [function]
     rule #getType(@tlll(T,_,_)) => T
 
-    syntax KItem  ::= "#canonicalizeType" "(" Type "," Bool /*event?*/ ")"
+    syntax KItem  ::= "#canonicalizeType" "(" CType "," Bool /*event?*/ ")"   [strict(1)]
  // ------------------------------------------------------------------------
     rule #canonicalizeType(%bytesT(L), EVENT)
         => #ifThenElse(EVENT ==K true andBool L <=Int 32,
@@ -3630,11 +3630,11 @@ module VYPER-LLL
 
     rule #canonicalizeType(%num, _) => "int128"
 
-    rule #canonicalizeType(%unitT(%num, _:Unit, _), _) => "int128"
+    rule #canonicalizeType(%unitT(%num, _:Map,_), _) => "int128"
 
     rule #canonicalizeType(%decimal, _) => "decimal10"
 
-    rule #canonicalizeType(%unitT(%decimal, _:Unit, _), _) => "decimal10"
+    rule #canonicalizeType(%unitT(%decimal, _:Map,_), _) => "decimal10"
 
     rule #canonicalizeType(%num256, _) => "uint256"
    
@@ -3643,8 +3643,6 @@ module VYPER-LLL
     rule #canonicalizeType(_:AddressType, _) => "address"
  
     rule #canonicalizeType(%bytes32, _) => "bytes32"
-
-    rule #canonicalizeType(%castT(%num, %num256), _) => "uint256"
 
 
     syntax KItem  ::= "#canonicalizeListType" "(" K "," Int ")"  [strict(1)]
@@ -4009,7 +4007,7 @@ module VYPER-LLL
     syntax KItem  ::= "#computeEventSigAux" "(" String "," EventParams ")"
  // ----------------------------------------------------------------------
     rule #computeEventSig(SIG, %eparam(_, T, _) EPARAMS)
-        => #canonicalizeType(T, true)
+        => #canonicalizeType(#parseType(T, true), true)
         ~> #computeEventSigAux(SIG, EPARAMS)
 
     rule TYPE:String ~> #computeEventSigAux(SIG, EPARAM1 EPARAMS)
@@ -4035,7 +4033,7 @@ module VYPER-LLL
     syntax KItem  ::= "#computeFuncSigAux" "(" String "," Params ")"
  // ----------------------------------------------------------------
     rule #computeFuncSig(SIG, %param(_,T) PARAMS)
-        => #canonicalizeType(T, false)
+        => #canonicalizeType(#parseType(T, true), false)
         ~> #computeFuncSigAux(SIG, PARAMS)
 
     rule TYPE:String ~> #computeFuncSigAux(SIG, PARAM1 PARAMS)
