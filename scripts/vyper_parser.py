@@ -161,8 +161,8 @@ def parseType(node):
             positional = "true"
         else:
             positional = "false"
-        if type(node.args[0]) == ast.Name and node.args[0].id == "num256":
-            return "%castT({}, {})".format(parseType(node.func), parseUnit(node.args[0]))
+        if type(node.args[0]) == ast.Name and node.args[0].id == "uint256":
+            return "%castT({}, {})".format(parseType(node.func), parseType(node.args[0]))
         elif type(node.func) == ast.Name and node.func.id == "contract":
             return "%contractT({})".format(node.args[0].id)
         else:

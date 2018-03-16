@@ -2085,15 +2085,17 @@ module VYPER-LLL
                                                $ans,.LLLExps)))), @none))))
 
     rule #binOpPureAux(/, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
-        => #ifThenElse(RT ==K %num,
-                       @tlll(LT, $sdiv(LCODE, $clamp_nonzero(RCODE)), @none),
-             #ifThenElse(LT ==K RT andBool LT ==K %decimal,
+        => #ifThenElse(LT ==K %decimal andBool RT ==K %num,
+                       @tlll(%decimal, $sdiv(LCODE, $clamp_nonzero(RCODE)), @none),
+              #ifThenElse(LT ==K %num andBool RT ==K %num,
+                          @tlll(%decimal, $sdiv($mul(LCODE, @decimalDivisor), $clamp_nonzero(RCODE)), @none),
+                #ifThenElse(LT ==K %decimal andBool RT ==K %decimal,
                          @tlll(%decimal, $with($l, LCODE,
                                            $with($r, $clamp_nonzero(RCODE),
                                              $sdiv($mul($l, @decimalDivisor), $r))), @none),
-               #ifThen(LT ==K %num andBool RT ==K %decimal,
-                       @tlll(%decimal,
-                             $sdiv($mul(LCODE, @decimalDivisor ^Int 2), $clamp_nonzero(RCODE)), @none))))
+                  #ifThen(LT ==K %num andBool RT ==K %decimal,
+                          @tlll(%decimal,
+                             $sdiv($mul(LCODE, @decimalDivisor ^Int 2), $clamp_nonzero(RCODE)), @none)))))
 
     rule #binOpPureAux(%, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
         => #ifThenElse(LT ==K RT,
@@ -3087,10 +3089,10 @@ module VYPER-LLL
         => @tlll(%num256, $not(CODE1), @none)
 
 
-    // num256_add
+    // uint256_add
     syntax CTypedLLLExp  ::= "#num256Add" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileToLoc(%num256_add(EXPR1, EXPR2)) => #num256Add(#compileToVal(EXPR1), #compileToVal(EXPR2))
+    rule #compileToLoc(%uint256_add(EXPR1, EXPR2)) => #num256Add(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Add(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq(
@@ -3098,10 +3100,10 @@ module VYPER-LLL
                             $add(CODE1, CODE2),.LLLExps), @none)
 
 
-    // num256_sub
+    // uint256_sub
     syntax CTypedLLLExp  ::= "#num256Sub" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileToLoc(%num256_sub(EXPR1, EXPR2)) => #num256Sub(#compileToVal(EXPR1), #compileToVal(EXPR2))
+    rule #compileToLoc(%uint256_sub(EXPR1, EXPR2)) => #num256Sub(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Sub(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq(
@@ -3109,10 +3111,10 @@ module VYPER-LLL
                             $sub(CODE1, CODE2),.LLLExps), @none)
 
 
-    // num256_mul
+    // uint256_mul
     syntax CTypedLLLExp  ::= "#num256Mul" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileToLoc(%num256_mul(EXPR1, EXPR2)) => #num256Mul(#compileToVal(EXPR1), #compileToVal(EXPR2))
+    rule #compileToLoc(%uint256_mul(EXPR1, EXPR2)) => #num256Mul(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Mul(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq(
@@ -3120,21 +3122,19 @@ module VYPER-LLL
                             $mul(CODE1, CODE2),.LLLExps), @none)
 
 
-    // num256_div
+    // uint256_div
     syntax CTypedLLLExp  ::= "#num256Div" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileToLoc(%num256_div(EXPR1, EXPR2)) => #num256Div(#compileToVal(EXPR1), #compileToVal(EXPR2))
+    rule #compileToLoc(%uint256_div(EXPR1, EXPR2)) => #num256Div(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Div(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
-        => @tlll(%num256, $%seq(
-                            $assert(CODE2),
-                            $div(CODE1, CODE2),.LLLExps), @none)
+        => @tlll(%num256, $div(CODE1, $clamp_nonzero(CODE2)), @none)
 
 
-    // num256_exp
+    // uint256_exp
     syntax CTypedLLLExp  ::= "#num256Exp" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileToLoc(%num256_exp(EXPR1, EXPR2)) => #num256Exp(#compileToVal(EXPR1), #compileToVal(EXPR2))
+    rule #compileToLoc(%uint256_exp(EXPR1, EXPR2)) => #num256Exp(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Exp(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq(
@@ -3142,20 +3142,20 @@ module VYPER-LLL
                             $exp(CODE1, CODE2),.LLLExps), @none)
 
 
-    // num256_mod
+    // uint256_mod
     syntax CTypedLLLExp  ::= "#num256Mod" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileToLoc(%num256_mod(EXPR1, EXPR2)) => #num256Mod(#compileToVal(EXPR1), #compileToVal(EXPR2))
+    rule #compileToLoc(%uint256_mod(EXPR1, EXPR2)) => #num256Mod(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     // ['mod', args[0], args[1]]
     rule #num256Mod(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
-        => @tlll(%num256, $mod(CODE1, CODE2), @none)
+        => @tlll(%num256, $mod(CODE1, $clamp_nonzero(CODE2)), @none)
 
 
-    // num256_addmod
+    // uint256_addmod
     syntax CTypedLLLExp  ::= "#num256Addmod" "(" CTypedLLLExp "," CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileToLoc(%num256_addmod(EXPR1, EXPR2, EXPR3)) 
+    rule #compileToLoc(%uint256_addmod(EXPR1, EXPR2, EXPR3)) 
          => #num256Addmod(#compileToVal(EXPR1), #compileToVal(EXPR2), #compileToVal(EXPR3))
 
     /*return LLLnode.from_list(['seq',
@@ -3165,13 +3165,13 @@ module VYPER-LLL
     rule #num256Addmod(@tlll(%num256, CODE0, _), @tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq(
                             $assert($or($iszero(CODE1), $gt($add(CODE0, CODE1), CODE0))),
-                            $addmod(CODE0, CODE1, CODE2),.LLLExps), @none)
+                            $addmod(CODE0, CODE1, $clamp_nonzero(CODE2)),.LLLExps), @none)
                             
                             
-    // num256_mulmod
+    // uint256_mulmod
     syntax CTypedLLLExp  ::= "#num256Mulmod" "(" CTypedLLLExp "," CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileToLoc(%num256_mulmod(EXPR1, EXPR2, EXPR3))
+    rule #compileToLoc(%uint256_mulmod(EXPR1, EXPR2, EXPR3))
          => #num256Mulmod(#compileToVal(EXPR1), #compileToVal(EXPR2), #compileToVal(EXPR3))
 
     /*return LLLnode.from_list(['seq',
@@ -3182,40 +3182,40 @@ module VYPER-LLL
     rule #num256Mulmod(@tlll(%num256, CODE0, _), @tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq($assert($or($iszero(CODE0),
                                             $eq($div($mul(CODE0, CODE1), CODE0), CODE1))),
-                                $mulmod(CODE0, CODE1, CODE2)), @none)
+                                $mulmod(CODE0, CODE1, $clamp_nonzero(CODE2))), @none)
 
 
-    // num256_gt
+    // uint256_gt
     syntax CTypedLLLExp  ::= "#num256Gt" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // -----------------------------------------------------------------------------------------
-    rule #compileToLoc(%num256_gt(EXPR1, EXPR2)) => #num256Gt(#compileToVal(EXPR1), #compileToVal(EXPR2))
+    rule #compileToLoc(%uint256_gt(EXPR1, EXPR2)) => #num256Gt(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Gt(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%bool, $gt(CODE1, CODE2), @none)
 
 
-    // num256_ge
+    // uint256_ge
     syntax CTypedLLLExp  ::= "#num256Ge" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // -----------------------------------------------------------------------------------------
-    rule #compileToLoc(%num256_ge(EXPR1, EXPR2)) => #num256Ge(#compileToVal(EXPR1), #compileToVal(EXPR2))
+    rule #compileToLoc(%uint256_ge(EXPR1, EXPR2)) => #num256Ge(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Ge(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%bool, $ge(CODE1, CODE2), @none)
 
 
-    // num256_lt
+    // uint256_lt
     syntax CTypedLLLExp  ::= "#num256Lt" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // -----------------------------------------------------------------------------------------
-    rule #compileToLoc(%num256_lt(EXPR1, EXPR2)) => #num256Lt(#compileToVal(EXPR1), #compileToVal(EXPR2))
+    rule #compileToLoc(%uint256_lt(EXPR1, EXPR2)) => #num256Lt(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Lt(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%bool, $lt(CODE1, CODE2), @none)
 
 
-    // num256_le
+    // uint256_le
     syntax CTypedLLLExp  ::= "#num256Le" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // -----------------------------------------------------------------------------------------
-    rule #compileToLoc(%num256_le(EXPR1, EXPR2)) => #num256Le(#compileToVal(EXPR1), #compileToVal(EXPR2))
+    rule #compileToLoc(%uint256_le(EXPR1, EXPR2)) => #num256Le(#compileToVal(EXPR1), #compileToVal(EXPR2))
 
     rule #num256Le(@tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%bool, $le(CODE1, CODE2), @none)
