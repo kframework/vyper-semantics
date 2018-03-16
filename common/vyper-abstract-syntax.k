@@ -238,9 +238,10 @@ module VYPER-ABSTRACT-SYNTAX
     syntax ReservedFunc  ::= "%floor"               "(" Expr ")"
                            | "%decimal"             "(" Expr ")"
                            | "%as_unitless_number"  "(" Expr ")"
-                           | "%as_num128"           "(" Expr ")"
-                           | "%as_num256"           "(" Expr ")"
-                           | "%as_bytes32"          "(" Expr ")"
+                           | "%convert"             "(" Expr ","  //target
+                                                        String    //new type
+                                                    ")"
+                           | "%as_num256"           "(" Expr ")"  //todo obsolete, replaced by %convert
                            | "%slice"               "(" Expr "," Expr "," Expr ")"
                            | "%len"                 "(" Expr ")"
                            | "%concat"              "(" Exprs ")"                      //byte arrays concatenation

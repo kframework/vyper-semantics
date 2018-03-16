@@ -2699,7 +2699,7 @@ module VYPER-LLL
     syntax CTypedLLLExp  ::= "#asNum128"    "(" CTypedLLLExp ")"    [strict]
     syntax CTypedLLLExp  ::= "#asNum128Aux" "(" LLLExp ")"
  // ------------------------------------------------------------------------
-    rule #compileToLoc(%as_num128(EXPR)) => #asNum128(#compileToVal(EXPR))
+    rule #compileToLoc(%convert(EXPR, "int128")) => #asNum128(#compileToVal(EXPR))
 
     rule #asNum128(@tlll(T, CODE, _))
         => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %num256) orBool isAddressType(T),
@@ -2713,7 +2713,7 @@ module VYPER-LLL
     syntax CTypedLLLExp  ::= "#asNum256"    "(" CTypedLLLExp ")"    [strict]
     syntax CTypedLLLExp  ::= "#asNum256Aux" "(" TypedLLLExp ")"
  // ------------------------------------------------------------------------
-    rule #compileToLoc(%as_num256(EXPR)) => #asNum256(#compileToVal(EXPR))
+    rule #compileToLoc(%convert(EXPR, "uint256")) => #asNum256(#compileToVal(EXPR))
 
     rule #asNum256(@tlll(T, CODE, EXPRATTR))
         => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool isAddressType(T),
@@ -2740,7 +2740,7 @@ module VYPER-LLL
     // as_bytes32
     syntax CTypedLLLExp  ::= "#asBytes32" "(" CTypedLLLExp ")"    [strict]
  // ----------------------------------------------------------------------
-    rule #compileToLoc(%as_bytes32(EXPR)) => #asBytes32(#compileToVal(EXPR))
+    rule #compileToLoc(%convert(EXPR, "bytes32")) => #asBytes32(#compileToVal(EXPR))
 
     rule #asBytes32(@tlll(T, CODE, EXPRATTR))
         => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool isAddressType(T),
@@ -2946,7 +2946,7 @@ module VYPER-LLL
 
     // extract32
     //---------------------
-    rule #compileToLoc(%extract32(BExp, IExp, %num)) => #compileToLoc(%as_num128(%extract32(BExp, IExp, %bytes32)))
+    rule #compileToLoc(%extract32(BExp, IExp, %num)) => #compileToLoc(%convert(%extract32(BExp, IExp, %bytes32), "num128"))
 
     rule #compileToLoc(%extract32(BExp, IExp, _:AddressType))
          => #toAddress(#extract32(#compileToLoc(BExp), #compileToLoc(IExp), %bytes32))
