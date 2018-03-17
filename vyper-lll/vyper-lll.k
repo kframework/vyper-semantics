@@ -383,14 +383,14 @@ module VYPER-LLL
  // -------------------------------------------------------------------------------------------------------------
     rule #mkPublicGetterBase(NAME, PARAMS, T, VAR, DEPTH)
         => %fdecl(%@public %@constant .Decorators,
-                  String2Id("get_" +String NAME),
+                  String2Id(NAME),
                   PARAMS,
                   T,
                   %return(VAR) .Stmts) .Defs
 
     rule #mkPublicGetterByteArray(NAME, PARAMS, %bytesT(L), VAR, DEPTH)
         => %fdecl(%@public %@constant .Decorators,
-                  String2Id("get_" +String NAME),
+                  String2Id(NAME),
                   PARAMS,
                   %bytesT(L),
                   %return(VAR) .Stmts) .Defs
