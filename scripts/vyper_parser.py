@@ -783,11 +783,13 @@ inputLines: List[str]
 def main(vyperPgm):
     global inputLines
     inputLines = vyperPgm.splitlines()
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "premade_contracts.v.py"), "r") as fin:
-        premadeContracts = fin.read()
+    if "ERC20" in vyperPgm:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "premade_contracts.v.py"), "r") as fin:
+            premadeContracts = fin.read()
+        vyperPgm += "\n" + premadeContracts
 
-    astList = parse(vyperPgm + "\n" + premadeContracts)
-    return parseProgram(astList)
+    pythonAST = parse(vyperPgm)
+    return parseProgram(pythonAST)
 
 
 if __name__ == '__main__':
