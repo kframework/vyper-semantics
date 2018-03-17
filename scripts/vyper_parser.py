@@ -303,11 +303,19 @@ def parseConst(node):
     elif type(node) == ast.Num and type(node.n == float):
         return parseFixed10Const(node)
     elif type(node) == ast.Str:
-        return "\"{}\"".format(node.s)
+        return "\"{}\"".format(escapeSpecialChars(node.s))
     elif type(node) == ast.NameConstant:
         return nameCosntantMap[node.value]
     else:
         raise ParserException("Unsupported Const format: " + str(node))
+
+
+def escapeSpecialChars(s: str):
+    return s.translate(str.maketrans({"\t": r"\t",
+                                      "\n": r"\n",
+                                      "\r": r"\r",
+                                      "\\": r"\\",
+                                      "\"": r"\""}))
 
 
 #    syntax Expr :== ...
