@@ -247,7 +247,7 @@ module VYPER-ABSTRACT-SYNTAX
                            | "%concat"              "(" Exprs ")"                      //byte arrays concatenation
                            | "%keccak256"           "(" Expr ")"
                            | "%method_id"           "(" Expr ")"
-                           | "%ecrecover"           "(" Expr ")"
+                           | "%ecrecover"           "(" Expr "," Expr "," Expr "," Expr ")"
                            | "%ecadd"               "(" Expr "," Expr ")"
                            | "%ecmul"               "(" Expr "," Expr ")"
                            | "%extract32"           "(" Expr "," Expr "," Type ")"

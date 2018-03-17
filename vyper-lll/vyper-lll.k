@@ -1724,13 +1724,13 @@ module VYPER-LLL
 
     rule #compileToLoc(NUM:Int) => #ifThenElse((NUM >=Int @minNum) andBool (NUM <=Int @maxNum),
                                               @tlll(%num, NUM, @none),
-                                              #exception("Number out of range"))
+                                              #exception("Number out of range") ~> #compileToLoc(NUM))
 
     rule #compileToLoc(%fixed10(NUM, DEN))
         => #ifThen(notBool((NUM >=Int (@minNum *Int DEN)) andBool (NUM >=Int (@minNum *Int DEN))),
-                   #exception("Number out of range."))
+                   #exception("Number out of range.") ~> #compileToLoc(%fixed10(NUM, DEN)))
         ~> #ifThen(@decimalDivisor <Int DEN,
-                   #exception("Too many decimal places."))
+                   #exception("Too many decimal places.") ~> #compileToLoc(%fixed10(NUM, DEN)))
         ~> @tlll(%decimal, (NUM *Int @decimalDivisor) /Int DEN, @none)
 
     rule #compileToLoc(%hex(STR))
@@ -2698,6 +2698,7 @@ module VYPER-LLL
 
 
     // as_num128
+    //---------------------
     syntax CTypedLLLExp  ::= "#asNum128"    "(" CTypedLLLExp ")"    [strict]
     syntax CTypedLLLExp  ::= "#asNum128Aux" "(" LLLExp ")"
  // ------------------------------------------------------------------------
@@ -2712,34 +2713,34 @@ module VYPER-LLL
 
 
     // as_num256
-    syntax CTypedLLLExp  ::= "#asNum256"    "(" CTypedLLLExp ")"    [strict]
-    syntax CTypedLLLExp  ::= "#asNum256Aux" "(" TypedLLLExp ")"
- // ------------------------------------------------------------------------
-    rule #compileToLoc(%convert(EXPR, "uint256")) => #asNum256(#compileToVal(EXPR))
+    //---------------------
+    rule #compileToLoc(%convert(EXPR:Expr, "uint256"))
+         => #ifThenElse(isInt(EXPR), //todo support all literal formats
+                        #asNum256Number(EXPR),
+                        #asNum256(#compileToVal(EXPR))
+                       )
 
+    syntax CTypedLLLExp  ::= "#asNum256"    "(" CTypedLLLExp ")"    [strict]
+ // ------------------------------------------------------------------------
     rule #asNum256(@tlll(T, CODE, EXPRATTR))
         => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool isAddressType(T),
-                       #asNum256Aux(@tlll(T, CODE, EXPRATTR)),
+                       #asNum256LLLExp(CODE),
                        #exception("Function arg type does not match expected type."))
 
-    rule #asNum256Aux(@tlll(T, CODE, EXPRATTR))
-        => #ifThenElse(isInt(CODE),
-                       #asNum256Number(CODE),
-                       #asNum256LLLExp(CODE))
 
-
-    syntax CTypedLLLExp  ::= "#asNum256Number" "(" LLLExp ")"
+    syntax CTypedLLLExp  ::= "#asNum256Number" "(" Expr ")"
     syntax CTypedLLLExp  ::= "#asNum256LLLExp" "(" LLLExp ")"
  // ---------------------------------------------------------
     rule #asNum256Number(I:Int) => #ifThenElse((I >=Int 0) andBool (I <=Int 2^Int 256 -Int 1),
                                                @tlll(%num256, I, @none),
-                                               #exception("Number out of range"))
+                                               #exception("Number out of range") ~> #asNum256Number(I))
 
     //Denis: not sure if this clamp is required. Throws exception if argument is %bytes32.
     rule #asNum256LLLExp(CODE) => @tlll(%num256, $clampge(CODE, 0), @none)
 
 
     // as_bytes32
+    //---------------------
     syntax CTypedLLLExp  ::= "#asBytes32" "(" CTypedLLLExp ")"    [strict]
  // ----------------------------------------------------------------------
     rule #compileToLoc(%convert(EXPR, "bytes32")) => #asBytes32(#compileToVal(EXPR))
@@ -2944,6 +2945,30 @@ module VYPER-LLL
 
     rule #appendByteArray(@tlll(%bytesT(RezSize:Int), REZLoc:Int, LA:LocAttr), .TypedLLLExps, CODE:LLLExp)
          => @tlll(%bytesT(RezSize), $%seq(CODE, REZLoc), LA)
+
+
+    // ecrecover
+    //---------------------
+    rule #compileToLoc(%ecrecover(E1, E2, E3, E4))
+         => #ecrecover(#compileToVal(E1), #compileToVal(E2), #compileToVal(E3), #compileToVal(E4),
+                       #newPlaceholder(%bytesT(128)))
+
+    syntax CTypedLLLExp  ::= "#ecrecover" "(" CTypedLLLExp
+                                          "," CTypedLLLExp
+                                          "," CTypedLLLExp
+                                          "," CTypedLLLExp
+                                          "," CTypedLLLExp
+                                          ")"               [seqstrict]
+ // ------------------------------------------------------------------------
+    rule #ecrecover(@tlll(%bytes32, C0, _), @tlll(%num256, C1, _), @tlll(%num256, C2, _), @tlll(%num256, C3, _),
+                    @tlll(%bytesT(_), PLLOC, _))
+         => @tlll(%address, $%seq($mstore(PLLOC, C0),
+                                  $mstore($add(PLLOC, 32), C1),
+                                  $mstore($add(PLLOC, 64), C2),
+                                  $mstore($add(PLLOC, 96), C3),
+                                  $pop($call(3000, 1, 0, PLLOC, 128, @freeVarPos, 32)),
+                                  $mload(@freeVarPos)),
+                  @none)
 
 
     // extract32
