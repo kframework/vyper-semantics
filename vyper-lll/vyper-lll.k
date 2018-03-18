@@ -191,8 +191,7 @@ module VYPER-LLL
          <internalSig> SIGS </internalSig>
       requires notBool NAME in_keys(SIGS)
 
-    rule <k> #addEvent(%event(NAME, EPARAMS))
-            => #exception("Duplicate event name: " +String Id2String(NAME))
+    rule <k> (. => #exception("Duplicate event name: " +String Id2String(NAME))) ~> #addEvent(%event(NAME, _))
          ... </k>
          <internalSig>... NAME |-> _ ...</internalSig>
 
@@ -209,24 +208,27 @@ module VYPER-LLL
     rule #checkEventParams(%eparam(NAME, T, true) EPARAMS, TOPICNUM, NAMES)
         => #checkEventParamType(T)
         ~> #ifThen(#inIds(NAME, NAMES),
-                   #exception("Duplicate function argument name: " +String Id2String(NAME)))
+                   #exception("Duplicate function argument name: " +String Id2String(NAME))
+                      ~> #checkEventParams(%eparam(NAME, T, true) EPARAMS, TOPICNUM, NAMES)
+                  )
         ~> #checkEventParams(EPARAMS, TOPICNUM +Int 1, NAMES ++Id (NAME .Ids))
       requires TOPICNUM <Int 3
 
-    rule #checkEventParams(%eparam(NAME, T, true) EPARAMS, TOPICNUM, NAMES)
-        => #exception("Maximum of 3 topics.")
+    rule (. => #exception("Maximum of 3 topics.")) ~> #checkEventParams(%eparam(_, _, true) _, TOPICNUM, _)
       requires TOPICNUM >=Int 3
 
     rule #checkEventParams(%eparam(NAME, T, false) EPARAMS, TOPICNUM, NAMES)
         => #checkEventParamType(T)
         ~> #ifThen(#inIds(NAME, NAMES),
-                   #exception("Duplicate function argument name: " +String Id2String(NAME)))
+                   #exception("Duplicate function argument name: " +String Id2String(NAME))
+                      ~> #checkEventParams(%eparam(NAME, T, false) EPARAMS, TOPICNUM, NAMES)
+                  )
         ~> #checkEventParams(EPARAMS, TOPICNUM, NAMES ++Id (NAME .Ids))
 
     rule #checkEventParamType(%bytesT(L)) => .
       requires L <=Int 32
 
-    rule #checkEventParamType(%bytesT(L)) => #exception("Can only log a maximum of 32 bytes at a time.")
+    rule (. => #exception("Can only log a maximum of 32 bytes at a time.")) ~> #checkEventParamType(%bytesT(L))
       requires L >Int 32
 
     rule #checkEventParamType(T) => .
@@ -250,8 +252,8 @@ module VYPER-LLL
          <global> GLOBALS </global>
       requires notBool %svar(NAME) in_keys(GLOBALS)
 
-    rule <k> #addGlobal(%svdecl(NAME, T, _))
-            => #exception("Cannot declare a persistent variable twice! " +String Id2String(NAME))
+    rule <k> (. => #exception("Cannot declare a persistent variable twice! " +String Id2String(NAME)))
+             ~> #addGlobal(%svdecl(NAME, _, _))
          ... </k>
          <global>... %svar(NAME) |-> _ ...</global>
 
@@ -306,8 +308,9 @@ module VYPER-LLL
          <currentContract> CCONT:K </currentContract>
       requires (CCONT =/=K .K) orBool notBool FNAME in_keys(SIGS)
 
-    rule <k> #addFunc(FNAME, PARAMS, T, CONSTANT, PAYABLE, PRIVATE, PUBLIC)
-            => #exception("Duplicate event or function name: " +String Id2String(FNAME)) ... </k>
+    rule <k> (. => #exception("Duplicate event or function name: " +String Id2String(FNAME)))
+             ~> #addFunc(FNAME, _,_,_,_,_,_)
+         ...</k>
          <internalSig> SIGS </internalSig>
          <currentContract> .K </currentContract>
       requires FNAME in_keys(SIGS)
@@ -328,19 +331,23 @@ module VYPER-LLL
  // -----------------------------------------------------------
     rule #checkFuncParams(.Params, NAMES) => .
 
-    rule #checkFuncParams(%param(NAME, _) PARAMS, NAMES)
-        => #ifThen(#inIds(NAME, NAMES),
-                   #exception("Duplicate function argument name: " +String Id2String(NAME)))
-        ~> #checkFuncParams(PARAMS, NAMES ++Id (NAME .Ids))
+    rule #checkFuncParams(%param(NAME, T) PARAMS, NAMES)
+        => #ifThenElse(#inIds(NAME, NAMES),
+                       #exception("Duplicate function argument name: " +String Id2String(NAME))
+                          ~> #checkFuncParams(%param(NAME, T) PARAMS, NAMES),
+                       #checkFuncParams(PARAMS, NAMES ++Id (NAME .Ids))
+           )
 
 
     syntax KItem  ::= "#checkPrivatePublicMECE" "(" Bool /*private?*/ "," Bool /*public?*/ ")"
  // --------------------------------------------------------------------------------------------
-    rule #checkPrivatePublicMECE(PRIVATE, PUBLIC)
-        => #ifThen(PRIVATE ==K true andBool PUBLIC ==K true,
-                   #exception("Cannot use public and private decorators on the same function."))
-        ~> #ifThen(PRIVATE ==K false andBool PUBLIC ==K false,
-                   #exception("Function visibility must be declared."))
+    rule #checkPrivatePublicMECE(false, false) => #exception("Function visibility must be declared.")
+
+    rule #checkPrivatePublicMECE(true, true)
+         => #exception("Cannot use public and private decorators on the same function.")
+
+    rule #checkPrivatePublicMECE(false, true) => .
+    rule #checkPrivatePublicMECE(true, false) => .
 
 
     syntax Defs  ::= "#mkPublicGetters" "(" Globals "," Defs ")"      [function]
@@ -708,8 +715,8 @@ module VYPER-LLL
                                               CTypedLLLExp  //same var compiled to TypedLLLExp. 
                                           ")"  [strict(2)]
  // -------------------------------------------------------------------------------
-    rule <k> #getTarget(%var(NAME), _)
-            => #exception("Altering iterator which is in use!") ... </k>
+    rule <k> (. => #exception("Altering iterator which is in use!"))
+             ~> #getTarget(%var(NAME), _) ... </k>
          <forvar>... SetItem(NAME) ...</forvar>
 
     rule <k> #getTarget(%var(NAME), TCODE:TypedLLLExp) => #getTargetAux(TCODE) ... </k>
@@ -720,8 +727,8 @@ module VYPER-LLL
 
     rule #getTarget(%attribute(_,_), TCODE:TypedLLLExp) => #getTargetAux(TCODE)
 
-    rule <k> #getTarget(%subscript(V, _), _)
-            => #exception("Altering list while being iterated!") ... </k>
+    rule <k> (. => #exception("Altering list while being iterated!"))
+             ~> #getTarget(%subscript(V, _), _) ... </k>
          <inLoop>... SetItem(V) ...</inLoop>
 
     rule <k> #getTarget(%subscript(V, _), TCODE) => #getTargetAux(TCODE) ... </k>
@@ -734,9 +741,13 @@ module VYPER-LLL
  // -------------------------------------------------------------------------------
     rule <k> #getTargetAux(@tlll(T, LOC, @locattr(TARGET, MUTABLE)))
             => #ifThen(TARGET ==K @storage andBool CONSTANT ==K true,
-                       #exception("Cannot modify storage inside a constant function!"))
+                       #exception("Cannot modify storage inside a constant function!")
+                          ~> #getTargetAux(@tlll(T, LOC, @locattr(TARGET, MUTABLE)))
+                      )
             ~> #ifThen(MUTABLE ==K false,
-                       #exception("Cannot modify function argument"))
+                       #exception("Cannot modify function argument")
+                          ~> #getTargetAux(@tlll(T, LOC, @locattr(TARGET, MUTABLE)))
+                      )
             ~> @tlll(T, LOC, @locattr(TARGET, MUTABLE))
          ... </k>
          <constant> CONSTANT </constant>
@@ -755,23 +766,29 @@ module VYPER-LLL
                          #baseTypeConvert(RTCODE, LT))
 
     rule #assignImpl(@tlll(LT:ByteArrayType, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
-        => #ifThen(notBool(isByteArrayType(RT)),
-                   #exception("Setter type mismatch: left side is byte array but right side is not."))
-        ~> #mkSetterBytesT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+        => #ifThenElse(notBool(isByteArrayType(RT)),
+                       #exception("Setter type mismatch: left side is byte array but right side is not.")
+                          ~> #assignImpl(@tlll(LT:ByteArrayType, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR)),
+                       #mkSetterBytesT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+           )
 
     // Can't copy mappings
-    rule #assignImpl(@tlll(LT:MappingType, LOC, LOCATTR), RTCODE)
-        => #exception("Cannot copy mappings; can only copy individual elements.")
+    rule (. => #exception("Cannot copy mappings; can only copy individual elements."))
+         ~> #assignImpl(@tlll(LT:MappingType, LOC, LOCATTR), RTCODE)
 
     rule #assignImpl(@tlll(LT:ListType, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
-        => #ifThen(notBool(isListType(RT)),
-                   #exception("Setter type mismatch: left side is array but right side is not."))
-        ~> #assignList(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+        => #ifThenElse(notBool(isListType(RT)),
+                       #exception("Setter type mismatch: left side is array but right side is not.")
+                          ~> #assignImpl(@tlll(LT:ListType, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR)),
+                       #assignList(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+           )
 
     rule #assignImpl(@tlll(LT:StructType, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
-        => #ifThen(notBool(isStructType(RT)),
-                   #exception("Setter type mismatch: left side is struct but right side is not."))
-        ~> #assignStruct(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+        => #ifThenElse(notBool(isStructType(RT)),
+                       #exception("Setter type mismatch: left side is struct but right side is not.")
+                          ~> #assignImpl(@tlll(LT:StructType, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR)),
+                       #assignStruct(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+           )
 
 
     // Basic Types
@@ -798,10 +815,11 @@ module VYPER-LLL
                                               TypedLLLExp      // right
                                           ")"
  // ------------------------------------------------------------
-    rule #assignList(@tlll(LT, LCODE, @locattr(LTARGET, LMUTABLE)),
-                        @tlll(RT, RCODE, REXPRATTR))
+    rule #assignList(@tlll(LT, LCODE, @locattr(LTARGET, LMUTABLE)), @tlll(RT, RCODE, REXPRATTR))
         => #ifThen(#getListTCount(LT) =/=K #getListTCount(RT),
-                   #exception("Mismatched number of elements in left and right side arrays."))
+                   #exception("Mismatched number of elements in left and right side arrays.")
+                      ~> #assignList(@tlll(LT, LCODE, @locattr(LTARGET, LMUTABLE)), @tlll(RT, RCODE, REXPRATTR))
+           )
         ~> #ifThenElse(LTARGET ==K @storage,
                        #assignListAux(@tlll(LT, $sha3_32(LCODE), @locattr(@storage_prehashed, LMUTABLE)),
                                       @tlll(LT, $_L, @locattr(@storage_prehashed, LMUTABLE)),
@@ -965,10 +983,12 @@ module VYPER-LLL
                                              CTypedLLLExp ","
                                              TypedLLLExp  ")"
  // ---------------------------------------------------------
-    rule #augassign(OP, @tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
-        => #ifThen(notBool(isBaseType(LT)),
-                   #exception("Can only use aug-assign operators with simple types!"))
-        ~> #augassignAux(OP, @tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
+    rule #augassign(OP, @tlll(LT:BaseType, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
+        => #augassignAux(OP, @tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
+
+    rule (. => #exception("Can only use aug-assign operators with simple types!"))
+         ~> #augassign(OP, @tlll(LT, LOC, @locattr(TARGET, MUTABLE)), RTCODE)
+      requires notBool isBaseType(LT)
 
     rule #augassignAux(OP, @tlll(LT, LOC, @locattr(@storage, MUTABLE)), RTCODE)
         => #desugarAugAssign(@tlll(LT, LOC, @locattr(@storage, MUTABLE)),
@@ -1108,7 +1128,9 @@ module VYPER-LLL
  // ---------------------------------------------------------
     rule #forlist(ITER:Id, VAR:Var, @tlll(%listT(SUBTYPE:Type, N), CODE, EXPRATTR), STMTS:Stmts)
         => #ifThen(notBool(isBaseType(SUBTYPE)),
-                   #exception("For loops allowed only on basetype lists."))
+                   #exception("For loops allowed only on basetype lists.")
+                      ~> #forlist(ITER:Id, VAR:Var, @tlll(%listT(SUBTYPE:Type, N), CODE, EXPRATTR), STMTS:Stmts)
+           )
         ~> #setInLoop(VAR)
         ~> #forlistVar(#newLoopVar(ITER, SUBTYPE),
                        #newVar(String2Id("_index_for_" +String Id2String(ITER)), %num),
@@ -1198,38 +1220,41 @@ module VYPER-LLL
 
 
     rule <k> #compileStmt(%return) => #ifThenElse(T =/=K %void,
-                                                  #exception("Expecting to return a value"),
+                                                  #exception("Expecting to return a value") ~> #compileStmt(%return),
                                                   $return(0, 0)) ... </k>
          <return> T </return>
 
     rule <k> #compileStmt(%return(E)) => #ifThenElse(T =/=K %void,
                                                      #return(#compileToVal(E), T),
-                                                     #exception("Not expecting to return a value")) ... </k>
+                                                     #exception("Not expecting to return a value")
+                                                        ~> #compileStmt(%return(E))) ... </k>
          <return> T </return>
 
 
     syntax CLLLExps  ::= "#return" "(" CTypedLLLExp "," Type /*return type*/ ")"  [strict(1)]
  // -----------------------------------------------------------------------------------------
     // Base Type
-    rule #return(@tlll(T:BaseType, CODE, EXPRATTR), RETURNTYPE)
-        => #ifThen(notBool(isBaseType(RETURNTYPE)),
-                   #exception("Trying to return base type but output expecting non base type."))
-        ~> #returnBase(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
+    rule (. => #exception("Trying to return base type but output expecting non base type."))
+         ~> #return(@tlll(T:BaseType, CODE, EXPRATTR), RETURNTYPE)
+      requires notBool isBaseType(RETURNTYPE)
+
+    rule #return(@tlll(T:BaseType, CODE, EXPRATTR), RETURNTYPE:BaseType)
+         => #returnBase(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
 
     // Byte Array Type
     rule #return(@tlll(T:ByteArrayType, CODE, EXPRATTR), RETURNTYPE)
-        => #ifThen(notBool(isByteArrayType(RETURNTYPE)),
-                   #exception("Trying to return byte array type but it not matching the expected return type."))
-        ~> #returnBytesT(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
+         => #ifThenElse(notBool(isByteArrayType(RETURNTYPE)),
+                        #exception("Trying to return byte array type but it is not matching the expected return type.")
+                          ~> #return(@tlll(T:ByteArrayType, CODE, EXPRATTR), RETURNTYPE),
+                        #returnBytesT(@tlll(T, CODE, EXPRATTR), RETURNTYPE))
 
     // List Type
-    rule #return(@tlll(%listT(SUBTYPE1, N1), CODE, EXPRATTR), %listT(SUBTYPE2, N2))
-        => #ifThen(N1 =/=Int N2,
-                   #exception("Return list length doesn't match the expected length."))
-        ~> #returnListT(@tlll(%listT(SUBTYPE1, N1), CODE, EXPRATTR), %listT(SUBTYPE2, N2))
+    rule #return(@tlll(%listT(SUBTYPE1, N), CODE, EXPRATTR), %listT(SUBTYPE2, N))
+        => #returnListT(@tlll(%listT(SUBTYPE1, N), CODE, EXPRATTR), %listT(SUBTYPE2, N))
 
-    // TODO: support return Tuple
-
+    rule (. => #exception("Return list length doesn't match the expected length."))
+         ~> #return(@tlll(%listT(SUBTYPE1, N1), CODE, EXPRATTR), %listT(SUBTYPE2, N2))
+      requires N1 =/=Int N2
 
     syntax CLLLExps  ::= "#returnBase"    "(" TypedLLLExp "," Type ")"
     syntax CLLLExps  ::= "#returnBaseAux" "(" TypedLLLExp "," Type ")"
@@ -1237,21 +1262,22 @@ module VYPER-LLL
     rule #returnBase(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
         => #ifThenElse(#areUnitsCompatible(T, RETURNTYPE, #isNumLiteral(CODE)),
                        #returnBaseAux(@tlll(#dropUnit(T), CODE, EXPRATTR), #dropUnit(RETURNTYPE)),
-                       #exception("Return type units mismatch"))
+                       #exception("Return type units mismatch") ~> #returnBase(@tlll(T, CODE, EXPRATTR), RETURNTYPE))
 
-    rule #returnBaseAux(@tlll(T, CODE, _), RETURNTYPE)
+    rule #returnBaseAux(@tlll(T, CODE, LA), RETURNTYPE)
         => #ifThenElse((T ==K RETURNTYPE) orBool (T ==K %num andBool RETURNTYPE ==K %signed256),
                        $%seq($mstore(0, CODE), $return(0, 32),.LLLExps),.LLLExps,
-                       #exception("Unsupported type conversion."))
+                       #exception("Unsupported type conversion.") ~> #returnBaseAux(@tlll(T, CODE, LA), RETURNTYPE))
 
 
     syntax CLLLExps  ::= "#returnBytesT"    "(" TypedLLLExp "," Type ")"
     syntax CLLLExps  ::= "#returnBytesTAux" "(" TypedLLLExp ")"
  // -----------------------------------------------------------------------
     rule #returnBytesT(@tlll(%bytesT(L1), CODE, LOCATTR), %bytesT(L2))
-        => #ifThen(L1 >Int L2,
-                   #exception("Cannot cast from greater max-length to shorter max-length."))
-        ~> #returnBytesTAux(@tlll(%bytesT(L1), CODE, LOCATTR))
+        => #ifThenElse(L1 >Int L2,
+                       #exception("Cannot cast from greater max-length to shorter max-length.")
+                          ~> #returnBytesT(@tlll(%bytesT(L1), CODE, LOCATTR), %bytesT(L2)),
+                       #returnBytesTAux(@tlll(%bytesT(L1), CODE, LOCATTR)))
 
     rule #returnBytesTAux(@tlll(%bytesT(L), CODE, @locattr(@memory, _)))
         => $with(
@@ -1342,8 +1368,7 @@ module VYPER-LLL
     rule <k> #compileStmt(%log(NAME, ARGS)) => #log(ARGS, EVENTRECORD) ... </k>
          <internalSig>... NAME |-> EVENTRECORD:EventRecord ...</internalSig>
 
-    rule <k> #compileStmt(%log(NAME, _))
-            => #exception("Event not declared yet: " +String Id2String(NAME)) ... </k>
+    rule <k> (. => #exception("Event not declared yet: " +String Id2String(NAME))) ~> #compileStmt(%log(NAME, _)) ...</k>
          <internalSig> SIGS </internalSig>
       requires notBool NAME in_keys(SIGS)
 
@@ -1363,7 +1388,8 @@ module VYPER-LLL
                        #exception("# of args doesn't match # of params in event " +String
                                   Id2String(ENAME) +String
                                   " expected: " +String Int2String(#numOfEventParams(EPARAMS)) +String
-                                  ", actual: " +String Int2String(#numOfExprs(ARGS))),
+                                  ", actual: " +String Int2String(#numOfExprs(ARGS)))
+                          ~> #log(ARGS, @event(EID, ENAME, EPARAMS)),
                        #logAux(EID, ARGS, EPARAMS, .Exprs, .EventParams, .Exprs, .EventParams))
 
     rule #logAux(EID, (ARG1 ARGS), (EPARAM1 EPARAMS), TARGS, TEPARAMS, DARGS, DEPARAMS)
@@ -1475,11 +1501,13 @@ module VYPER-LLL
 
     // Vyper only allows 32-byte byte array as data.
     // String Literal
-    rule #packArgBy32(@tlll(_, LOC:Int, _), STR:String, %bytesT(L))
+    rule #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L))
         => #ifThen(lengthString(STR) >Int L,
-                   #exception("Data input bytes are too big."))
+                   #exception("Data input bytes are too big.")
+                      ~> #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L)))
         ~> #ifThen(lengthString(STR) >Int 32,
-                   #exception("Can only log a maximum of 32 bytes at a time."))
+                   #exception("Can only log a maximum of 32 bytes at a time.")
+                      ~> #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L)))
         ~> #packArgBy32StringLiteral(LOC, #string2Bytes(STR))
 
     // Byte Array Variable
@@ -1488,10 +1516,11 @@ module VYPER-LLL
 
 
     // List Literal
-    rule #packArgBy32(@tlll(_, LOC:Int, _), %list(EXPRS), T:ListType)
-        => #ifThen(#numOfExprs(EXPRS) =/=Int #getListTCount(T),
-                   #exception("The length of list doesn't match the expected length."))
-        ~> #packArgBy32ListTLiteral(LOC, EXPRS, T, .LLLExps, 0)
+    rule #packArgBy32(@tlll(T0, LOC:Int, LA), %list(EXPRS), T:ListType)
+         => #ifThenElse(#numOfExprs(EXPRS) =/=Int #getListTCount(T),
+                        #exception("The length of list doesn't match the expected length.")
+                          ~> #packArgBy32(@tlll(T0, LOC:Int, LA), %list(EXPRS), T:ListType),
+                        #packArgBy32ListTLiteral(LOC, EXPRS, T, .LLLExps, 0))
 
     // List Var
     rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T:ListType)
@@ -1561,10 +1590,11 @@ module VYPER-LLL
     rule #packLoggingTopic(ARG, %eparam(_, T, _)) => #packLoggingTopicBase(#compileToLoc(ARG), T:BaseType)
 
     // String Literal
-    rule #packLoggingTopic(ARG:String, %eparam(_, %bytesT(L), _))
-        => #ifThen(lengthString(ARG) >Int L,
-                   #exception("Topic input bytes are to big."))
-        ~> #packLoggingTopicStringLiteral(#string2Bytes(ARG), %bytesT(L))
+    rule #packLoggingTopic(ARG:String, %eparam(ID, %bytesT(L), B))
+         => #ifThenElse(lengthString(ARG) >Int L,
+                        #exception("Topic input bytes are to big.")
+                          ~> #packLoggingTopic(ARG:String, %eparam(ID, %bytesT(L), B)),
+                        #packLoggingTopicStringLiteral(#string2Bytes(ARG), %bytesT(L)))
 
     // Byte Array Variable
     rule #packLoggingTopic(ARG, %eparam(_, %bytesT(L), _))
@@ -1581,9 +1611,10 @@ module VYPER-LLL
     syntax CTypedLLLExp  ::= "#packLoggingTopicStringLiteral" "(" CBytes "," Type ")"  [strict(1)]
  // ----------------------------------------------------------------------------------------------
     rule #packLoggingTopicStringLiteral(BS, %bytesT(L))
-        => #ifThen(#numOfBytes(BS) >Int 32,
-                   #exception("Can only log a maximum of 32 bytes at a time."))
-        ~> @tlll(%bytesT(L), #bytes2Int(BS, 32, 0), @none)
+         => #ifThenElse(#numOfBytes(BS) >Int 32,
+                        #exception("Can only log a maximum of 32 bytes at a time.")
+                          ~> #packLoggingTopicStringLiteral(BS, %bytesT(L)),
+                        @tlll(%bytesT(L), #bytes2Int(BS, 32, 0), @none))
 
 
     syntax CTypedLLLExp  ::= "#packLoggingTopicBytesTVar" "(" CTypedLLLExp "," Type ")"  [strict(1)]
@@ -1608,18 +1639,19 @@ module VYPER-LLL
          <internalSig>... FNAME |-> FUNCRECORD ...</internalSig>
 
     // TODO: Is it necessary to enforce that functions cannot call functions defined later than themselves?
-    rule <k> #stmtExpr(%icall(FNAME, _)) => #exception("Function not declared yet: " +String Id2String(FNAME)) ... </k>
+    rule <k> (. => #exception("Function not declared yet: " +String Id2String(FNAME)))
+             ~> #stmtExpr(%icall(FNAME, _)) ... </k>
          <internalSig> SIGS </internalSig>
       requires notBool FNAME in_keys(SIGS)
 
     // EVM: CALL GASCAP ACCTTO VALUE ARGSTART ARGWIDTH RETSTART RETWIDTH
-    rule <k> #icallNoReturn(ARGS, @func(FUNCID, FNAME, PARAMS, RETT, _, _, _))
-            => #ifThen(#numOfExprs(ARGS) =/=K #numOfParams(PARAMS),
-                       #exception("# of args doesn't match # of params in function" +String Id2String(FNAME) +String
-                                  " expected: " +String Int2String(#numOfParams(PARAMS)) +String
-                                  ", actual: " +String Int2String(#numOfExprs(ARGS))))
-            ~> #icallNoReturnAux(#packArguments(#compileExprs(ARGS), FUNCID, PARAMS))
-         ... </k>
+    rule #icallNoReturn(ARGS, @func(FUNCID, FNAME, PARAMS, RETT, B1, B2, B3))
+         => #ifThenElse(#numOfExprs(ARGS) =/=K #numOfParams(PARAMS),
+                        #exception("# of args doesn't match # of params in function" +String Id2String(FNAME) +String
+                                " expected: " +String Int2String(#numOfParams(PARAMS)) +String
+                                ", actual: " +String Int2String(#numOfExprs(ARGS)))
+                          ~> #icallNoReturn(ARGS, @func(FUNCID, FNAME, PARAMS, RETT, B1, B2, B3)),
+                        #icallNoReturnAux(#packArguments(#compileExprs(ARGS), FUNCID, PARAMS)))
 
 
     syntax CLLLExps  ::= "#icallNoReturnAux" "(" CPackedArgData ")"  [strict]
@@ -1634,7 +1666,7 @@ module VYPER-LLL
 
     rule <k> #compileStmt(%send(TO, VALUE))
             => #ifThenElse(CONSTANT ==K true,
-                           #exception("Cannot send ether inside a constant function"),
+                           #exception("Cannot send ether inside a constant function") ~> #compileStmt(%send(TO, VALUE)),
                            #send(#compileToVal(TO), #compileToVal(VALUE))) ... </k>
          <constant> CONSTANT </constant>
 
@@ -1654,9 +1686,8 @@ module VYPER-LLL
 // ============
 
 
-    rule <k> #compileStmt(%selfdestruct(ADDR))
-            => #exception("Cannot self destruct inside a constant function! ")
-         ... </k>
+    rule <k> (. => #exception("Cannot self destruct inside a constant function! "))
+             ~> #compileStmt(%selfdestruct(ADDR)) ...</k>
          <constant> true </constant>
 
     rule <k> #compileStmt(%selfdestruct(ADDR))
@@ -1708,7 +1739,8 @@ module VYPER-LLL
 
     rule #compileLocExprAux(@tlll(T, CODE, EXPRATTR))
         => #ifThenElse(EXPRATTR ==K @none,
-                       #exception("Looking for a variable location, instead got a value"),
+                       #exception("Looking for a variable location, instead got a value")
+                          ~> #compileLocExprAux(@tlll(T, CODE, EXPRATTR)),
                        @tlll(T, CODE, EXPRATTR))
 
 
@@ -1738,7 +1770,8 @@ module VYPER-LLL
                        @tlll(%address, String2Base(STR, 16), @none),
              #ifThenElse(lengthString(STR) ==Int 64,
                          @tlll(%bytes32, String2Base(STR, 16), @none),
-                         #exception("Cannot read 0x value with length:" +String Int2String(lengthString(STR)))))
+                         #exception("Cannot read 0x value with length:" +String Int2String(lengthString(STR)))
+                            ~> #compileToLoc(%hex(STR))))
 
 
 // String Literal
@@ -1845,8 +1878,7 @@ module VYPER-LLL
     rule #compileToLoc(%list(EXPRS)) => #listLiteral(EXPRS)
       requires #numOfExprs(EXPRS) >Int 0
 
-    rule #compileToLoc(%list(EXPRS)) => #exception("List must have elements")
-      requires #numOfExprs(EXPRS) ==Int 0
+    rule (. => #exception("List must have elements")) ~> #compileToLoc(%list(.Exprs))
 
 
     // Additional LLLExp to handle lists
@@ -1907,9 +1939,11 @@ module VYPER-LLL
 
     rule #structLiteral(%item(NAME, EXPR) ITEMS, NAMES, ANNVARS, RESULTCODE)
         => #ifThen(notBool #isVarNameValid(NAME),
-                   #exception("Invalid member variable for struct."))
+                   #exception("Invalid member variable for struct.")
+                      ~> #structLiteral(%item(NAME, EXPR) ITEMS, NAMES, ANNVARS, RESULTCODE))
         ~> #ifThen(#inIds(NAME, NAMES),
-                   #exception("Member variable duplicated: " +String Id2String(NAME)))
+                   #exception("Member variable duplicated: " +String Id2String(NAME))
+                      ~> #structLiteral(%item(NAME, EXPR) ITEMS, NAMES, ANNVARS, RESULTCODE))
         ~> #nameWithValue(NAME, #compileToLoc(EXPR))
         ~> #structLiteral(ITEMS, NAMES, ANNVARS, RESULTCODE)
 
@@ -1931,7 +1965,8 @@ module VYPER-LLL
  // ---------------------------------------------------------------------------------------------------
     rule #binOp(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
         => #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
-                   #exception("Unsupported types for arithmetic op"))
+                   #exception("Unsupported types for arithmetic op")
+                      ~> #binOp(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR)))
         ~> #ifThenElse(isPureNumType(LT) andBool isPureNumType(RT),
                        #binOpPure(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR)),
                        #binOpMix(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR)))
@@ -1954,11 +1989,13 @@ module VYPER-LLL
     syntax KItem      ::= "#newUnitTuple" "(" BinOp "," Type "," Type "," LLLExp ")"
  // --------------------------------------------------------------------------------
     // add
-    rule #newUnitTuple(+, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
+    rule #newUnitTuple(+, %unitT(T1, LM:Map, LPOS), %unitT(T2, RM:Map, RPOS), LLLE)
         => #ifThen(LM =/=K RM,
-                   #exception("Unit mismatch."))
+                   #exception("Unit mismatch.")
+                      ~> #newUnitTuple(+, %unitT(T1, LM:Map, LPOS), %unitT(T2, RM:Map, RPOS), LLLE))
         ~> #ifThen(LPOS ==K true andBool RPOS ==K true,
-                   #exception("Cannot add two positional units!"))
+                   #exception("Cannot add two positional units!")
+                      ~> #newUnitTuple(+, %unitT(T1, LM:Map, LPOS), %unitT(T2, RM:Map, RPOS), LLLE))
         ~> @unittuple(LM, LPOS xorBool RPOS)
 
     rule #newUnitTuple(+, %unitT(LT, LM:Map, LPOS), RT:PureNumType, _)
@@ -1968,9 +2005,10 @@ module VYPER-LLL
         => @unittuple(RM, RPOS)
 
     // subtract
-    rule #newUnitTuple(-, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
+    rule #newUnitTuple(-, %unitT(T1, LM:Map, LPOS), %unitT(T2, RM:Map, RPOS), LLLE)
         => #ifThen(LM =/=K RM,
-                   #exception("Unit mismatch."))
+                   #exception("Unit mismatch.")
+                      ~> #newUnitTuple(-, %unitT(T1, LM:Map, LPOS), %unitT(T2, RM:Map, RPOS), LLLE))
         ~> @unittuple(LM, LPOS xorBool RPOS)
 
     rule #newUnitTuple(-, %unitT(LT, LM:Map, LPOS), RT:PureNumType, _)
@@ -1980,64 +2018,74 @@ module VYPER-LLL
         => @unittuple(RM, RPOS)
 
     // multiply
-    rule #newUnitTuple(*, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
+    rule #newUnitTuple(*, %unitT(T1, LM:Map, LPOS), %unitT(T2, RM:Map, RPOS), LLLE)
         => #ifThen(LPOS ==K true orBool RPOS ==K true,
-                   #exception("Cannot multiply positional values!"))
+                   #exception("Cannot multiply positional values!")
+                      ~> #newUnitTuple(*, %unitT(T1, LM:Map, LPOS), %unitT(T2, RM:Map, RPOS), LLLE))
         ~> @unittuple(#combineUnits(LM, RM, false), false)
 
-    rule #newUnitTuple(*, %unitT(LT, LM:Map, LPOS), RT:PureNumType, _)
+    rule #newUnitTuple(*, %unitT(LT, LM:Map, LPOS), RT:PureNumType, LLLE)
         => #ifThen(LPOS ==K true,
-                   #exception("Cannot multiply positional values!"))
+                   #exception("Cannot multiply positional values!")
+                      ~> #newUnitTuple(*, %unitT(LT, LM:Map, LPOS), RT:PureNumType, LLLE))
         ~> @unittuple(LM, false)
 
-    rule #newUnitTuple(*, LT:PureNumType, %unitT(RT, RM:Map, RPOS), _)
+    rule #newUnitTuple(*, LT:PureNumType, %unitT(RT, RM:Map, RPOS), LLLE)
         => #ifThen(RPOS ==K true,
-                   #exception("Cannot multiply positional values!"))
+                   #exception("Cannot multiply positional values!")
+                      ~> #newUnitTuple(*, LT:PureNumType, %unitT(RT, RM:Map, RPOS), LLLE))
         ~> @unittuple(RM, false)
 
     // divide
-    rule #newUnitTuple(/, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
+    rule #newUnitTuple(/, %unitT(T1, LM:Map, LPOS), %unitT(T2, RM:Map, RPOS), LLLE)
         => #ifThen(LPOS ==K true orBool RPOS ==K true,
-                   #exception("Cannot divide positional values!"))
+                   #exception("Cannot divide positional values!")
+                      ~> #newUnitTuple(/, %unitT(T1, LM:Map, LPOS), %unitT(T2, RM:Map, RPOS), LLLE))
         ~> @unittuple(#combineUnits(LM, RM, true), false)
 
-    rule #newUnitTuple(/, %unitT(LT, LM:Map, LPOS), RT:PureNumType, _)
+    rule #newUnitTuple(/, %unitT(LT, LM:Map, LPOS), RT:PureNumType, LLLE)
         => #ifThen(LPOS ==K true,
-                   #exception("Cannot divide positional values!"))
+                   #exception("Cannot divide positional values!")
+                      ~> #newUnitTuple(/, %unitT(LT, LM:Map, LPOS), RT:PureNumType, LLLE))
         ~> @unittuple(LM, false)
 
-    rule #newUnitTuple(/, LT:PureNumType, %unitT(RT, RM:Map, RPOS), _)
+    rule #newUnitTuple(/, LT:PureNumType, %unitT(RT, RM:Map, RPOS), LLLE)
         => #ifThen(RPOS ==K true,
-                   #exception("Cannot divide positional values!"))
+                   #exception("Cannot divide positional values!")
+                      ~> #newUnitTuple(/, LT:PureNumType, %unitT(RT, RM:Map, RPOS), LLLE))
         ~> @unittuple(#combineUnits(.Map, RM, true), false)
 
     // mod
-    rule #newUnitTuple(%, %unitT(_, LM:Map, LPOS), %unitT(_, RM:Map, RPOS), _)
+    rule #newUnitTuple(%, %unitT(T1, LM:Map, LPOS), %unitT(T2, RM:Map, RPOS), LLLE)
         => #ifThen(LPOS ==K true orBool RPOS ==K true,
-                   #exception("Cannot use positional values as modulus arguments!"))
+                   #exception("Cannot use positional values as modulus arguments!")
+                      ~> #newUnitTuple(%, %unitT(T1, LM:Map, LPOS), %unitT(T2, RM:Map, RPOS), LLLE))
         ~> #ifThen(LM =/=K RM,
-                   #exception("Modulus arguments must have same unit."))
+                   #exception("Modulus arguments must have same unit.")
+                      ~> #newUnitTuple(%, %unitT(T1, LM:Map, LPOS), %unitT(T2, RM:Map, RPOS), LLLE))
         ~> @unittuple(LM, false)
 
-    rule #newUnitTuple(%, %unitT(LT, LM:Map, LPOS), RT:PureNumType, _)
+    rule #newUnitTuple(%, %unitT(LT, LM:Map, LPOS), RT:PureNumType, LLLE)
         => #ifThen(LPOS ==K true,
-                   #exception("Cannot use positional values as modulus arguments!"))
+                   #exception("Cannot use positional values as modulus arguments!")
+                      ~> #newUnitTuple(%, %unitT(LT, LM:Map, LPOS), RT:PureNumType, LLLE))
         ~> @unittuple(LM, false)
 
-    rule #newUnitTuple(%, LT:PureNumType, %unitT(RT, RM:Map, RPOS), _)
+    rule #newUnitTuple(%, LT:PureNumType, %unitT(RT, RM:Map, RPOS), LLLE)
         => #ifThen(RPOS ==K true,
-                   #exception("Cannot use positional values as modulus arguments!"))
+                   #exception("Cannot use positional values as modulus arguments!")
+                      ~> #newUnitTuple(%, LT:PureNumType, %unitT(RT, RM:Map, RPOS), LLLE))
         ~> @unittuple(RM, false)
 
     // exp
-    rule #newUnitTuple(**, _, %unitT(_, RM:Map, RPOS), _)
-        => #exception("Cannot use unit values as exponents")
+    rule (. => #exception("Cannot use unit values as exponents"))
+         ~> #newUnitTuple(**, _, %unitT(_, RM:Map, RPOS), _)
 
     rule #newUnitTuple(**, %unitT(LT, LM:Map, LPOS), %num, POW:Int)
         => @unittuple(#computeUnitPow(LM, POW), false)
 
-    rule #newUnitTuple(**, %unitT(LT, LM:Map, LPOS), RT:PureNumType, CODE)
-        => #exception("Only whole number exponents are supported")
+    rule (. => #exception("Only whole number exponents are supported"))
+         ~> #newUnitTuple(**, %unitT(LT, LM:Map, LPOS), RT:PureNumType, CODE)
       requires notBool isInt(CODE)
 
 
@@ -2048,23 +2096,25 @@ module VYPER-LLL
         => #binOpPureAux(BOP, LTCODE, RTCODE)
         ~> #clampArithResult
 
-    rule #binOpPureAux(+, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+    rule #binOpPureAux(+, @tlll(LT, LCODE, @none), @tlll(RT, RCODE, @none))
         => #ifThenElse(LT ==K RT,
                        @tlll(LT, $add(LCODE, RCODE), @none),
              #ifThenElse(LT ==K %num andBool RT ==K %decimal,
                          @tlll(%decimal, $add($mul(LCODE, @decimalDivisor), RCODE), @none),
                #ifThenElse(LT ==K %decimal andBool RT ==K %num,
                            @tlll(%decimal, $add(LCODE, $mul(RCODE, @decimalDivisor)), @none),
-                           #exception("How did I get here?"))))
+                           #exception("How did I get here?")
+                              ~> #binOpPureAux(+, @tlll(LT, LCODE, @none), @tlll(RT, RCODE, @none)))))
 
-    rule #binOpPureAux(-, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
+    rule #binOpPureAux(-, @tlll(LT, LCODE, @none), @tlll(RT, RCODE, @none))
         => #ifThenElse(LT ==K RT,
                        @tlll(LT, $sub(LCODE, RCODE), @none),
              #ifThenElse(LT ==K %num andBool RT ==K %decimal,
                          @tlll(%decimal, $sub($mul(LCODE, @decimalDivisor), RCODE), @none),
                #ifThenElse(LT ==K %decimal andBool RT ==K %num,
                            @tlll(%decimal, $sub(LCODE, $mul(RCODE, @decimalDivisor)), @none),
-                           #exception("How did I get here?"))))
+                           #exception("How did I get here?")
+                              ~> #binOpPureAux(-, @tlll(LT, LCODE, @none), @tlll(RT, RCODE, @none)))))
 
     rule #binOpPureAux(*, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
         => #ifThenElse(LT ==K RT andBool LT ==K %num,
@@ -2105,10 +2155,11 @@ module VYPER-LLL
                #ifThen(LT ==K %num andBool RT ==K %decimal,
                        @tlll(%decimal, $smod($mul(LCODE, @decimalDivisor), $clamp_nonzero(RCODE)), @none))))
 
-    rule #binOpPureAux(**, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
-        => #ifThenElse(LT ==K RT andBool LT ==K %num,
+    rule #binOpPureAux(**, @tlll(LT, LCODE, @none), @tlll(RT, RCODE, @none))
+        => #ifThenElse(LT ==K %num andBool RT ==K %num,
                        @tlll(%num, $exp(LCODE, RCODE), @none),
-                       #exception("Only whole number exponents are supported"))
+                       #exception("Only whole number exponents are supported")
+                          ~> #binOpPureAux(**, @tlll(LT, LCODE, @none), @tlll(RT, RCODE, @none)))
 
 
     syntax KItem  ::= "#clampArithResult"
@@ -2179,10 +2230,12 @@ module VYPER-LLL
     rule #compareOp(COP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
         => #ifThen(notBool(#areUnitsCompatible(LT, RT, #isNumLiteral(LCODE))) andBool
                    notBool(#areUnitsCompatible(RT, LT, #isNumLiteral(RCODE))),
-                   #exception("Can't compare values with different units!"))
+                   #exception("Can't compare values with different units!")
+                      ~> #compareOp(COP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR)))
         ~> #ifThen(notBool(isNumericType(LT)) orBool notBool(isNumericType(RT)),
              #ifThen(COP =/=K %eq andBool COP =/=K %ne,
-                     #exception("Invalid type for comparison op")))
+                     #exception("Invalid type for comparison op")
+                        ~> #compareOp(COP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))))
         ~> #compareOpAux(COP,
                          @tlll(#dropUnit(LT), LCODE, LEXPRATTR),
                          @tlll(#dropUnit(RT), RCODE, REXPRATTR))
@@ -2259,7 +2312,8 @@ module VYPER-LLL
     rule #boolOp(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR))
         => #ifThenElse((LT ==K %bool) andBool (RT ==K %bool),
                         #boolOpAux(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR)),
-                        #exception("Boolean operations can only be between booleans!"))
+                        #exception("Boolean operations can only be between booleans!")
+                          ~> #boolOp(BOP, @tlll(LT, LCODE, LEXPRATTR), @tlll(RT, RCODE, REXPRATTR)))
 
     rule #boolOpAux(%and, @tlll(LT, LCODE, _), @tlll(RT, RCODE, _))
         => @tlll(%bool, $and(LCODE, RCODE), @none)
@@ -2279,9 +2333,11 @@ module VYPER-LLL
  // -----------------------------------------------------------------------------------
     rule #unaryOp(%not, @tlll(T, CODE, _)) => @tlll(%bool, $iszero(CODE), @none)
 
-    rule #unaryOp(%neg, @tlll(T, CODE, _)) => #ifThenElse(isNumericType(T),
-                                                          @tlll(T, $sub(0, CODE), @none),
-                                                          #exception("Unsupported type for negation."))
+    rule #unaryOp(%neg, @tlll(T:NumericType, CODE, _)) => @tlll(T, $sub(0, CODE), @none)
+
+    rule (. => #exception("Unsupported type for negation."))
+         ~> #unaryOp(%neg, @tlll(T, CODE, _))
+      requires notBool isNumericType(T)
 
 
 
@@ -2295,7 +2351,8 @@ module VYPER-LLL
          <internalSig>... FNAME |-> FUNCRECORD ...</internalSig>
 
     // TODO: Is it necessary to enforce that functions cannot call functions defined later than themselves?
-    rule <k> #compileToLoc(%icall(FNAME, _)) => #exception("Function not declared yet: " +String Id2String(FNAME)) ... </k>
+    rule <k> (. => #exception("Function not declared yet: " +String Id2String(FNAME)))
+             ~> #compileToLoc(%icall(FNAME, _)) ... </k>
          <internalSig> SIGS </internalSig>
       requires notBool FNAME in_keys(SIGS)
 
@@ -2704,10 +2761,10 @@ module VYPER-LLL
  // ------------------------------------------------------------------------
     rule #compileToLoc(%convert(EXPR, "int128")) => #asNum128(#compileToVal(EXPR))
 
-    rule #asNum128(@tlll(T, CODE, _))
+    rule #asNum128(@tlll(T, CODE, LA))
         => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %num256) orBool isAddressType(T),
                        #asNum128Aux(CODE),
-                       #exception("Function arg type does not match expected type."))
+                       #exception("Function arg type does not match expected type.") ~> #asNum128(@tlll(T, CODE, LA)))
 
     rule #asNum128Aux(CODE:LLLExp) => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)), @none)
 
@@ -2725,7 +2782,8 @@ module VYPER-LLL
     rule #asNum256(@tlll(T, CODE, EXPRATTR))
         => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool isAddressType(T),
                        #asNum256LLLExp(CODE),
-                       #exception("Function arg type does not match expected type."))
+                       #exception("Function arg type does not match expected type.")
+                          ~> #asNum256(@tlll(T, CODE, EXPRATTR)))
 
 
     syntax CTypedLLLExp  ::= "#asNum256Number" "(" Expr ")"
@@ -2748,7 +2806,8 @@ module VYPER-LLL
     rule #asBytes32(@tlll(T, CODE, EXPRATTR))
         => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool isAddressType(T),
                        @tlll(%bytes32, CODE, @none),
-                       #exception("Function arg type does not match expected type."))
+                       #exception("Function arg type does not match expected type.")
+                          ~> #asBytes32(@tlll(T, CODE, EXPRATTR)))
 
 
     // slice
@@ -3003,10 +3062,11 @@ module VYPER-LLL
  // ------------------------------------------------------------------------
     rule #compileToLoc(%bytes_to_num(EXPR)) => #bytes_to_num(#compileToLoc(EXPR))
 
-    rule #bytes_to_num(@tlll(T, LOC, @locattr(@memory, _)))
+    rule #bytes_to_num(@tlll(T, LOC, @locattr(@memory, B)))
         => #ifThenElse(isByteArrayType(T),
                        #bytes_to_num_Aux(LOC),
-                       #exception("Function arg type does not match expected type."))
+                       #exception("Function arg type does not match expected type.")
+                          ~> #bytes_to_num(@tlll(T, LOC, @locattr(@memory, B))))
 
     /*Conversion algorithm:
         Allocate 64 bytes to some V.
@@ -3067,9 +3127,9 @@ module VYPER-LLL
         => @tlll(%unitT(%num, %wei |-> 1, false), NUM *Int DENOMINATION, @none)
 
     rule #asWeiValueNumber(%fixed10(NUM, DEN), DENOMINATION)
-        => #ifThen((DENOMINATION modInt DEN) =/=Int 0,
-                   #exception("Too many decimal places."))
-        ~> @tlll(%unitT(%num, %wei |-> 1, false), (NUM *Int DENOMINATION) /Int DEN, @none)
+        => #ifThenElse((DENOMINATION modInt DEN) =/=Int 0,
+                       #exception("Too many decimal places.") ~> #asWeiValueNumber(%fixed10(NUM, DEN), DENOMINATION),
+                       @tlll(%unitT(%num, %wei |-> 1, false), (NUM *Int DENOMINATION) /Int DEN, @none))
 
     rule #asWeiValueLLLExp(@tlll(%num, CODE, EXPRATTR), DENOMINATION)
         => @tlll(%unitT(%num, %wei |-> 1, false), $mul(CODE, DENOMINATION), @none)
@@ -3650,8 +3710,8 @@ module VYPER-LLL
         => #canonicalizeListType(#canonicalizeType(SUBTYPE, false), N)
       requires isBaseType(SUBTYPE) orBool isListType(SUBTYPE)
 
-    rule #canonicalizeType(%listT(SUBTYPE:ByteArrayType, _), _)
-        => #exception("List of byte arrays not allowed.")
+    rule (. => #exception("List of byte arrays not allowed."))
+         ~> #canonicalizeType(%listT(SUBTYPE:ByteArrayType, _), _)
 
     rule #canonicalizeType(%num, _) => "int128"
 
@@ -3705,14 +3765,16 @@ module VYPER-LLL
 
     rule #baseTypeConvertNoUnit(CODE:LLLExp, FROMT:Type, TOT:Type)
         => #ifThenElse(notBool(isBaseType(FROMT)) orBool notBool(isBaseType(TOT)),
-                       #exception("Base type conversion from or to non-base type."),
+                       #exception("Base type conversion from or to non-base type.")
+                          ~> #baseTypeConvertNoUnit(CODE:LLLExp, FROMT:Type, TOT:Type),
              #ifThenElse(FROMT ==K TOT orBool (isAddressType(FROMT) andBool isAddressType(TOT)),
                          @tlll(TOT, CODE, @none),
                #ifThenElse(FROMT ==K %num andBool TOT ==K %decimal,
                            @tlll(TOT, $mul(CODE, @decimalDivisor), @none),
                  #ifThenElse(FROMT ==K %num256 andBool TOT ==K %num,
                              @tlll(TOT, $uclample(CODE, $mload(@maxNumPos)), @none),
-                             #exception("Typecasting unavailable.")))))
+                             #exception("Typecasting unavailable.")
+                                ~> #baseTypeConvertNoUnit(CODE:LLLExp, FROMT:Type, TOT:Type)))))
 
 
     syntax CParams  ::= "#parseTypeForParams" "(" Params "," Params ")"
@@ -3773,13 +3835,13 @@ module VYPER-LLL
 
     rule #parseType(%listT(SUBTYPE, N), INMEM) => #parseListType(#parseType(SUBTYPE, INMEM), N)
 
-    rule #parseType(%mapT(KT, VT), true)
-        => #exception("No mappings allowed for in-memory types, only fixed-size arrays")
+    rule (. => #exception("No mappings allowed for in-memory types, only fixed-size arrays"))
+         ~> #parseType(%mapT(KT, VT), true)
 
     rule #parseType(%mapT(KT, VT), false)
         => #ifThenElse(isBaseType(KT) orBool isByteArrayType(KT),
                        #parseMapType(#parseType(KT, false), #parseType(VT, false)),
-                       #exception("Mapping keys must be base or bytes types"))
+                       #exception("Mapping keys must be base or bytes types") ~> #parseType(%mapT(KT, VT), false))
 
     rule #parseType(%structT(ANNVARS), INMEM) => #parseStructType(ANNVARS, INMEM, .Ids, .AnnVars)
 
@@ -3818,7 +3880,7 @@ module VYPER-LLL
 
     rule #parseStructType(%annvar(NAME, T) ANNVARS, INMEM, NAMES, RESULT)
         => #ifThen(notBool #isVarNameValid(NAME),
-                   #exception("Invalid member variable for struct."))
+                   #exception("Invalid member variable for struct: " +String Id2String(NAME)))
         ~> #ifThen(#inIds(NAME, NAMES),
                    #exception("Member variable duplicated: " +String Id2String(NAME)))
         ~> #nameWithType(NAME, #parseType(T, INMEM))
@@ -3974,8 +4036,8 @@ module VYPER-LLL
                             RESULT ++Byte (ordChar(substrString(STR, 0, 1)) : .Bytes))
       requires ordChar(substrString(STR, 0, 1)) <Int 256
 
-    rule #nonEmptystring2Bytes(STR, RESULT)
-        => #exception("Cannot insert special character into byte array")
+    rule (. => #exception("Cannot insert special character into byte array"))
+         ~> #nonEmptystring2Bytes(STR, RESULT)
       requires ordChar(substrString(STR, 0, 1)) >=Int 256
 
 
@@ -4085,16 +4147,16 @@ module VYPER-LLL
     rule <k> #lookupVar(%var(NAME)) => @tlll(T, LOC, LOCATTR) ... </k>
          <env>... %var(NAME) |-> @taddr(T, LOC, LOCATTR) ...</env>
 
-    rule <k> #lookupVar(%var(NAME))
-            => #exception("Undeclared Variable: " +String Id2String(NAME)) ... </k>
+    rule <k> (. => #exception("Undeclared Variable: " +String Id2String(NAME)))
+             ~> #lookupVar(%var(NAME)) ... </k>
          <env> ENV </env>
       requires notBool %var(NAME) in_keys(ENV)
 
     rule <k> #lookupVar(%svar(NAME)) => @tlll(T, LOC, LOCATTR) ... </k>
          <global>... %svar(NAME) |-> @taddr(T, LOC, LOCATTR) ...</global>
 
-    rule <k> #lookupVar(%svar(NAME))
-            => #exception("Persistent variable undeclared: " +String Id2String(NAME)) ... </k>
+    rule <k> (. => #exception("Persistent variable undeclared: " +String Id2String(NAME)))
+             ~> #lookupVar(%svar(NAME)) ...</k>
          <global> GLOBAL </global>
       requires notBool %svar(NAME) in_keys(GLOBAL)
 
@@ -4167,8 +4229,8 @@ module VYPER-LLL
                           @tlll(_, INDEX, _))
         => @tlll(VT, $add(BASELOC, INDEX), @locattr(@storage, MUTABLE))
 
-    rule #lookupMapElement(@tlll(%mapT(KT, VT), _, @locattr(@memory, _)), _)
-        => #exception("Can only have fixed-side arrays in memory, not mappings")
+    rule (. => #exception("Can only have fixed-side arrays in memory, not mappings"))
+         ~> #lookupMapElement(@tlll(%mapT(KT, VT), _, @locattr(@memory, _)), _)
 
 
     /* Converts a byte array that is used as key in a map to memory offset.
@@ -4258,8 +4320,8 @@ module VYPER-LLL
          <nextMem> LOC => LOC +Int #sizeOfType(T) </nextMem>
       requires notBool %var(NAME) in_keys(ENV)
 
-    rule <k> #newVar(NAME, _)
-             => #exception("Duplicate variable name: " +String Id2String(NAME)) ...</k>
+    rule <k> (. => #exception("Duplicate variable name: " +String Id2String(NAME)))
+             ~> #newVar(NAME, _) ...</k>
          <env>... %var(NAME) |-> _ ...</env>
 
 
@@ -4288,7 +4350,8 @@ module VYPER-LLL
 
     syntax CTypedLLLExp  ::= "#newLoopVar" "(" Id "," Type ")"
  // ----------------------------------------------------------
-    rule <k> #newLoopVar(NAME, T) => #exception("Duplicate iter: " +String Id2String(NAME)) ... </k>
+    rule <k> (. => #exception("Duplicate iter: " +String Id2String(NAME)))
+             ~> #newLoopVar(NAME, T)  ...</k>
          <forvar>... SetItem(NAME) ...</forvar>
 
     rule <k> #newLoopVar(NAME, T) => #newVar(NAME, T) ... </k>
@@ -4379,10 +4442,10 @@ module VYPER-LLL
     syntax CLLLExps  ::= "#mkByteArrayCopier" "(" TypedLLLExp "," TypedLLLExp ")"
     syntax CLLLExps  ::= "#mkByteArrayCopierAux" "(" TypedLLLExp "," TypedLLLExp ")"
  // --------------------------------------------------------------------------------
-    rule #mkByteArrayCopier(@tlll(DESTT, DESTCODE, DATTR),
-                            @tlll(SOURCET, SOURCECODE, SATTR))
+    rule #mkByteArrayCopier(@tlll(DESTT, DESTCODE, DATTR), @tlll(SOURCET, SOURCECODE, SATTR))
         => #ifThenElse(#getBytesTLen(SOURCET) >Int #getBytesTLen(DESTT),
-                       #exception("Cannot cast from greater max-length to shorter max-length."),
+                       #exception("Cannot cast from greater max-length to shorter max-length.")
+                          ~> #mkByteArrayCopier(@tlll(DESTT, DESTCODE, DATTR), @tlll(SOURCET, SOURCECODE, SATTR)),
                        #mkByteArrayCopierAux(@tlll(DESTT, DESTCODE, DATTR),
                                              @tlll(SOURCET, SOURCECODE, SATTR)))
 
