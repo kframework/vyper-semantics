@@ -3138,7 +3138,81 @@ module VYPER-LLL
         => @tlll(%unitT(%num, %wei |-> 1, false), $div($mul(CODE, DENOMINATION), @decimalDivisor), @none)
 
 
+    // raw_call()
+    //==========================================
+    rule #compileToLoc(%raw_call(E1, E2, I3:Int, E4, E5)) => #raw_call(#compileToVal(E1),
+                                                                       #compileToVal(E2),
+                                                                       I3,
+                                                                       #compileToVal(E4),
+                                                                       #compileToVal(E5))
+
+    syntax CTypedLLLExp ::= "#raw_call" "(" CTypedLLLExp    // address
+                                        "," CTypedLLLExp    // data: Bytes
+                                        "," Int             // outsize
+                                        "," CTypedLLLExp    // gas: int128
+                                        "," CTypedLLLExp    // value: int128 optional
+                                        ")"  [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule <k> (. => #exception("Cannot make calls from a constant function"))
+             ~> #raw_call(_,_,_,_,_) ...</k>
+         <constant> true </constant>
+
+    rule <k> #raw_call(TL1:TypedLLLExp, @tlll(DataT, DataCODE, DataLA), OUTSIZE, TL4:TypedLLLExp,
+                       @tlll(ValT, ValCODE, @none))
+         => #ifThenElse(#areUnitsCompatible(ValT, %unitT(%num, %wei |-> 1, false), false),
+                        #raw_call2(TL1, @tlll(DataT, DataCODE, DataLA), OUTSIZE, TL4, @tlll(ValT, ValCODE, @none),
+                                   #newPlaceholder(DataT)),
+                        #exception("Invalid unit for value")
+                          ~> #raw_call(TL1, @tlll(DataT, DataCODE, DataLA), OUTSIZE, TL4, @tlll(ValT, ValCODE, @none))
+            ) ...</k>
+         <constant> false </constant>
+
+    /*  copier = make_byte_array_copier(placeholder_node, data)
+        output_placeholder = context.new_placeholder(ByteArrayType(outsize))
+    */
+    syntax CTypedLLLExp ::= "#raw_call2" "(" TypedLLLExp      // address
+                                         "," TypedLLLExp      // data: Bytes
+                                         "," Int              // outsize
+                                         "," TypedLLLExp      // gas: int128
+                                         "," TypedLLLExp      // value: int128 optional
+                                         "," CTypedLLLExp     // placeholder
+                                         ")"  [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #raw_call2(TL1, TL2, OUTSIZE, TL4, TL5, PL:TypedLLLExp)
+         => #raw_call3(TL1, OUTSIZE, TL4, TL5, PL, #mkByteArrayCopier(PL, TL2), #newPlaceholder(%bytesT(OUTSIZE)))
+
+    /* z = LLLnode.from_list(['seq',
+                              copier,
+                              ['assert', ['call', gas, to, value, ['add', placeholder_node, 32], ['mload', placeholder_node],
+                                         ['add', output_node, 32], outsize]],
+                              ['mstore', output_node, outsize],
+                              output_node], typ=ByteArrayType(outsize), location='memory', pos=getpos(expr))
+    */
+    syntax CTypedLLLExp ::= "#raw_call3" "(" TypedLLLExp      // address
+                                         "," Int              // outsize
+                                         "," TypedLLLExp      // gas: int128
+                                         "," TypedLLLExp      // value: int128 optional
+                                         "," TypedLLLExp      // placeholder
+                                         "," CLLLExps         // copier
+                                         "," CTypedLLLExp     // output_placeholder
+                                         ")"  [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #raw_call3(@tlll(_, AddrCODE, _),
+                    OUTSIZE,
+                    @tlll(_, GasCODE, _),
+                    @tlll(_, ValCode, _),
+                    @tlll(_, PLCode, _),
+                    COPIER:LLLExp,.LLLExps,
+                    @tlll(_, OutPLCode, _))
+         => @tlll(%bytesT(OUTSIZE), $%seq(COPIER,
+                                          $assert($call(GasCODE, AddrCODE, ValCode, $add(PLCode, 32), $mload(PLCode),
+                                                        $add(OutPLCode, 32), OUTSIZE)),
+                                          $mstore(OutPLCode, OUTSIZE),
+                                          OutPLCode), @locattr(@memory, true))
+
+
     // bitwise_and
+    //==========================================
     syntax CTypedLLLExp  ::= "#bitwise_and" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
     rule #compileToLoc(%bitwise_and(EXPR1, EXPR2)) => #bitwise_and(#compileToVal(EXPR1), #compileToVal(EXPR2))
@@ -4003,12 +4077,7 @@ module VYPER-LLL
       requires notBool(isUnitType(TO))
 
     rule #areUnitsCompatible(%unitT(_, FROMMAP:Map, FROMPOSITIONAL), %unitT(_, TOMAP:Map, TOPOSITIONAL), _)
-        => true
-      requires FROMMAP ==K TOMAP andBool FROMPOSITIONAL ==K TOPOSITIONAL
-
-    rule #areUnitsCompatible(%unitT(_, FROMMAP:Map, FROMPOSITIONAL), %unitT(_, TOMAP:Map, TOPOSITIONAL), _)
-        => false
-      requires FROMMAP =/=K TOMAP orBool FROMPOSITIONAL =/=K TOPOSITIONAL
+        => FROMMAP ==K TOMAP andBool FROMPOSITIONAL ==K TOPOSITIONAL
 
 
 // Bytes

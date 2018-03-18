@@ -380,6 +380,13 @@ def parseCallExpr(expr: ast.Call):
                                                   expr.args[1].s if type(expr.args[1]) == ast.Str else expr.args[1].id)
         elif expr.func.id == "concat":
             return "%concat({})".format(parseArgs(expr.args + expr.keywords))
+        elif expr.func.id == "raw_call":
+            valueArg = getKeyword(expr.keywords, "value")
+            value = parseArg(valueArg) if valueArg is not None else "%as_wei_value(0, wei)"
+            return "%raw_call({}, {}, {}, {}, {})".format(parseArg(expr.args[0]), parseArg(expr.args[1]),
+                                                          parseArg(getKeyword(expr.keywords, "outsize")),
+                                                          parseArg(getKeyword(expr.keywords, "gas")),
+                                                          value)
         elif expr.func.id == "extract32":
             if len(expr.keywords) == 0:
                 typeArg = "%bytes32"
@@ -402,6 +409,13 @@ def parseCallExpr(expr: ast.Call):
             raise ParserException("Unsupported Call Expr format: " + str(expr))
     else:
         raise ParserException("Unsupported Call Expr format: " + str(expr))
+
+
+def getKeyword(keywords: list, param: str):
+    for kw in keywords:
+        if kw.arg == param:
+            return kw.value
+    return None
 
 
 # syntax ReservedExpr  ::= "%msg.sender" | "%msg.value" | "%msg.gas"

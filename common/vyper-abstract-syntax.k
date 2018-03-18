@@ -253,7 +253,12 @@ module VYPER-ABSTRACT-SYNTAX
                            | "%extract32"           "(" Expr "," Expr "," Type ")"
                            | "%bytes_to_num"        "(" Expr ")"
                            | "%as_wei_value"        "(" Expr "," Id   ")"
-                        // | "%raw_call"            "(" Expr "," Expr "," Expr "," Expr "," Expr ")"
+                           | "%raw_call"            "(" Expr    // address
+                                                    "," Expr    // data: Bytes
+                                                    "," Expr    // outsize: num_literal
+                                                    "," Expr    // gas: int128
+                                                    "," Expr    // value: int128 optional
+                                                    ")"
                            | "%RLPlist"             "(" Expr "," Expr ")"
                            | "%blockhash"           "(" Expr ")"
                            | "%bitwise_and"         "(" Expr "," Expr ")"
