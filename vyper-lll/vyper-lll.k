@@ -4032,7 +4032,10 @@ module VYPER-LLL
     syntax KItem  ::= "#computeEventSigAux" "(" String "," EventParams ")"
  // ----------------------------------------------------------------------
     rule #computeEventSig(SIG, %eparam(_, T, _) EPARAMS)
-        => #canonicalizeType(#parseType(T, true), true)
+        => #if isCastType(T)
+            #then #canonicalizeType(%num256, true)
+            #else #canonicalizeType(#parseType(T, true), true)
+           #fi
         ~> #computeEventSigAux(SIG, EPARAMS)
 
     rule TYPE:String ~> #computeEventSigAux(SIG, EPARAM1 EPARAMS)
@@ -4058,7 +4061,10 @@ module VYPER-LLL
     syntax KItem  ::= "#computeFuncSigAux" "(" String "," Params ")"
  // ----------------------------------------------------------------
     rule #computeFuncSig(SIG, %param(_,T) PARAMS)
-        => #canonicalizeType(#parseType(T, true), false)
+        => #if isCastType(T)
+            #then #canonicalizeType(%num256, false)
+            #else #canonicalizeType(#parseType(T, true), false)
+           #fi
         ~> #computeFuncSigAux(SIG, PARAMS)
 
     rule TYPE:String ~> #computeFuncSigAux(SIG, PARAM1 PARAMS)
