@@ -103,6 +103,7 @@ module VYPER-ABSTRACT-SYNTAX
                    | Var
                    | ListExpr
                    | StructExpr
+                   | TupleExpr
                    | "%self"
                    | "%binop"     "(" BinOp     "," Expr "," Expr ")"
                    | "%compareop" "(" CompareOp "," Expr "," Expr ")"
@@ -151,6 +152,8 @@ module VYPER-ABSTRACT-SYNTAX
 
     syntax StructExpr  ::= "%struct" "(" StructItems ")"
 
+    syntax TupleExpr ::= "%tuple" "(" Exprs ")"
+
     syntax StructItem  ::= "%item" "(" Id "," Expr ")"
     syntax StructItems ::= List{StructItem, ""}
 
@@ -173,6 +176,7 @@ module VYPER-ABSTRACT-SYNTAX
                    | ListType
                    | MappingType
                    | StructType
+                   | TupleType
 
     syntax BaseType  ::= "%bool"
                        | NumericType | "%num256"  | "%signed256"
@@ -213,6 +217,10 @@ module VYPER-ABSTRACT-SYNTAX
     syntax MappingType  ::= "%mapT" "(" Type "," Type ")" // keyType, valueType
 
     syntax StructType  ::= "%structT" "(" AnnVars ")"
+
+    syntax TupleType ::= "%tupleT" "(" Types ")"
+
+    syntax Types ::= List{Type, ""}
 
 
 // Reserved

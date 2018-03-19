@@ -168,6 +168,8 @@ def parseType(node):
             return "%contractT({})".format(node.args[0].id)
         else:
             return "%unitT({}, {}, {})".format(parseType(node.func), parseUnit(node.args[0]), positional)
+    elif type(node) == ast.Tuple:
+        return "%tupleT({})".format(parseList(node.elts, parseType, " "))
     else:
         raise ParserException("Type parsing not yet implemented for: " + str(node))
 
@@ -570,6 +572,8 @@ def parseExpr(node):
         return "%struct({})".format(parseStructItems(node))
     elif type(node) == ast.Call:
         return parseCallExpr(node)
+    elif type(node) == ast.Tuple:
+        return "%tuple({})".format(parseExprs(node.elts))
     else:
         raise ParserException("Unsupported Expr format: " + str(node))
 

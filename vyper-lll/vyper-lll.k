@@ -783,12 +783,13 @@ module VYPER-LLL
                        #assignList(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
            )
 
-    rule #assignImpl(@tlll(LT:StructType, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
-        => #ifThenElse(notBool(isStructType(RT)),
-                       #exception("Setter type mismatch: left side is struct but right side is not.")
+    rule #assignImpl(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+        => #ifThenElse(notBool(getKLabel(LT) ==K getKLabel(RT)),
+                       #exception("Setter type mismatch")
                           ~> #assignImpl(@tlll(LT:StructType, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR)),
-                       #assignStruct(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+                       #assignStructOrT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
            )
+      requires isStructType(LT) orBool isTupleType(LT)
 
 
     // Basic Types
@@ -883,86 +884,116 @@ module VYPER-LLL
 
 
     // Struct
-    syntax CLLLExps  ::= "#assignStruct" "(" TypedLLLExp "," TypedLLLExp ")"
+    syntax CLLLExps  ::= "#assignStructOrT" "(" TypedLLLExp "," TypedLLLExp ")"
 
-    syntax CLLLExps  ::= "#assignStructAux" "(" TypedLLLExp ","  // left
+    syntax CLLLExps  ::= "#assignStructOrTAux" "(" TypedLLLExp ","  // left
                                                    TypedLLLExp ","  // left token
                                                    TypedLLLExp ")"  // right
  // ---------------------------------------------------------------------------
-    rule #assignStruct(@tlll(%structT(LANNVARS), LCODE, @locattr(LTARGET, LMUTABLE)),
-                          @tlll(%structT(RANNVARS), RCODE, REXPRATTR))
-        => #checkStructFieldNameMatch(LANNVARS, RANNVARS)
+    rule #assignStructOrT(@tlll(LT:Type, LCODE, @locattr(LTARGET, LMUTABLE)),
+                          @tlll(RT, RCODE, REXPRATTR))
+        => #checkStructOrTAssignValid(LT, RT)
         ~> #ifThenElse(LTARGET ==K @storage,
-                       #assignStructAux(@tlll(%structT(LANNVARS), $sha3_32(LCODE), @locattr(@storage_prehashed, LMUTABLE)),
-                                           @tlll(%structT(LANNVARS), $_L, @locattr(@storage_prehashed, LMUTABLE)),
-                                           @tlll(%structT(RANNVARS), RCODE, REXPRATTR)),
-                       #assignStructAux(@tlll(%structT(LANNVARS), LCODE, @locattr(LTARGET, LMUTABLE)),
-                                           @tlll(%structT(LANNVARS), $_L, @locattr(LTARGET, LMUTABLE)),
-                                           @tlll(%structT(RANNVARS), RCODE, REXPRATTR)))
+                       #assignStructOrTAux(@tlll(LT, $sha3_32(LCODE), @locattr(@storage_prehashed, LMUTABLE)),
+                                           @tlll(LT, $_L, @locattr(@storage_prehashed, LMUTABLE)),
+                                           @tlll(RT, RCODE, REXPRATTR)),
+                       #assignStructOrTAux(@tlll(LT, LCODE, @locattr(LTARGET, LMUTABLE)),
+                                           @tlll(LT, $_L, @locattr(LTARGET, LMUTABLE)),
+                                           @tlll(RT, RCODE, REXPRATTR)))
 
-    rule #assignStructAux(@tlll(%structT(LANNVARS), LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, REXPRATTR))
-        => #assignStructLiteral(LANNVARS, LCODE, LTTOKENCODE, RCODE, .LLLExps)
-      requires isMultiLLLExp(RCODE)
+    rule #assignStructOrTAux(@tlll(LT:Type, LCODE, _), LTTOKENCODE, @tlll(RT, RCODE:MultiLLLExp, REXPRATTR))
+        => #assignStructOrTLiteral(LT, LCODE, LTTOKENCODE, RCODE, 0, .LLLExps)
 
-    rule #assignStructAux(@tlll(%structT(LANNVARS), LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
-        => #assignStructVar(LANNVARS, LCODE, LTTOKENCODE, RCODE,
-                               @tlll(RT, $_R, RLOCATTR), .LLLExps)
+    rule #assignStructOrTAux(@tlll(LT:Type, LCODE, _), LTTOKENCODE, @tlll(RT, RCODE, RLOCATTR))
+        => #assignStructOrTVar(LT, LCODE, LTTOKENCODE, RCODE,
+                               @tlll(RT, $_R, RLOCATTR), 0, .LLLExps)
       requires notBool isMultiLLLExp(RCODE)
 
 
-    syntax KItem  ::= "#checkStructFieldNameMatch" "(" AnnVars "," AnnVars ")"
+    syntax KItem  ::= "#checkStructOrTAssignValid" "(" Type "," Type ")"
  // -----------------------------------------------------------------------
-    rule #checkStructFieldNameMatch((%annvar(NAME, _) LANNVARS => LANNVARS),
-                                    (%annvar(NAME, _) RANNVARS => RANNVARS))
 
-    rule #checkStructFieldNameMatch(.AnnVars, .AnnVars) => .
+    //%structT()
+    rule #checkStructOrTAssignValid(%structT(%annvar(NAME, _) LANNVARS => LANNVARS),
+                                    %structT(%annvar(NAME, _) RANNVARS => RANNVARS))
+
+    rule #checkStructOrTAssignValid(%structT(.AnnVars), %structT(.AnnVars)) => .
 
     rule (. => #exception("Keys don't match for structs."))
-         ~> #checkStructFieldNameMatch(%annvar(LNAME, _) LANNVARS, %annvar(RNAME, _) RANNVARS)
+         ~> #checkStructOrTAssignValid(%structT(%annvar(LNAME, _) LANNVARS),
+                                       %structT(%annvar(RNAME, _) RANNVARS))
       requires LNAME =/=K RNAME
 
     rule (. => #exception("Keys don't match for structs."))
-         ~> #checkStructFieldNameMatch(%annvar(_,_) _, .AnnVars)
+         ~> #checkStructOrTAssignValid(%structT(%annvar(_,_) _), %structT(.AnnVars))
 
     rule (. => #exception("Keys don't match for structs."))
-         ~> #checkStructFieldNameMatch(.AnnVars, %annvar(_,_) _)
+         ~> #checkStructOrTAssignValid(%structT(.AnnVars), %structT(%annvar(_,_) _))
+
+    //%tupleT()
+    rule #checkStructOrTAssignValid(%tupleT(_:Type Ts1 => Ts1),
+                                    %tupleT(_:Type Ts2 => Ts2))
+
+    rule #checkStructOrTAssignValid(%tupleT(.Types), %tupleT(.Types)) => .
+
+    rule (. => #exception("Tuple lengths don't match."))
+         ~> #checkStructOrTAssignValid(%tupleT(_:Type _), %tupleT(.Types))
+
+    rule (. => #exception("Tuple lengths don't match."))
+         ~> #checkStructOrTAssignValid(%tupleT(.Types), %tupleT(_:Type _))
 
 
-    syntax CLLLExps  ::= "#assignStructLiteral" "(" AnnVars     ","  // left struct fields
-                                                    LLLExp      ","  // left code
-                                                    TypedLLLExp ","  // left token
-                                                    LLLExp      ","  // right code
-                                                    LLLExps          // result code
-                                                ")"
+    syntax CLLLExps  ::= "#assignStructOrTLiteral" "("  Type        ","  // LHS type
+                                                        LLLExp      ","  // left code
+                                                        TypedLLLExp ","  // left token
+                                                        LLLExp      ","  // right code
+                                                        Int         ","  // counter
+                                                        LLLExps          // result code
+                                                    ")"
  // ------------------------------------------------------------------
-    rule #assignStructLiteral(.AnnVars, LCODE, _, _, RESULTCODE)
+    //struct
+    rule (. => #assignImpl(#lookupVarElement(LTTOKENCODE, @tlll(%void, NAME, @none)), TEXPR))
+         ~> #assignStructOrTLiteral(%structT(%annvar(NAME, T) ANNVARS => ANNVARS),
+                                    LCODE, LTTOKENCODE, $multi(TEXPR TEXPRS => TEXPRS), 0, RESULTCODE)
+
+    //tuple
+    rule (. => #assignImpl(#lookupVarElement(LTTOKENCODE, @tlll(%void, CNT, @none)), TEXPR))
+         ~> #assignStructOrTLiteral(%tupleT(_),
+                                    LCODE, LTTOKENCODE, $multi(TEXPR TEXPRS => TEXPRS), CNT:Int => CNT +Int 1, RESULTCODE)
+
+    rule (CODE:LLLExps => .)
+         ~> #assignStructOrTLiteral(LT:Type, LCODE, LTTOKENCODE, RCODE, _, RESULTCODE => RESULTCODE ++LLL CODE)
+
+    rule #assignStructOrTLiteral(LT:Type, LCODE, _, _, _, RESULTCODE)
         => $with($_L, LCODE, $%seq(RESULTCODE)), .LLLExps
+      requires LT ==K %structT(.AnnVars) orBool LT ==K %tupleT(.Types)
 
-    rule #assignStructLiteral(%annvar(NAME, T) ANNVARS, LCODE, LTTOKENCODE, $multi(TEXPR TEXPRS), RESULTCODE)
-        => #assignImpl(#lookupVarElement(LTTOKENCODE, @tlll(%void, NAME, @none)), TEXPR)
-        ~> #assignStructLiteral(ANNVARS, LCODE, LTTOKENCODE, $multi(TEXPRS), RESULTCODE)
-
-    rule CODE:LLLExps ~> #assignStructLiteral(ANNVARS, LCODE, LTTOKENCODE, RCODE, RESULTCODE)
-        => #assignStructLiteral(ANNVARS, LCODE, LTTOKENCODE, RCODE, RESULTCODE ++LLL CODE)
-
-
-    syntax CLLLExps  ::= "#assignStructVar" "(" AnnVars     ","  // left struct fields
+    syntax CLLLExps  ::= "#assignStructOrTVar" "(" Type        ","  // LHS type
                                                    LLLExp      ","  // left code
                                                    TypedLLLExp ","  // left token
                                                    LLLExp      ","  // right code
                                                    TypedLLLExp ","  // right token
+                                                   Int         ","  // counter
                                                    LLLExps     ")"  // result code
  // -------------------------------------------------------------
-    rule #assignStructVar(.AnnVars, LCODE, _, RCODE, _, RESULTCODE)
+    //struct
+    rule (. => #assignImpl(#lookupVarElement(LTTOKENCODE, @tlll(%void, NAME, @none)),
+                           #lookupVarElement(RTTOKENCODE, @tlll(%void, NAME, @none))))
+         ~> #assignStructOrTVar(%structT(%annvar(NAME, T) ANNVARS => ANNVARS),
+                                LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, 0, RESULTCODE)
+
+    //tuple
+    rule (. => #assignImpl(#lookupVarElement(LTTOKENCODE, @tlll(%void, CNT, @none)),
+                           #lookupVarElement(RTTOKENCODE, @tlll(%void, CNT, @none))))
+         ~> #assignStructOrTVar(%tupleT(_),
+                                LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, CNT:Int, RESULTCODE)
+
+    rule (CODE:LLLExps => .)
+         ~> #assignStructOrTVar(LT:Type, LCODE, LTTOKENCODE, RCODE, _, RTTOKENCODE, RESULTCODE => RESULTCODE ++LLL CODE)
+
+    rule #assignStructOrTVar(LT:Type, LCODE, _, RCODE, _, _, RESULTCODE)
         => $with($_L, LCODE, $with($_R, RCODE, $%seq(RESULTCODE))),.LLLExps
-
-    rule #assignStructVar(%annvar(NAME, T) ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
-        => #assignImpl(#lookupVarElement(LTTOKENCODE, @tlll(%void, NAME, @none)),
-                     #lookupVarElement(RTTOKENCODE, @tlll(%void, NAME, @none)))
-        ~> #assignStructVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
-
-    rule CODE:LLLExps ~> #assignStructVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE)
-        => #assignStructVar(ANNVARS, LCODE, LTTOKENCODE, RCODE, RTTOKENCODE, RESULTCODE ++LLL CODE)
+      requires LT ==K %structT(.AnnVars) orBool LT ==K %tupleT(.Types)
 
 
 // Aug Assignment
@@ -1233,7 +1264,7 @@ module VYPER-LLL
 
     syntax CLLLExps  ::= "#return" "(" CTypedLLLExp "," Type /*return type*/ ")"  [strict(1)]
  // -----------------------------------------------------------------------------------------
-    // Base Type
+    // Return Base Type
     rule (. => #exception("Trying to return base type but output expecting non base type."))
          ~> #return(@tlll(T:BaseType, CODE, EXPRATTR), RETURNTYPE)
       requires notBool isBaseType(RETURNTYPE)
@@ -1241,16 +1272,12 @@ module VYPER-LLL
     rule #return(@tlll(T:BaseType, CODE, EXPRATTR), RETURNTYPE:BaseType)
          => #returnBase(@tlll(T, CODE, EXPRATTR), RETURNTYPE)
 
-    // Byte Array Type
+    // Return Byte Array Type
     rule #return(@tlll(T:ByteArrayType, CODE, EXPRATTR), RETURNTYPE)
          => #ifThenElse(notBool(isByteArrayType(RETURNTYPE)),
                         #exception("Trying to return byte array type but it is not matching the expected return type.")
                           ~> #return(@tlll(T:ByteArrayType, CODE, EXPRATTR), RETURNTYPE),
                         #returnBytesT(@tlll(T, CODE, EXPRATTR), RETURNTYPE))
-
-    // List Type
-    rule #return(@tlll(%listT(SUBTYPE1, N), CODE, EXPRATTR), %listT(SUBTYPE2, N))
-        => #returnListT(@tlll(%listT(SUBTYPE1, N), CODE, EXPRATTR), %listT(SUBTYPE2, N))
 
     rule (. => #exception("Return list length doesn't match the expected length."))
          ~> #return(@tlll(%listT(SUBTYPE1, N1), CODE, EXPRATTR), %listT(SUBTYPE2, N2))
@@ -1312,6 +1339,11 @@ module VYPER-LLL
          <nextMem> LOC </nextMem>
 
 
+    // Return List Type
+    //-------------------
+    rule #return(@tlll(%listT(SUBTYPE1, N), CODE, EXPRATTR), %listT(SUBTYPE2, N))
+        => #returnListT(@tlll(%listT(SUBTYPE1, N), CODE, EXPRATTR), %listT(SUBTYPE2, N))
+
     syntax CLLLExps  ::= "#returnListT" "(" TypedLLLExp "," //returned value
                                             Type            //expected type
                                         ")"
@@ -1341,6 +1373,101 @@ module VYPER-LLL
     rule #returnListTByCopyAux(SETTER, LOC, RETURNTYPE)
         => $%seq(SETTER ++LLL ($return(LOC, #sizeOfType(RETURNTYPE)),.LLLExps)),.LLLExps
 
+
+// Return Tuple
+// ===============================
+
+    /*  //sub = returned value, 1st arg of #return
+
+        subs = []
+        dynamic_offset_counter = LLLnode(self.context.get_next_mem(), typ=None, annotation="dynamic_offset_counter")  # dynamic offset position counter.
+        new_sub = LLLnode.from_list(self.context.get_next_mem() + 32, typ=self.context.return_type, location='memory', annotation='new_sub')
+        keyz = list(range(len(sub.typ.members)))
+        dynamic_offset_start = 32 * len(sub.args)  # The static list of args end.
+        left_token = LLLnode.from_list('_loc', typ=new_sub.typ, location="memory")
+            e.g. left_token == $_loc
+    */
+    rule <k> #return(@tlll(%tupleT(Ts1:Types), CODE, EXPRATTR), %tupleT(Ts2:Types))
+             => #checkStructOrTAssignValid(%tupleT(Ts1), %tupleT(Ts2))
+             ~> #returnTupleT(@tlll(%tupleT(Ts1), CODE, EXPRATTR),
+                              NextMem, NextMem +Int 32, 32 *Int #listLen(Ts1, 0), 0, .LLLExps)
+         ...</k>
+         <nextMem> NextMem </nextMem>
+
+    syntax Int ::= #listLen( Types , Int )  [function]
+    rule #listLen(_:Type Ts => Ts, I => I +Int 1)
+    rule #listLen(.Types, I) => I
+
+    syntax CLLLExps ::= "#returnTupleT" "(" TypedLLLExp   // return value. Also stores keyz.
+                                        "," Int           // dynamic_offset_counter
+                                        "," Int           // new_sub
+                                        "," Int           // dynamic_offset_start
+                                        "," Int           // i
+                                                          // typ = top of keyz
+                                                          // arg - top of CODE, which is a $multi()
+                                        "," LLLExps       // subs - the result code
+                                        ")"
+
+    /* Other vars:
+       variable_offset = LLLnode.from_list(['add', 32 * i, left_token], typ=arg.typ ...
+          e.g.: variable_offset = $add(32 *Int i, $_loc)
+
+       get_dynamic_offset_value() = $mload(DynOffsCouter)
+    */
+
+    // Case next type in tuple is BaseType:
+    // subs.append(make_setter(variable_offset, arg, "memory", pos=getpos(self.stmt)))
+    rule (. => #assignImpl(@tlll(ArgT, $add(32 *Int I, $_loc), @locattr(@memory, true)), Arg))
+         ~> #returnTupleT(@tlll(%tupleT(ArgT:BaseType ArgTs => ArgTs), $multi(Arg ArgRest => ArgRest), _),
+                          DynOffsCouter, NewSub, DynOffsetStart, I => I +Int 1, SUBS)
+
+    /*  Case next type in tuple is ByteArrayType:
+
+        subs.append(['mstore', variable_offset, get_dynamic_offset_value()])
+        dynamic_spot = LLLnode.from_list(['add', left_token, get_dynamic_offset_value()], location="memory", ...
+        subs.append(make_setter(dynamic_spot, arg, location="memory", pos=getpos(self.stmt)))
+        subs.append(increment_dynamic_offset(dynamic_spot))
+
+        def increment_dynamic_offset(dynamic_spot):
+            return ['mstore', dynamic_offset_counter,
+                                 ['add',
+                                        ['add', ['ceil32', ['mload', dynamic_spot]], 32],
+                                        ['mload', dynamic_offset_counter]]]
+    */
+    rule (. => #assignImpl(@tlll(ArgT, $add($_loc, $mload(DynOffsCouter))/*dynamic_spot*/, @locattr(@memory, true)), Arg)
+               ~> #returnTupleByteArray(DynOffsCouter, I)
+         )
+         ~> #returnTupleT(@tlll(%tupleT(ArgT:ByteArrayType ArgTs => ArgTs), $multi(Arg ArgRest => ArgRest), _),
+                          DynOffsCouter, NewSub, DynOffsetStart, I => I +Int 1, SUBS)
+
+    syntax LLLExps ::= "#returnTupleByteArray" "(" Int "," Int ")"
+
+    rule AssignResult:LLLExps ~> #returnTupleByteArray(DynOffsCouter, I)
+         => ($mstore($add(32 *Int I, $_loc), $mload(DynOffsCouter)), .LLLExps)
+            ++LLL AssignResult
+            ++LLL $mstore(DynOffsCouter, $add($add($ceil32($mload($add($_loc, $mload(DynOffsCouter)))), 32),
+                                              $mload(DynOffsCouter))),
+                  .LLLExps
+
+    rule (. => #exception("Can only return a tuple of base types or byte arrays!"))
+         ~> #returnTupleT(@tlll(%tupleT(ArgT:Type _), _,_),
+                          DynOffsCouter, NewSub, DynOffsetStart, I, SUBS)
+      requires notBool (isBaseType(ArgT) orBool isByteArrayType(ArgT))
+
+    rule (LocalResult:LLLExps => .)
+         ~> #returnTupleT(_,_,_,_,_, SUBS => SUBS ++LLL LocalResult)
+
+    /*  setter = LLLnode.from_list(['seq',
+            ['mstore', dynamic_offset_counter, dynamic_offset_start],
+            ['with', '_loc', new_sub, ['seq'] + subs]], typ=None
+        )
+
+        return LLLnode.from_list(['seq', setter, ['return', new_sub, get_dynamic_offset_value()]],
+    */
+    rule #returnTupleT(@tlll(%tupleT(.Types), _,_), DynOffsCouter, NewSub, DynOffsetStart, _, SUBS)
+         => $%seq($mstore(DynOffsCouter, DynOffsetStart),
+                  $with($_loc, NewSub, $%seq(SUBS)),
+                  $return(NewSub, $mload(DynOffsCouter)), .LLLExps), .LLLExps
 
 // Assert
 // ======
@@ -1934,9 +2061,6 @@ module VYPER-LLL
 
     syntax KItem  ::= "#nameWithValue" "(" Id "," CTypedLLLExp ")"    [strict(2)]
  // -----------------------------------------------------------------------------
-    rule #structLiteral(.StructItems, NAMES, ANNVARS, RESULTCODE)
-        => @tlll(%structT(ANNVARS), $multi(RESULTCODE), @none)
-
     rule #structLiteral(%item(NAME, EXPR) ITEMS, NAMES, ANNVARS, RESULTCODE)
         => #ifThen(notBool #isVarNameValid(NAME),
                    #exception("Invalid member variable for struct.")
@@ -1947,10 +2071,36 @@ module VYPER-LLL
         ~> #nameWithValue(NAME, #compileToLoc(EXPR))
         ~> #structLiteral(ITEMS, NAMES, ANNVARS, RESULTCODE)
 
-    rule #nameWithValue(NAME, @tlll(T, CODE, EXPRATTR)) ~> #structLiteral(ITEMS, NAMES, ANNVARS, RESULTCODE)
-        => #structLiteral(ITEMS, NAMES ++Id (NAME .Ids),
-                          ANNVARS ++Annvar (%annvar(NAME, T) .AnnVars),
-                          RESULTCODE ++TLLL (@tlll(T, CODE, EXPRATTR) .TypedLLLExps))
+    rule (#nameWithValue(NAME, @tlll(T, CODE, EXPRATTR)) => .)
+        ~> #structLiteral(_,
+                          NAMES => NAMES ++Id (NAME .Ids),
+                          ANNVARS => ANNVARS ++Annvar (%annvar(NAME, T) .AnnVars),
+                          RESULTCODE => RESULTCODE ++TLLL (@tlll(T, CODE, EXPRATTR) .TypedLLLExps))
+
+    rule #structLiteral(.StructItems, NAMES, ANNVARS, RESULTCODE)
+        => @tlll(%structT(ANNVARS), $multi(RESULTCODE), @none)
+
+
+// Tuple Literal
+// ===============
+
+    rule #compileToLoc(%tuple(Ts)) => #tupleLiteral(Ts, .Types, .TypedLLLExps)
+
+
+    syntax CTypedLLLExp  ::= "#tupleLiteral"  "(" Exprs        ","  // elements
+                                                  Types        ","  // elements type (for inferring struct type)
+                                                  TypedLLLExps      // result code
+                                              ")"
+ // -----------------------------------------------------------------------------
+    rule (. => #compileToLoc(E)) ~> #tupleLiteral(E Es => Es, Ts, RESULTCODE)
+
+    rule (@tlll(T, CODE, EXPRATTR) => .)
+         ~> #tupleLiteral(_,
+                          Ts => Ts ++Types T .Types,
+                          RESULTCODE => RESULTCODE ++TLLL (@tlll(T, CODE, EXPRATTR) .TypedLLLExps))
+
+    rule #tupleLiteral(.Exprs, Ts, RESULTCODE)
+         => @tlll(%tupleT(Ts), $multi(RESULTCODE), @none)
 
 
 // Arithmetic
@@ -3776,9 +3926,13 @@ module VYPER-LLL
 
     rule #sizeOfType(%listT(SUBTYPE, N)) => #sizeOfType(SUBTYPE) *Int N
 
+    rule #sizeOfType(%structT(%annvar(_, T) ANNVARS)) => #sizeOfType(T) +Int #sizeOfType(%structT(ANNVARS))
+
     rule #sizeOfType(%structT(.AnnVars)) => 0
 
-    rule #sizeOfType(%structT(%annvar(_, T) ANNVARS)) => #sizeOfType(T) +Int #sizeOfType(%structT(ANNVARS))
+    rule #sizeOfType(%tupleT(T Ts)) => #sizeOfType(T) +Int #sizeOfType(%tupleT(Ts))
+
+    rule #sizeOfType(%tupleT(.Types)) => 0
 
     syntax Type  ::= "#getType" "(" TypedLLLExp ")"     [function]
     rule #getType(@tlll(T,_,_)) => T
@@ -3792,7 +3946,7 @@ module VYPER-LLL
 
     rule #canonicalizeType(%listT(SUBTYPE, N), _)
         => #canonicalizeListType(#canonicalizeType(SUBTYPE, false), N)
-      requires isBaseType(SUBTYPE) orBool isListType(SUBTYPE)
+      requires notBool isByteArrayType(SUBTYPE)
 
     rule (. => #exception("List of byte arrays not allowed."))
          ~> #canonicalizeType(%listT(SUBTYPE:ByteArrayType, _), _)
@@ -3813,7 +3967,6 @@ module VYPER-LLL
  
     rule #canonicalizeType(%bytes32, _) => "bytes32"
 
-
     syntax KItem  ::= "#canonicalizeListType" "(" K "," Int ")"  [strict(1)]
  // ------------------------------------------------------------------------
     rule #canonicalizeListType(T:String, N)
@@ -3829,6 +3982,19 @@ module VYPER-LLL
  // -----------------------------------------------------------------
     rule #getBytesTLen(%bytesT(L)) => L
 
+    rule #canonicalizeType(%tupleT(Ts), _) => #canonicalizeTupleType(Ts, "", "")
+
+    syntax KItem  ::= "#canonicalizeTupleType" "(" Types "," K "," String ")"   [strict(2)]
+
+    rule #canonicalizeTupleType(T:Type Ts => Ts,
+                                S:String => #canonicalizeType(#parseType(T, true), false),
+                                SAcc => SAcc +String asString(#if SAcc ==String "" #then "" #else "," #fi) +String S)
+
+    rule #canonicalizeTupleType(.Types, S:String, SAcc)
+         => "(" +String SAcc +String asString(#if SAcc ==String "" #then "" #else "," #fi) +String S +String ")"
+
+    syntax String ::= asString ( K )    [function]
+    rule asString(S:String) => S
 
     // Convert from one base type to another. Need to call `#unwrapLoc` first.
     syntax CTypedLLLExp  ::= "#baseTypeConvert"    "(" TypedLLLExp "," Type /*to*/ ")"
@@ -3929,7 +4095,7 @@ module VYPER-LLL
 
     rule #parseType(%structT(ANNVARS), INMEM) => #parseStructType(ANNVARS, INMEM, .Ids, .AnnVars)
 
-    // TODO: support Tuple
+    rule #parseType(%tupleT(Ts), INMEM) => #parseTupleType(Ts, INMEM, .Types)
 
     // Special Types
     rule #parseType(%timestamp, _)       => %unitT(%num, %sec |-> 1, true)
@@ -3972,6 +4138,24 @@ module VYPER-LLL
 
     rule #nameWithType(NAME, T:Type) ~> #parseStructType(ANNVARS, INMEM, NAMES, RESULT)
         => #parseStructType(ANNVARS, INMEM, NAMES ++Id (NAME .Ids), RESULT ++Annvar (%annvar(NAME, T) .AnnVars))
+
+
+    syntax CType  ::= "#parseTupleType" "(" Types "," Bool "," Types ")"
+
+    rule (. => #parseType(T, INMEM))
+         ~> #parseTupleType(T:Type Ts => Ts, INMEM, _)
+
+    rule (T:Type => .)
+         ~> #parseTupleType(_, _, FinalTs => FinalTs ++Types T)
+
+    rule #parseTupleType(.Types, _, FinalTs) => %tupleT(FinalTs)
+
+    syntax Types  ::= Types "++Types" Types    [right, function]
+ // ---------------------------------------------------------------
+    rule (T Ts1) ++Types Ts2        => T (Ts1 ++Types Ts2)
+
+    rule .Types ++Types Ts:Types => Ts
+
 
 // Units
 // =====
@@ -4278,6 +4462,10 @@ module VYPER-LLL
         => #lookupStructElement(@tlll(%structT(ANNVARS), BASELOC, LOCATTR),
                                 ANNVARS, 0, FIELD)
 
+    // Tuple
+    rule #lookupVarElement(@tlll(%tupleT(Ts), BASELOC, LOCATTR), @tlll(_, CNT:Int, _))
+         => #lookupTupleElement(@tlll(%tupleT(Ts), BASELOC, LOCATTR), Ts, 0, CNT)
+
 
     /* Computes location(List[I]), I converted to %num
     */
@@ -4381,15 +4569,31 @@ module VYPER-LLL
     rule #lookupStructElement(@tlll(_, BASELOC, @locattr(@memory, MUTABLE)),
                              %annvar(INDEX:Id, FIELDT) ANNVARS, OFFSET,
                              INDEX:Id)
-        => @tlll(FIELDT, $add(OFFSET, BASELOC), @locattr(@memory, MUTABLE))
+        => @tlll(FIELDT, $add(BASELOC, OFFSET), @locattr(@memory, MUTABLE))
 
-    rule #lookupStructElement(@tlll(BASET, BASELOC, @locattr(@memory, MUTABLE)),
-                             %annvar(FIELD:Id, FIELDT) ANNVARS, OFFSET,
+    rule #lookupStructElement(@tlll(_,_, @locattr(@memory, _)),
+                             %annvar(FIELD:Id, FIELDT) ANNVARS => ANNVARS,
+                             OFFSET => OFFSET +Int #sizeOfType(FIELDT),
                              INDEX:Id)
-        => #lookupStructElement(@tlll(BASET, BASELOC, @locattr(@memory, MUTABLE)),
-                               ANNVARS, OFFSET +Int #sizeOfType(FIELDT), INDEX)
       requires INDEX =/=K FIELD
 
+    syntax CTypedLLLExp  ::= "#lookupTupleElement" "(" TypedLLLExp ","  // parent
+                                                        Types      ","  // tuple types
+                                                        Int        ","  // offset
+                                                        Int             // index
+                                                    ")"
+
+    rule #lookupTupleElement(@tlll(_,_, @locattr(@memory, _)),
+                             T:Type Ts => Ts,
+                             OFFSET => OFFSET +Int #sizeOfType(T),
+                             INDEX:Int => INDEX -Int 1)
+      requires INDEX >Int 0
+
+    rule #lookupTupleElement(@tlll(_, BASELOC, @locattr(@memory, MUTABLE)),
+                             T:Type _,
+                             OFFSET,
+                             0)
+        => @tlll(T, $add(BASELOC, OFFSET), @locattr(@memory, MUTABLE))
 
     //defines a new variable of given name in <env>
     syntax CTypedLLLExp  ::= "#newVar" "(" Id "," CType ")"   [strict(2)]
