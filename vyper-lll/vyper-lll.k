@@ -1715,7 +1715,7 @@ module VYPER-LLL
     rule #compileExprsAux(.Exprs, RESULTCODE) => RESULTCODE
 
     rule #compileExprsAux((EXPR EXPRS), RESULTCODE)
-        => #compileToLoc(EXPR)
+        => #compileToVal(EXPR)
         ~> #compileExprsAux(EXPRS, RESULTCODE)
 
     rule TCODE:TypedLLLExp ~> #compileExprsAux(EXPRS, RESULTCODE)
@@ -2909,6 +2909,8 @@ module VYPER-LLL
 
     rule #alloc(SIZE:Int => SIZE +Int 32, @tlll(%bytes32, _,_) Rest:TypedLLLExps => Rest )
 
+    rule #alloc(SIZE:Int => SIZE +Int 4, @tlll(%methodIdT, _,_) Rest:TypedLLLExps => Rest )
+
     rule <k> #alloc(SIZE:Int, .TypedLLLExps) => @tlll(%bytesT(SIZE), REZ, @locattr(@memory, true)) ...</k>
          <nextMem> REZ:Int => REZ +Int #sizeOfType(%bytesT(SIZE)) </nextMem>
 
@@ -2931,39 +2933,33 @@ module VYPER-LLL
     syntax CTypedLLLExp  ::= "#appendByteArray"    "(" CTypedLLLExp "," TypedLLLExps "," LLLExp ")"    [strict(1)]
  // ------------------------------------------------------------------------
 
-    //Appends one %bytes32 argument from memory.
+    //Appends one %methodIdT argument.
     rule #appendByteArray(@tlll(%bytesT(_), REZLoc:Int, _),
-                     @tlll(%bytes32, CODE:LLLExp, @locattr(@memory, _)) Rest:TypedLLLExps => Rest,
+                     @tlll(%methodIdT, FID:Int, @none) Rest:TypedLLLExps => Rest,
                      RezCode:LLLExp => $%seq(RezCode,
-             $with($_loc1, CODE, // _loc1 = CODE
-                       $%seq(
-                           //copy the bytes
-                           $mstore($add(REZLoc +Int 32, $mload(REZLoc)),
-                                   $mload($_loc1)),
+                     $%seq(
+                         //copy the bytes
+                         $mstore($add(REZLoc +Int 32, $mload(REZLoc)), FID *Int (2 ^Int 224)),
 
-                           //update result size
-                           $mstore(REZLoc, $add($mload(REZLoc), 32)),
-                       .LLLExps)
-                  ), .LLLExps)
+                         //update result size
+                         $mstore(REZLoc, $add($mload(REZLoc), 4)),
+                     .LLLExps), .LLLExps)
          )
 
-    //Appends one %bytes32 argument from storage.
+    //Appends one %bytes32 argument.
     rule #appendByteArray(@tlll(%bytesT(_), REZLoc:Int, _),
-                     @tlll(%bytes32, CODE:LLLExp, @locattr(@storage, _)) Rest:TypedLLLExps => Rest,
+                     @tlll(%bytes32, CODE:LLLExp, @none) Rest:TypedLLLExps => Rest,
                      RezCode:LLLExp => $%seq(RezCode,
-             $with($_loc1, CODE, // _loc1 = CODE
-                       $%seq(
-                           //copy the bytes
-                           $mstore($add(REZLoc +Int 32, $mload(REZLoc)),
-                                   $sload($_loc1)),
+                     $%seq(
+                         //copy the bytes
+                         $mstore($add(REZLoc +Int 32, $mload(REZLoc)), CODE),
 
-                           //update result size
-                           $mstore(REZLoc, $add($mload(REZLoc), 32)),
-                       .LLLExps)
-                  ), .LLLExps)
+                         //update result size
+                         $mstore(REZLoc, $add($mload(REZLoc), 32)),
+                     .LLLExps), .LLLExps)
          )
 
-    //Appends just one argument to the already allocated result. From memory.
+    //Appends one %bytest(_) argument from memory.
     rule #appendByteArray(@tlll(%bytesT(_), REZLoc:Int, _),
                      @tlll(%bytesT(SIZE:Int), CODE:LLLExp, @locattr(@memory, _)) Rest:TypedLLLExps => Rest,
                      RezCode:LLLExp => $%seq(RezCode,
@@ -2981,7 +2977,7 @@ module VYPER-LLL
                      )
       requires SIZE >Int 0
 
-    //Appends just one argument to the already allocated result. From storage.
+    //Appends one %bytest(_) argument from storage.
     rule #appendByteArray(@tlll(%bytesT(_), REZLoc:Int, _),
                      @tlll(%bytesT(SIZE:Int), CODE:LLLExp, @locattr(@storage, _)) Rest:TypedLLLExps => Rest,
                      RezCode:LLLExp => $%seq(RezCode,
@@ -3004,6 +3000,20 @@ module VYPER-LLL
 
     rule #appendByteArray(@tlll(%bytesT(RezSize:Int), REZLoc:Int, LA:LocAttr), .TypedLLLExps, CODE:LLLExp)
          => @tlll(%bytesT(RezSize), $%seq(CODE, REZLoc), LA)
+
+    // keccak256
+    //---------------------
+    rule #compileToLoc(%keccak256(E) => %sha3(E))
+
+
+    // method_id
+    //---------------------
+    rule #compileToLoc(%method_id(S:String)) => S ~> #computeFuncIdAux ~> #methodId
+
+    syntax K ::= "#methodId"
+    syntax BaseType ::= "%methodIdT"
+
+    rule FID:Int ~> #methodId => @tlll(%methodIdT, FID, @none)
 
 
     // ecrecover
