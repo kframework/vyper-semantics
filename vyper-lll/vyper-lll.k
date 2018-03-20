@@ -12,6 +12,7 @@ module VYPER-LLL
     imports LLL-ABSTRACT-SYNTAX
     imports VYPER-LLL-UTILS
     imports STRING
+    imports K-REFLECTION
     imports KRYPTO
 
 
@@ -784,9 +785,10 @@ module VYPER-LLL
            )
 
     rule #assignImpl(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
-        => #ifThenElse(notBool(getKLabel(LT) ==K getKLabel(RT)),
-                       #exception("Setter type mismatch")
-                          ~> #assignImpl(@tlll(LT:StructType, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR)),
+        => #ifThenElse(getKLabel(LT) =/=K getKLabel(RT),
+                       #exception("Setter type mismatch: left side is struct or tuple, right side has different form.")
+                          ~> getKLabel(LT) ~> "vs" ~> getKLabel(RT)
+                          ~> #assignImpl(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR)),
                        #assignStructOrT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
            )
       requires isStructType(LT) orBool isTupleType(LT)
@@ -2567,7 +2569,7 @@ module VYPER-LLL
  // ------------------------------------------------------------------------
     rule #allocMemForPackedArgs(TARGS, @tlll(T, LOC, _), FUNCID, PARAMS)
         => #packArgumentsAux(LOC +Int 32, TARGS, PARAMS, #numOfTypedLLLExps(TARGS), ($mstore(LOC, FUNCID),.LLLExps),
-                             LOC +Int 28, #sizeOfPackedArgs(TARGS) +Int 4, false)
+                             LOC +Int 28, #sizeOfPackedArgs(TARGS) +Int 4, 0, false)
 
 
     syntax CPackedArgData  ::= "#packArgumentsAux" "(" Int          ","  // packing loc for the first arg
@@ -2578,29 +2580,30 @@ module VYPER-LLL
                                                        LLLExps      ","  // setter code
                                                        Int          ","  // start of the arg block (including the funcid): placeholder +28
                                                        Int          ","  // packed args width
+                                                       Int          ","  // staticarray_offset
                                                        Bool              // need pos?
                                                    ")"
  // -------------------------------------------------------------------
-    rule #packArgumentsAux(_, .TypedLLLExps, .Params, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, false)
+    rule #packArgumentsAux(_, .TypedLLLExps, .Params, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, SARRO, false)
         => @argdata($%seq(SETTER ++LLL (ARGSSTART,.LLLExps)), ARGSWIDTH)
 
-    rule #packArgumentsAux(_, .TypedLLLExps, .Params, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, true)
-        => @argdata($with($_poz, ARGNUM *Int 32,
+    rule #packArgumentsAux(_, .TypedLLLExps, .Params, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, SARRO, true)
+        => @argdata($with($_poz, ARGNUM *Int 32 +Int SARRO,
                       $%seq(SETTER ++LLL (ARGSSTART,.LLLExps))), ARGSWIDTH)
 
     // Base Type
     // setters.append(make_setter(LLLnode.from_list(placeholder + staticarray_offset + 32 + i * 32, typ=typ), arg, 'memory'))
     rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T:BaseType) PARAMS),
-                           ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
-        => #assignImpl(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG)
-        ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+                           ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, SARRO, NEEDPOS)
+        => #assignImpl(@tlll(T, ARGLOC +Int SARRO, @locattr(@memory, true)), TARG)
+        ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, SARRO, NEEDPOS)
 
     // Byte Array Type
     // TODO: Byte Array packing does not comply with ABI specification?
     rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T:ByteArrayType) PARAMS),
-                           ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
-        => #packArgumentBytesT(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG, ARGSSTART +Int 4)
-        ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, true)
+                           ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, SARRO, NEEDPOS)
+        => #packArgumentBytesT(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG, ARGSSTART +Int 4, SARRO)
+        ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, SARRO, true)
 
     // List Type
     /*  target = LLLnode.from_list([placeholder + 32 + staticarray_offset + i * 32], typ=typ, location='memory')
@@ -2608,34 +2611,37 @@ module VYPER-LLL
         staticarray_offset += 32 * (typ.count - 1) //typ is Param type, taken from signature.
     */
     rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T:ListType) PARAMS),
-                           ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+                           ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, SARRO, NEEDPOS)
         => #ifThen(notBool isListType(#getType(TARG)),
                    #exception("Arg expects list type but actual type is not."))
-        ~> #assignImpl(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG)
+        ~> #assignImpl(@tlll(T, ARGLOC +Int SARRO, @locattr(@memory, true)), TARG)
         ~> #packArgumentsAux(
-                             ARGLOC +Int #sizeOfType(T) -Int 32, //staticarray_offset += 32 * (typ.count - 1)
-                             TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
+                             ARGLOC,
+                             TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH,
+                             SARRO +Int (32 *Int (#getListTCount(T) -Int 1)), NEEDPOS)
 
 
-    rule CODE:LLLExps ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, NEEDPOS)
-        => #packArgumentsAux(ARGLOC +Int 32, TARGS, PARAMS, ARGNUM, SETTER ++LLL CODE, ARGSSTART, ARGSWIDTH, NEEDPOS)
+    rule CODE:LLLExps ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, SARRO, NEEDPOS)
+        => #packArgumentsAux(ARGLOC +Int 32, TARGS, PARAMS, ARGNUM, SETTER ++LLL CODE, ARGSSTART, ARGSWIDTH, SARRO, NEEDPOS)
 
 
     syntax CLLLExps  ::= "#packArgumentBytesT" "(" TypedLLLExp  ","  // typed arg loc
                                                    TypedLLLExp  ","  // typed arg value
-                                                   Int          ")"  // start of the arg block (excluding the func id)
+                                                   Int          ","  // start of the arg block (excluding the func id)
+                                                   Int               // staticarray_offset
+                                               ")"
 
     syntax CLLLExps  ::= "#packArgumentBytesTAux" "(" TypedLLLExp ","  // arg copy
                                                       TypedLLLExp ","  // target
                                                       LLLExps     ","  // setter
                                                       LLLExp      ")"  // arg code
  // ---------------------------------------------------------------
-    rule #packArgumentBytesT(@tlll(PARAMT, LOC, LOCATTR), @tlll(ARGT, ARGCODE, EXPRATTR), ARGBLOCKSTART)
+    rule #packArgumentBytesT(@tlll(PARAMT, LOC, LOCATTR), @tlll(ARGT, ARGCODE, EXPRATTR), ARGBLOCKSTART, SARRO)
         => #ifThen(notBool isByteArrayType(ARGT),
                    #exception("Arg expects byte array type but actual type is not."))
         ~> #packArgumentBytesTAux(@tlll(ARGT, $_s, EXPRATTR),
                                   @tlll(PARAMT, $add(ARGBLOCKSTART, $_poz), @locattr(@memory, true)),
-                                  ($mstore(LOC, $_poz),.LLLExps),
+                                  ($mstore(LOC +Int SARRO, $_poz),.LLLExps),
                                   ARGCODE)
 
     rule #packArgumentBytesTAux(ARGCOPY, TARGET, SETTER, ARGCODE)
