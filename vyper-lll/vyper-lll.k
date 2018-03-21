@@ -2865,6 +2865,7 @@ module VYPER-LLL
 
 
     // floor
+    //---------------------
     syntax CTypedLLLExp  ::= "#floor" "(" CTypedLLLExp ")"    [strict]
  // ------------------------------------------------------------------
     rule #compileToLoc(%floor(EXPR)) => #floor(#compileToVal(EXPR))
@@ -2876,7 +2877,18 @@ module VYPER-LLL
         => @tlll(%unitT(%num, UNITMAP, POSITIONAL), $sdiv(CODE, @decimalDivisor), EXPRATTR)
 
 
+    // ceil
+    //---------------------
+    rule #compileToLoc(%ceil(EXPR)) => #ceil(#compileToVal(EXPR))
+
+    syntax CTypedLLLExp  ::= "#ceil" "(" CTypedLLLExp ")"    [strict]
+ // ------------------------------------------------------------------
+    rule #ceil(@tlll(%decimal, CODE, @none))
+        => @tlll(%num, $sdiv($add(CODE, @decimalDivisor -Int 1), @decimalDivisor), @none)
+
+
     // decimal
+    //---------------------
     syntax CTypedLLLExp  ::= "#decimal" "(" CTypedLLLExp ")"    [strict]
  // --------------------------------------------------------------------
     rule #compileToLoc(%decimal(EXPR)) => #decimal(#compileToVal(EXPR))
@@ -2895,6 +2907,7 @@ module VYPER-LLL
 
 
     // as_unitless_number
+    //---------------------
     syntax CTypedLLLExp  ::= "#asUnitlessNumber" "(" CTypedLLLExp ")"  [strict]
  // ---------------------------------------------------------------------------
     rule #compileToLoc(%as_unitless_number(EXPR)) => #asUnitlessNumber(#compileToVal(EXPR))

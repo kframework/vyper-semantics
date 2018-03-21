@@ -244,6 +244,7 @@ module VYPER-ABSTRACT-SYNTAX
                            | "%tx.origin"
 
     syntax ReservedFunc  ::= "%floor"               "(" Expr ")"
+                           | "%ceil"                "(" Expr ")"
                            | "%decimal"             "(" Expr ")"
                            | "%as_unitless_number"  "(" Expr ")"
                            | "%convert"             "(" Expr ","  //target
