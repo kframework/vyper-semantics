@@ -2910,63 +2910,97 @@ module VYPER-LLL
         => @tlll(%decimal, CODE, @none)
 
 
-    // as_num128
+    // convert(EXPR, "int128")
     //---------------------
-    syntax CTypedLLLExp  ::= "#asNum128"    "(" CTypedLLLExp ")"    [strict]
-    syntax CTypedLLLExp  ::= "#asNum128Aux" "(" LLLExp ")"
- // ------------------------------------------------------------------------
     rule #compileToLoc(%convert(EXPR, "int128")) => #asNum128(#compileToVal(EXPR))
 
-    rule #asNum128(@tlll(T, CODE, LA))
-        => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool #isTypeOf(T, %num256) orBool isAddressType(T),
-                       #asNum128Aux(CODE),
-                       #exception("Function arg type does not match expected type.") ~> #asNum128(@tlll(T, CODE, LA)))
+    syntax CTypedLLLExp  ::= "#asNum128"    "(" CTypedLLLExp ")"    [strict]
+ // ------------------------------------------------------------------------
+    rule #asNum128(@tlll(T, CODE:LLLExp, LA))
+         => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)), @none)
+      requires #isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %bytes32) orBool isAddressType(T)
 
-    rule #asNum128Aux(CODE:LLLExp) => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)), @none)
+    rule #asNum128(@tlll(T:ByteArrayType, CODE:LLLExp, @locattr(LTGT:LocTarget, _)))
+        => @tlll(%num,
+            $with($_sub, CODE,
+                 $with($_el1, /*first_el_getter*/
+                              #ifLLLExp(LTGT ==K @memory, $mload($add(32, $_sub)), $sload($add(1, $sha3_32($_sub)))),
+                    $with($_len, $clamp(0, /*lengetter*/
+                                           #ifLLLExp(LTGT ==K @memory, $mload($_sub), $sload($sha3_32($_sub))), 32),
+                       $%seq(
+                          $assert($or($iszero($_len), $div($_el1, $exp(256, 31)))),
+                          $clamp($mload(@minDecimalPos),
+                                 $div($_el1, $exp(256, $sub(32, $_len))),
+                                 $mload(@maxDecimalPos)))))),
+            @none)
+
+    rule (. => #exception("Function arg type does not match expected type."))
+         ~> #asNum128(@tlll(T, CODE:LLLExp, LA))
+      requires notBool(#isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %bytes32)
+                       orBool isAddressType(T) orBool isByteArrayType(T))
 
 
-    // as_num256
+    // convert(EXPR, "uint256")
     //---------------------
     rule #compileToLoc(%convert(EXPR:Expr, "uint256"))
-         => #ifThenElse(isInt(EXPR), //todo support all literal formats
+         => #ifThenElse(isInt(EXPR),
                         #asNum256Number(EXPR),
                         #asNum256(#compileToVal(EXPR))
                        )
 
-    syntax CTypedLLLExp  ::= "#asNum256"    "(" CTypedLLLExp ")"    [strict]
- // ------------------------------------------------------------------------
-    rule #asNum256(@tlll(T, CODE, EXPRATTR))
-        => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %bytes32) orBool isAddressType(T),
-                       #asNum256LLLExp(CODE),
-                       #exception("Function arg type does not match expected type.")
-                          ~> #asNum256(@tlll(T, CODE, EXPRATTR)))
-
-
     syntax CTypedLLLExp  ::= "#asNum256Number" "(" Expr ")"
-    syntax CTypedLLLExp  ::= "#asNum256LLLExp" "(" LLLExp ")"
  // ---------------------------------------------------------
     rule #asNum256Number(I:Int) => #ifThenElse((I >=Int 0) andBool (I <=Int 2^Int 256 -Int 1),
                                                @tlll(%num256, I, @none),
                                                #exception("Number out of range") ~> #asNum256Number(I))
 
-    //Denis: not sure if this clamp is required. Throws exception if argument is %bytes32.
-    rule #asNum256LLLExp(CODE) => @tlll(%num256, $clampge(CODE, 0), @none)
+    syntax CTypedLLLExp  ::= "#asNum256"    "(" CTypedLLLExp ")"    [strict]
+ // ------------------------------------------------------------------------
+    rule #asNum256(@tlll(%num, CODE, @none)) => @tlll(%num256, $clampge(CODE, 0), @none)
+
+    rule #asNum256(@tlll(%bytes32, CODE, @none)) => @tlll(%num256, CODE, @none)
+
+    rule (. => #exception("Invalid input for uint256"))
+         ~> #asNum256(@tlll(T:Type, CODE, _))
+      requires notBool(T ==K %num orBool T ==K %bytes32)
 
 
-    // as_bytes32
+    // convert(EXPR, "decimal")
     //---------------------
-    syntax CTypedLLLExp  ::= "#asBytes32" "(" CTypedLLLExp ")"    [strict]
- // ----------------------------------------------------------------------
+    rule #compileToLoc(%convert(EXPR, "decimal")) => #asDecimal(#compileToVal(EXPR))
+
+    syntax CTypedLLLExp  ::= "#asDecimal"    "(" CTypedLLLExp ")"    [strict]
+ // ------------------------------------------------------------------------
+    rule #asDecimal(@tlll(%num, CODE:LLLExp, LA)) => @tlll(%decimal, $mul(CODE, @decimalDivisor), @none)
+
+
+    // convert(EXPR, "bytes32")
+    //---------------------
     rule #compileToLoc(%convert(EXPR, "bytes32")) => #asBytes32(#compileToVal(EXPR))
 
-    rule #asBytes32(@tlll(T, CODE, EXPRATTR))
-        => #ifThenElse(#isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool isAddressType(T),
-                       @tlll(%bytes32, CODE, @none),
-                       #exception("Function arg type does not match expected type.")
-                          ~> #asBytes32(@tlll(T, CODE, EXPRATTR)))
+    syntax CTypedLLLExp  ::= "#asBytes32" "(" CTypedLLLExp ")"    [strict]
+ // ----------------------------------------------------------------------
+    rule #asBytes32(@tlll(T, CODE:LLLExp, LA))
+         => @tlll(%bytes32, CODE, @none)
+      requires #isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool isAddressType(T)
+
+    rule #asBytes32(@tlll(%bytesT(LEN:Int), CODE:LLLExp, @locattr(LTGT, MT)))
+         => #ifThenElse(LEN =/=Int 32,
+              #exception("Unable to convert bytes to bytes32")
+                  ~> #asBytes32(@tlll(%bytesT(LEN:Int), CODE:LLLExp, @locattr(LTGT, MT))),
+              #ifThenElse(LTGT ==K @memory,
+                          @tlll(%bytes32, $mload($add(CODE, 32)), @none),
+                          @tlll(%bytes32, $sload($add($sha3_32(CODE), 1)), @none)))
+
+
+    rule (. => #exception("Function arg type does not match expected type."))
+         ~> #asBytes32(@tlll(T, CODE, EXPRATTR))
+      requires notBool (#isTypeOf(T, %num) orBool #isTypeOf(T, %num256)
+                        orBool isAddressType(T) orBool isByteArrayType(T))
 
 
     // slice
+    //---------------------
     syntax CTypedLLLExp  ::= "#slice" "(" CTypedLLLExp "," CTypedLLLExp "," CTypedLLLExp ")"  [seqstrict]
     syntax CTypedLLLExp  ::= "#sliceAux" "(" TypedLLLExp  ","  // bytes
                                              LLLExp       ","  // start
@@ -3677,18 +3711,10 @@ module VYPER-LLL
 
     syntax Bool  ::= "#isTypeOf" "(" Type "," Type /*target type*/ ")"    [function]
  // --------------------------------------------------------------------------------
-    rule #isTypeOf(T:UnitType, TARGET) => #isUnitTypeOf(T, TARGET)
+    rule #isTypeOf(%unitT(T, _:Map, _), TARGET) => T ==K TARGET
 
     rule #isTypeOf(T, TARGET) => T ==K TARGET
       requires notBool isUnitType(T)
-
-
-    syntax Bool  ::= "#isUnitTypeOf" "(" UnitType "," Type ")"    [function]
- // ------------------------------------------------------------------------
-    rule #isUnitTypeOf(%unitT(T, _:Map, _), T) => true
-
-    rule #isUnitTypeOf(%unitT(T, _:Map, _), TARGET) => false
-      requires T =/=K TARGET
 
 
     syntax Bool  ::= "#isTopic" "(" EventParam ")"    [function]
