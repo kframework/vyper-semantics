@@ -3246,6 +3246,59 @@ module VYPER-LLL
                   @none)
 
 
+    // ecadd()
+    //---------------------
+    rule #compileToLoc(%ecadd(E1, E2))
+         => #ecadd(#compileToVal(E1), #compileToVal(E2), #newPlaceholder(%bytesT(128)))
+
+    syntax CTypedLLLExp  ::= "#ecadd" "(" CTypedLLLExp
+                                      "," CTypedLLLExp
+                                      "," CTypedLLLExp
+                                      ")"               [seqstrict]
+ // ------------------------------------------------------------------------
+    rule #ecadd(@tlll(%listT(%num256, 2), C0, LA0), @tlll(%listT(%num256, 2), C1, LA1), @tlll(%bytesT(128), PLLOC, _))
+         => @tlll(%listT(%num256, 2),
+                  $%seq($mstore( PLLOC, #getLLL(#unwrapLoc(
+                                          #lookupListElementAux(@tlll(%listT(%num256, 2), C0, LA0),
+                                                                @tlll(%num, 0, @none))))) /*avo(args[0], 0)*/,
+                        $mstore( $add( PLLOC, 32), #getLLL(#unwrapLoc(
+                                          #lookupListElementAux(@tlll(%listT(%num256, 2), C0, LA0),
+                                                                @tlll(%num, 1, @none))))) /*avo(args[0], 1)*/,
+                        $mstore( $add( PLLOC, 64), #getLLL(#unwrapLoc(
+                                          #lookupListElementAux(@tlll(%listT(%num256, 2), C1, LA1),
+                                                                @tlll(%num, 0, @none))))) /*avo(args[1], 0)*/,
+                        $mstore( $add( PLLOC, 96), #getLLL(#unwrapLoc(
+                                          #lookupListElementAux(@tlll(%listT(%num256, 2), C1, LA1),
+                                                                @tlll(%num, 1, @none))))) /*avo(args[1], 1)*/,
+                        $assert( $call( 500, 6, 0, PLLOC, 128, PLLOC, 64)),
+                        PLLOC),
+                  @locattr(@memory, false))
+
+
+    // ecmul()
+    //---------------------
+    rule #compileToLoc(%ecmul(E1, E2))
+         => #ecmul(#compileToVal(E1), #compileToVal(E2), #newPlaceholder(%bytesT(128)))
+
+    syntax CTypedLLLExp  ::= "#ecmul" "(" CTypedLLLExp
+                                      "," CTypedLLLExp
+                                      "," CTypedLLLExp
+                                      ")"               [seqstrict]
+ // ------------------------------------------------------------------------
+    rule #ecmul(@tlll(%listT(%num256, 2), C0, LA0), @tlll(%num256, C1, @none), @tlll(%bytesT(128), PLLOC, _))
+         => @tlll(%listT(%num256, 2),
+                  $%seq($mstore(PLLOC, #getLLL(#unwrapLoc(
+                                          #lookupListElementAux(@tlll(%listT(%num256, 2), C0, LA0),
+                                                                @tlll(%num, 0, @none))))) /*avo(args[0], 0)*/,
+                        $mstore($add(PLLOC, 32), #getLLL(#unwrapLoc(
+                                          #lookupListElementAux(@tlll(%listT(%num256, 2), C0, LA0),
+                                                                @tlll(%num, 1, @none))))) /*avo(args[0], 1)*/,
+                        $mstore($add(PLLOC, 64), C1),
+                        $assert($call(40000, 7, 0, PLLOC, 96, PLLOC, 64)),
+                        PLLOC),
+                  @locattr(@memory, false))
+
+
     // extract32
     //---------------------
     rule #compileToLoc(%extract32(BExp, IExp, %num)) => #compileToLoc(%convert(%extract32(BExp, IExp, %bytes32), "num128"))
@@ -3660,6 +3713,9 @@ module VYPER-LLL
                                              LLLExpAttr        ")"  [strict(2)]
 
     rule #tlllAux(T, (Exp:LLLExp, .LLLExps), A) => @tlll(T, Exp, A)
+
+    syntax LLLExp ::= #getLLL ( TypedLLLExp )   [function]
+    rule #getLLL(@tlll(_, CODE, _)) => CODE
 
     //Wrapper over builtin #if, of sort LLLExp
     syntax LLLExp ::= "#ifLLLExp" "(" K "," K "," K ")"             [function]
@@ -4529,18 +4585,23 @@ module VYPER-LLL
     */
     syntax CTypedLLLExp  ::= "#lookupListElement" "(" TypedLLLExp  ","
                                                       CTypedLLLExp ")"  [strict(2)]
+    syntax TypedLLLExp  ::= "#lookupListElementAux" "(" TypedLLLExp  ","
+                                                        TypedLLLExp  ")"   [function]
  // ------------------------------------------------------------------------------
-    rule #lookupListElement(@tlll(%listT(ELEMTYPE, N), BASELOC, @locattr(@storage, MUTABLE)),
-                           @tlll(_, INDEX, _))
-        => @tlll(ELEMTYPE, $add($sha3_32(BASELOC), $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
+    rule #lookupListElement(TLLL1:TypedLLLExp, TLLL2:TypedLLLExp)
+         => #lookupListElementAux(TLLL1, TLLL2)
 
-    rule #lookupListElement(@tlll(%listT(SUBTYPE, N), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
-                          @tlll(_, INDEX, _))
-        => @tlll(SUBTYPE, $add(BASELOC, $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
+    rule #lookupListElementAux(@tlll(%listT(ELEMTYPE, N), BASELOC, @locattr(@storage, MUTABLE)),
+                               @tlll(_, INDEX, _))
+         => @tlll(ELEMTYPE, $add($sha3_32(BASELOC), $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
 
-    rule #lookupListElement(@tlll(%listT(SUBTYPE, N), BASELOC, @locattr(@memory, MUTABLE)),
-                           @tlll(_, INDEX, _))
-        => @tlll(SUBTYPE, $add($mul(#sizeOfType(SUBTYPE), $uclamplt(INDEX, N)), BASELOC), @locattr(@memory, MUTABLE))
+    rule #lookupListElementAux(@tlll(%listT(SUBTYPE, N), BASELOC, @locattr(@storage_prehashed, MUTABLE)),
+                               @tlll(_, INDEX, _))
+         => @tlll(SUBTYPE, $add(BASELOC, $uclamplt(INDEX, N)), @locattr(@storage, MUTABLE))
+
+    rule #lookupListElementAux(@tlll(%listT(SUBTYPE, N), BASELOC, @locattr(@memory, MUTABLE)),
+                               @tlll(_, INDEX, _))
+         => @tlll(SUBTYPE, $add($mul(#sizeOfType(SUBTYPE), $uclamplt(INDEX, N)), BASELOC), @locattr(@memory, MUTABLE))
 
 
     syntax CTypedLLLExp  ::= "#lookupMapElement" "(" TypedLLLExp  ","
