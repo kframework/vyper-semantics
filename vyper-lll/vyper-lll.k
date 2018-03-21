@@ -3424,6 +3424,16 @@ module VYPER-LLL
                                           OutPLCode), @locattr(@memory, true))
 
 
+    // blockhash
+    //==========================================
+    rule #compileToLoc(%blockhash(EXPR)) => #blockhash(#compileToVal(EXPR))
+
+    syntax CTypedLLLExp  ::= "#blockhash" "(" CTypedLLLExp ")"    [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #blockhash(@tlll(%num, CODE, @none))
+         => @tlll(%bytes32, $blockhash($uclamplt($clampge(CODE, $sub($number, 256)), $number)), @none)
+
+
     // bitwise_and
     //==========================================
     syntax CTypedLLLExp  ::= "#bitwise_and" "(" CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
