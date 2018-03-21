@@ -3032,13 +3032,13 @@ module VYPER-LLL
         => #sliceBytesByCopy(@tlll(%bytesT(L),
                                    $add($sha3_32(BYTESLOC), $add($div($_start, 32), 1)),  // first pos is the byte array length
                                    @locattr(@storage, MUTABLE)),
-                             L, START, LEN, PLACEHOLDER)
+                             L, START, LEN, PLACEHOLDER, BYTESLOC)
 
     rule #sliceAux(@tlll(%bytesT(L), BYTESLOC, @locattr(TARGET, MUTABLE)), START, LEN, PLACEHOLDER)
         => #sliceBytesByCopy(@tlll(%bytesT(L),
                                   $add(BYTESLOC, $add($sub($_start, $mod($_start, 32)),32)),  // make sure the byte arrary after copy is still 32-byte aligned.
                                   @locattr(TARGET, MUTABLE)),
-                             L, START, LEN, PLACEHOLDER)
+                             L, START, LEN, PLACEHOLDER, BYTESLOC)
       requires TARGET =/=K @storage
 
 
@@ -3046,7 +3046,9 @@ module VYPER-LLL
                                                      Int         ","  // old max length
                                                      LLLExp      ","  // start
                                                      LLLExp      ","  // length
-                                                     TypedLLLExp ")"  // placeholder (destination)
+                                                     TypedLLLExp ","  // placeholder (destination)
+                                                     LLLExp           // BYTESLOC
+                                                 ")"
 
 
     syntax CTypedLLLExp  ::= "#sliceBytesByCopyAux" "(" CLLLExp  ","  // copier
@@ -3054,31 +3056,32 @@ module VYPER-LLL
                                                         LLLExp   ","  // start
                                                         LLLExp   ","  // length
                                                         Int      ","  // old max length
-                                                        Int           // new max length
+                                                        Int      ","  // new max length
+                                                        LLLExp        // BYTESLOC
                                                      ")"  [strict(1)]
  // -----------------------------------------------------------------
-    rule #sliceBytesByCopy(SOURCE, OLDMAXLEN, START, LEN, @tlll(T, PLACEHOLDERLOC, LOCATTR))
+    rule #sliceBytesByCopy(SOURCE, OLDMAXLEN, START, LEN, @tlll(T, PLACEHOLDERLOC, LOCATTR), BYTESLOC)
         => #sliceBytesByCopyAux(#mkByteSliceCopier(@tlll(T, PLACEHOLDERLOC +Int 32, LOCATTR),
                                                    SOURCE,
                                                    $add($_length, 32),
                                                    OLDMAXLEN),
-                                PLACEHOLDERLOC, START, LEN, OLDMAXLEN, LEN)
+                                PLACEHOLDERLOC, START, LEN, OLDMAXLEN, LEN, BYTESLOC)
       requires isInt(LEN)
 
-    rule #sliceBytesByCopy(SOURCE, OLDMAXLEN, START, LEN, @tlll(T, PLACEHOLDERLOC, LOCATTR))
+    rule #sliceBytesByCopy(SOURCE, OLDMAXLEN, START, LEN, @tlll(T, PLACEHOLDERLOC, LOCATTR), BYTESLOC)
         => #sliceBytesByCopyAux(#mkByteSliceCopier(@tlll(T, PLACEHOLDERLOC +Int 32, LOCATTR),
                                                    SOURCE,
                                                    $add($_length, 32),
                                                    OLDMAXLEN),
-                                PLACEHOLDERLOC, START, LEN, OLDMAXLEN, OLDMAXLEN)
+                                PLACEHOLDERLOC, START, LEN, OLDMAXLEN, OLDMAXLEN, BYTESLOC)
       requires notBool isInt(LEN)
 
-    rule #sliceBytesByCopyAux(COPIER, PLACEHOLDERLOC, START, LEN, OLDMAXLEN, NEWMAXLEN)
+    rule #sliceBytesByCopyAux(COPIER, PLACEHOLDERLOC, START, LEN, OLDMAXLEN, NEWMAXLEN, BYTESLOC)
         => @tlll(%bytesT(NEWMAXLEN), $with($_start, START,
                                       $with($_length, LEN,
                                         $with($_opos, $add(PLACEHOLDERLOC, $mod($_start, 32)),
                                           $%seq(
-                                            $assert($lt($add($_start, $_length), OLDMAXLEN)),
+                                            $assert($le($add($_start, $_length), $mload(BYTESLOC))),
                                             COPIER,
                                             $mstore($_opos, $_length),
                                             $_opos,.LLLExps)))), @locattr(@memory, true))
