@@ -426,13 +426,15 @@ def getKeyword(keywords: list, param: str):
 #                        | "%tx.origin"
 #
 # If no reserved expression found, returns None.
-def tryParseReservedExpr(expr):
+def tryParseReservedExpr(expr: ast.Attribute):
     optionsMap = {"msg": ["sender", "value", "gas"],
                   "block": ["difficulty", "timestamp", "coinbase", "number", "prevhash"],
                   "tx": ["origin"]}
-    values = optionsMap.get(expr.value.id)
-    if values is not None and expr.attr in values:
+    if type(expr.value) == ast.Name and expr.value.id in optionsMap.keys() \
+            and expr.attr in optionsMap.get(expr.value.id):
         return "%" + expr.value.id + "." + expr.attr
+    elif expr.attr in ["balance", "codesize", "is_contract"]:
+        return "%{}({})".format(expr.attr, parseExpr(expr.value))
     return None
 
 
@@ -558,13 +560,13 @@ def parseExpr(node):
         return "%boolop({}, {}, {})".format(parseBoolOp(node.op), parseExpr(node.values[0]), parseExpr(node.values[1]))
     elif type(node) == ast.UnaryOp:
         return "%unaryop({}, {})".format(parseUnaryOp(node.op), parseExpr(node.operand))
-    elif type(node) == ast.Attribute and type(node.value) == ast.Name:
+    elif type(node) == ast.Attribute:
         rez = tryParseReservedExpr(node)
         if rez is not None:
             return rez
         else:
             return parseVar(node)
-    elif type(node) == ast.Name or type(node) == ast.Subscript or type(node) == ast.Attribute:
+    elif type(node) == ast.Name or type(node) == ast.Subscript:
         return parseVar(node)
     elif type(node) == ast.List:
         return "%list({})".format(parseExprs(node.elts))
