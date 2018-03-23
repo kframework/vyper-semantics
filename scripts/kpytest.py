@@ -1,3 +1,5 @@
+#!/usr/bin/env python3.6
+
 import py
 from vyper import compiler
 
@@ -5,8 +7,8 @@ import sys
 import os.path
 
 # importing parent dir, where kvyper.py is located
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from kvyper import compile
+# sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from kvyper_test import compile
 
 
 def gas_estimate(origcode, *args, **kwargs):
