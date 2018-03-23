@@ -3301,22 +3301,55 @@ module VYPER-LLL
 
     // extract32
     //---------------------
-    rule #compileToLoc(%extract32(BExp, IExp, %num)) => #compileToLoc(%convert(%extract32(BExp, IExp, %bytes32), "num128"))
+    rule #compileToLoc(%extract32(BExp, IExp, %num)) => #compileToLoc(%convert(%extract32(BExp, IExp, %bytes32), "int128"))
 
     rule #compileToLoc(%extract32(BExp, IExp, _:AddressType))
-         => #toAddress(#extract32(#compileToLoc(BExp), #compileToLoc(IExp), %bytes32))
+         => #toAddress(#extract32(#compileToVal(BExp), #compileToVal(IExp), %bytes32))
 
-    rule #compileToLoc(%extract32(BExp, IExp, T:Type)) => #extract32(#compileToLoc(BExp), #compileToLoc(IExp), T)
+    rule #compileToLoc(%extract32(BExp, IExp, T:Type)) => #extract32(#compileToVal(BExp), #compileToVal(IExp), T)
       when T ==K %bytes32 orBool T ==K %num256
 
     syntax CTypedLLLExp  ::= "#extract32" "(" CTypedLLLExp "," CTypedLLLExp "," Type ")"    [seqstrict(1,2)]
  // ------------------------------------------------------------------------
-    rule #extract32(@tlll(%bytesT(_), BCode:LLLExp, @locattr(@memory, _)), @tlll(%num, ICode:LLLExp, @none), T:Type)
-         => @tlll(T, $mload($add($add(BCode, 32), ICode)), @none)
+    rule #extract32(@tlll(%bytesT(_), SUB:LLLExp, @locattr(LocTarg:LocTarget, _)),
+                    @tlll(%num, INDEX:Int, @none), T:Type)
+         => @tlll(T, $with($_sub, SUB, #extract32ElemGetter($div($clamp(0, INDEX,
+                                          $sub(#extract32LenGetter(LocTarg), 32)), 32), LocTarg)), @none)
+      requires INDEX %Int 32 ==Int 0
 
-    rule #extract32(@tlll(%bytesT(L), BCode:LLLExp, @locattr(@storage, MUT)), INDEX:TypedLLLExp, T:Type)
-         => #extract32(#slice(@tlll(%bytesT(L), BCode, @locattr(@storage, MUT)), INDEX, @tlll(%num, 32, @none)),
-                       @tlll(%num, 0, @none), T)
+    rule #extract32(@tlll(%bytesT(_), SUB:LLLExp, @locattr(LocTarg:LocTarget, _)),
+                    @tlll(%num, INDEX:LLLExp, @none), T:Type)
+         => @tlll(T, $with($_sub, SUB,
+                       $with($_len, #extract32LenGetter(LocTarg),
+                        $with($_index, $clamp(0, INDEX, $sub($_len, 32)),
+                         $with($_mi32, $mod($_index, 32),
+                          $with($_di32, $div($_index, 32),
+                           $if(
+                            $_mi32,
+                            $add(
+                             $mul(
+                              #extract32ElemGetter($_di32, LocTarg),
+                              $exp(256, $_mi32)),
+                             $div(
+                              #extract32ElemGetter($add($_di32, 1), LocTarg),
+                              $exp(256, $sub(32, $_mi32)))),
+                            #extract32ElemGetter($_di32, LocTarg))))))), @none)
+      requires (notBool isInt(INDEX)) orBool (asInt(INDEX) %Int 32 =/=Int 0)
+
+    syntax LLLExp ::= #extract32ElemGetter ( LLLExp , LocTarget )   [function]
+ // ------------------------------------------------------------------------
+    rule #extract32ElemGetter(INDEX, @memory)
+         => $mload($add($_sub, $add(32, $mul(32, INDEX))))
+
+    rule #extract32ElemGetter(INDEX, @storage)
+         => $sload($add($sha3_32($_sub), $add(1, INDEX)))
+
+    syntax LLLExp ::= #extract32LenGetter ( LocTarget )             [function]
+ // ------------------------------------------------------------------------
+    rule #extract32LenGetter(@memory) => $mload($_sub)
+
+    rule #extract32LenGetter(@storage) => $sload($sha3_32($_sub))
+
 
     //Checks that value produced by CODE is inside the range for %address.
     syntax CTypedLLLExp  ::= "#toAddress" "(" CTypedLLLExp ")"    [strict]
@@ -4109,6 +4142,9 @@ module VYPER-LLL
 
     syntax String ::= asString ( K )    [function]
     rule asString(S:String) => S
+
+    syntax Int ::= asInt ( K )          [function]
+    rule asInt(I:Int) => I
 
     // Convert from one base type to another. Need to call `#unwrapLoc` first.
     syntax CTypedLLLExp  ::= "#baseTypeConvert"    "(" TypedLLLExp "," Type /*to*/ ")"

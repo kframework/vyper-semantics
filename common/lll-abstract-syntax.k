@@ -127,5 +127,7 @@ module LLL-ABSTRACT-SYNTAX
                     | "$_start"  [token] | "$_length" [token]
                     // minmax
                     | "$_l"      [token] | "$_r"    [token]
+                    //extract32
+                    | "$_di32"   [token] | "$_mi32" [token] | "$_index" [token]
 
 endmodule
