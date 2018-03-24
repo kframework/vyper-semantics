@@ -51,9 +51,12 @@ def vyper2lll(ast):  # string -> string
                     or "Unsupported operator" in exceptionMsg \
                     or "List must have elements" in exceptionMsg \
                     or "Tuple must have elements" in exceptionMsg \
-                    or "Invalid contract reference" in exceptionMsg:
+                    or "Invalid contract reference" in exceptionMsg \
+                    or "Function visibility must be declared" in exceptionMsg \
+                    or "For loops allowed" in exceptionMsg:
                 raise exceptions.StructureException(exceptionMsg)
-            elif "constant function" in exceptionMsg:
+            elif "constant function" in exceptionMsg \
+                    or "Cannot modify function argument" in exceptionMsg:
                 raise exceptions.ConstancyViolationException(exceptionMsg)
             elif "in a non-payable function" in exceptionMsg:
                 raise exceptions.NonPayableViolationException(exceptionMsg)
@@ -65,6 +68,8 @@ def vyper2lll(ast):  # string -> string
                     or "Invalid input for uint256" in exceptionMsg \
                     or "Invalid denomination" in exceptionMsg:
                 raise exceptions.InvalidLiteralException(exceptionMsg)
+            elif "Invalid unit" in exceptionMsg:
+                raise exceptions.InvalidTypeException(exceptionMsg)
             elif "Argument must have type" in exceptionMsg \
                     or "type invalid" in exceptionMsg \
                     or "base type" in exceptionMsg \
@@ -78,7 +83,27 @@ def vyper2lll(ast):  # string -> string
                     or "Invalid base unit" in exceptionMsg \
                     or "Invalid unit expression" in exceptionMsg \
                     or "Can only raise a base type to an exponent" in exceptionMsg \
-                    or "Exponent must be positive integer" in exceptionMsg:
+                    or "Exponent must be positive integer" in exceptionMsg \
+                    or "Mismatched number of elements" in exceptionMsg \
+                    or "Typecasting" in exceptionMsg \
+                    or "Unsupported type" in exceptionMsg \
+                    or "Units must be compatible" in exceptionMsg \
+                    or "Boolean operations can only be between booleans" in exceptionMsg \
+                    or "Cannot cast" in exceptionMsg \
+                    or "mismatch" in exceptionMsg \
+                    or "Trying to return" in exceptionMsg \
+                    or "Only whole number exponents" in exceptionMsg \
+                    or "to return a value" in exceptionMsg \
+                    or "Return list length" in exceptionMsg \
+                    or "Keys don't match" in exceptionMsg \
+                    or "Cannot copy mappings" in exceptionMsg \
+                    or "Member variable duplicated" in exceptionMsg \
+                    or "does not match" in exceptionMsg \
+                    or "Minmax types incompatible" in exceptionMsg \
+                    or "don't match" in exceptionMsg \
+                    or "Expecting one of" in exceptionMsg \
+                    or "Can't compare values" in exceptionMsg \
+                    or "positional" in exceptionMsg:
                 raise exceptions.TypeMismatchException(exceptionMsg)
 
             raise RuntimeError("vyper-lll exception:\n\n{}\n\n".format(out))

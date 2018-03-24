@@ -3781,7 +3781,8 @@ module VYPER-LLL
                     #exception("sha3: Unsupported location.") ~> #sha3(@tlll(T:Type, CODE, LocAttr))
                   )
                 ),
-                #exception("sha3: unsupported argument type.") ~> #sha3(@tlll(T:Type, CODE, LocAttr))
+                #exception("Expecting one of ('str_literal', 'bytes', 'bytes32') for argument 1 of sha3")
+                  ~> #sha3(@tlll(T:Type, CODE, LocAttr))
               )
            )
 
