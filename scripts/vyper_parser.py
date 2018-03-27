@@ -389,6 +389,10 @@ def parseCallExpr(expr: ast.Call):
                                                           parseArg(getKeyword(expr.keywords, "outsize")),
                                                           parseArg(getKeyword(expr.keywords, "gas")),
                                                           value)
+        elif expr.func.id == "create_with_code_of":
+            valueArg = getKeyword(expr.keywords, "value")
+            value = parseArg(valueArg) if valueArg is not None else "%as_wei_value(0, wei)"
+            return "%create_with_code_of({}, {})".format(parseArg(expr.args[0]), value)
         elif expr.func.id == "extract32":
             if len(expr.keywords) == 0:
                 typeArg = "%bytes32"

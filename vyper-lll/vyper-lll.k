@@ -3464,7 +3464,7 @@ module VYPER-LLL
          => #ifThenElse(#areUnitsCompatible(ValT, %unitT(%num, %wei |-> 1, false), false),
                         #raw_call2(TL1, @tlll(DataT, DataCODE, DataLA), OUTSIZE, TL4, @tlll(ValT, ValCODE, @none),
                                    #newPlaceholder(DataT)),
-                        #exception("Invalid unit for value")
+                        #exception("Invalid units for value")
                           ~> #raw_call(TL1, @tlll(DataT, DataCODE, DataLA), OUTSIZE, TL4, @tlll(ValT, ValCODE, @none))
             ) ...</k>
          <constant> false </constant>
@@ -3511,6 +3511,54 @@ module VYPER-LLL
                                                         $add(OutPLCode, 32), OUTSIZE)),
                                           $mstore(OutPLCode, OUTSIZE),
                                           OutPLCode), @locattr(@memory, true))
+
+
+    // create_with_code_of()
+    //==========================================
+    rule #compileToLoc(%create_with_code_of(E1, E2)) => #create_with_code_of(#compileToVal(E1),
+                                                                             #compileToVal(E2))
+
+    syntax CTypedLLLExp ::= "#create_with_code_of" "(" CTypedLLLExp    // address
+                                                   "," CTypedLLLExp    // value: int128 optional
+                                                   ")"  [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule <k> (. => #exception("Cannot make calls from a constant function"))
+             ~> #create_with_code_of(_,_) ...</k>
+         <constant> true </constant>
+
+    rule <k> #create_with_code_of(TL1:TypedLLLExp, @tlll(ValT, ValCODE, @none))
+         => #ifThenElse(#areUnitsCompatible(ValT, %unitT(%num, %wei |-> 1, false), false),
+                        #create_with_code_of2(TL1, @tlll(ValT, ValCODE, @none),
+                                              #newPlaceholder(%bytesT(96))),
+                        #exception("Invalid units for value")
+                          ~> #create_with_code_of(TL1:TypedLLLExp, @tlll(ValT, ValCODE, @none))
+            ) ...</k>
+         <constant> false </constant>
+
+    syntax CTypedLLLExp ::= "#create_with_code_of2" "(" TypedLLLExp      // address
+                                                    "," TypedLLLExp      // value: int128 optional
+                                                    "," CTypedLLLExp     // placeholder
+                                                    ")"  [seqstrict]
+ // ------------------------------------------------------------------------------------------
+    rule #create_with_code_of2(@tlll(%address, AddrCODE, @none), @tlll(_, ValCODE, @none), @tlll(_, PLLoc:Int, _))
+         => @tlll(%address,
+                  $%seq($mstore(PLLoc, #create_wco_high),
+                        $mstore($add( PLLoc, 27), $mul(AddrCODE, 2 ^Int 96)),
+                        $mstore($add( PLLoc, 47), #create_wco_low),
+                        $clamp_nonzero($create(ValCODE, PLLoc, 64))),
+                  @none)
+
+    syntax String ::= "#create_wco_kode"  [function]
+    //len 58 + 21
+    rule #create_wco_kode => "`.`\x0c`\x009`.`\x00\xf36`\x00`\x007a\x10\x00`\x006`\x00s\x00\x00\x00\x00\x00\x00"
+         +String "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00Z\xf4\x15XWa\x10\x00`\x00\xf3"
+         +String "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+
+    syntax Int ::= "#create_wco_high"  [function]
+    rule #create_wco_high => #string2BytesInt(substrString(#create_wco_kode, 0, 32))
+
+    syntax Int ::= "#create_wco_low"  [function]
+    rule #create_wco_low => #string2BytesInt(substrString(#create_wco_kode, 47, 79))
 
 
     // blockhash
@@ -4487,6 +4535,18 @@ module VYPER-LLL
 
     syntax TypedLLLExp  ::= "#byteArray2Num"  "(" TypedLLLExp "," Type "," Int ")"
  // ------------------------------------------------------------------------------
+
+
+    syntax Int ::= #string2BytesInt( String )       [function]
+    syntax Int ::= #string2BytesInt( String , Int ) [function]
+ // --------------------------------------------------------------------
+    rule #string2BytesInt(S) => #string2BytesInt(S, 0)
+
+    rule #string2BytesInt(S => substrString(S, 1, lengthString(S)),
+                          I => I *Int 256 +Int ordChar(substrString(S, 0, 1)))
+      requires lengthString(S) >Int 0
+
+    rule #string2BytesInt("", I) => I
 
 
 // Compute signatures

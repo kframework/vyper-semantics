@@ -266,7 +266,10 @@ module VYPER-ABSTRACT-SYNTAX
                                                     "," Expr    // data: Bytes
                                                     "," Expr    // outsize: num_literal
                                                     "," Expr    // gas: int128
-                                                    "," Expr    // value: int128 optional
+                                                    "," Expr    // value: wei, optional
+                                                    ")"
+                           | "%create_with_code_of" "(" Expr    // address
+                                                    "," Expr    // value: wei, optional
                                                     ")"
                            | "%RLPlist"             "(" Expr "," Expr ")"
                            | "%blockhash"           "(" Expr ")"
