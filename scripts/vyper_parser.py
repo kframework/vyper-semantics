@@ -13,7 +13,7 @@ class ParserException(Exception):
 
 
 def get_original_if_0x_prefixed(expr):
-    context_slice = inputLines[expr.lineno - 1][expr.col_offset:]
+    context_slice = get_original_str_to_line_end(expr)
     if context_slice[:2] != '0x':
         return None
     t = 0
@@ -22,8 +22,21 @@ def get_original_if_0x_prefixed(expr):
     return context_slice[:t + 2]
 
 
+def get_original_str(node: ast.Str):
+    context_slice = get_original_str_to_line_end(node)
+    t = 1
+    # searching the closing "
+    while t < len(context_slice) and context_slice[t:t + 1] != "\"":
+        t += 1
+    return context_slice[:t + 1]
+
+
+def get_original_str_to_line_end(node: ast.AST):
+    return inputLines[node.lineno - 1][node.col_offset:]
+
+
 def get_number_as_fraction(expr):
-    context_slice = inputLines[expr.lineno - 1][expr.col_offset:]
+    context_slice = get_original_str_to_line_end(expr)
     t = 0
     while t < len(context_slice) and context_slice[t] in '0123456789.':
         t += 1
@@ -305,6 +318,7 @@ def parseConst(node):
     elif type(node) == ast.Num and type(node.n == float):
         return parseFixed10Const(node)
     elif type(node) == ast.Str:
+        # return get_original_str(node)
         return "\"{}\"".format(escapeSpecialChars(node.s))
     elif type(node) == ast.NameConstant:
         return nameCosntantMap[node.value]
@@ -313,11 +327,16 @@ def parseConst(node):
 
 
 def escapeSpecialChars(s: str):
-    return s.translate(str.maketrans({"\t": r"\t",
-                                      "\n": r"\n",
-                                      "\r": r"\r",
-                                      "\\": r"\\",
-                                      "\"": r"\""}))
+    translated = s.translate(str.maketrans({"\t": r"\t", "\n": r"\n", "\r": r"\r", "\\": r"\\", "\"": r"\""}))
+    encoded = translated.encode('ascii', 'backslashreplace').decode("ascii")
+    for i in range(0, 32):
+        encoded = encode_char(encoded, i)
+    encoded = encode_char(encoded, 127)
+    return encoded
+
+
+def encode_char(encoded, i):
+    return encoded.replace(chr(i), '\\x{:02x}'.format(i))
 
 
 #    syntax Expr :== ...
@@ -821,7 +840,8 @@ def main(vyperPgm):
         vyperPgm += "\n" + premadeContracts
 
     pythonAST = parse(vyperPgm)
-    return parseProgram(pythonAST)
+    program = parseProgram(pythonAST)
+    return program
 
 
 if __name__ == '__main__':
