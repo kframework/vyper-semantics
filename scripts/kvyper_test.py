@@ -33,84 +33,86 @@ def vyper2lll(ast):  # string -> string
     if lll == ".":
         exceptionRegex = re.search(r'<k> #exception \( "([^"]+)" \)', out)
         if exceptionRegex is not None:
-            exceptionMsg = exceptionRegex.group(1)
-            if "Persistent variable undeclared" in exceptionMsg \
-                    or "not declared" in exceptionMsg \
-                    or "Undeclared" in exceptionMsg \
-                    or "Variable name" in exceptionMsg \
-                    or "variable name" in exceptionMsg \
-                    or "Cannot declare" in exceptionMsg \
-                    or "not declared yet" in exceptionMsg \
-                    or "Duplicate" in exceptionMsg \
-                    or "Variable name duplicated" in exceptionMsg \
-                    or "Maximum of 3 topics" in exceptionMsg:
-                raise exceptions.VariableDeclarationException(exceptionMsg)
-            elif "Persistent variable undeclared" in exceptionMsg \
-                    or "Concat expects at least two arguments" in exceptionMsg \
-                    or "requires argument" in exceptionMsg \
-                    or "Unexpected argument" in exceptionMsg \
-                    or "Unsupported operator" in exceptionMsg \
-                    or "List must have elements" in exceptionMsg \
-                    or "Tuple must have elements" in exceptionMsg \
-                    or "Invalid contract reference" in exceptionMsg \
-                    or "Function visibility must be declared" in exceptionMsg \
-                    or "For loops allowed" in exceptionMsg:
-                raise exceptions.StructureException(exceptionMsg)
-            elif "constant function" in exceptionMsg \
-                    or "Cannot modify function argument" in exceptionMsg:
-                raise exceptions.ConstancyViolationException(exceptionMsg)
-            elif "in a non-payable function" in exceptionMsg:
-                raise exceptions.NonPayableViolationException(exceptionMsg)
-            elif "Cannot insert special character" in exceptionMsg \
-                    or "Number out of range" in exceptionMsg \
-                    or "Too many decimal places" in exceptionMsg \
-                    or "Cannot read 0x value" in exceptionMsg \
-                    or "Can only log" in exceptionMsg \
-                    or "Invalid input for uint256" in exceptionMsg \
-                    or "Invalid denomination" in exceptionMsg:
-                raise exceptions.InvalidLiteralException(exceptionMsg)
-            elif "Invalid unit" in exceptionMsg:
-                raise exceptions.InvalidTypeException(exceptionMsg)
-            elif "Argument must have type" in exceptionMsg \
-                    or "type invalid" in exceptionMsg \
-                    or "base type" in exceptionMsg \
-                    or "Malformed unit type" in exceptionMsg \
-                    or "No mappings allowed" in exceptionMsg \
-                    or "Mapping keys must be" in exceptionMsg \
-                    or "Invalid member variable for struct" in exceptionMsg \
-                    or "Invalid type" in exceptionMsg \
-                    or "Byte array length must be a number" in exceptionMsg \
-                    or "Bad byte array length" in exceptionMsg \
-                    or "Invalid base unit" in exceptionMsg \
-                    or "Invalid unit expression" in exceptionMsg \
-                    or "Can only raise a base type to an exponent" in exceptionMsg \
-                    or "Exponent must be positive integer" in exceptionMsg \
-                    or "Mismatched number of elements" in exceptionMsg \
-                    or "Typecasting" in exceptionMsg \
-                    or "Unsupported type" in exceptionMsg \
-                    or "Units must be compatible" in exceptionMsg \
-                    or "Boolean operations can only be between booleans" in exceptionMsg \
-                    or "Cannot cast" in exceptionMsg \
-                    or "mismatch" in exceptionMsg \
-                    or "Trying to return" in exceptionMsg \
-                    or "Only whole number exponents" in exceptionMsg \
-                    or "to return a value" in exceptionMsg \
-                    or "Return list length" in exceptionMsg \
-                    or "Keys don't match" in exceptionMsg \
-                    or "Cannot copy mappings" in exceptionMsg \
-                    or "Member variable duplicated" in exceptionMsg \
-                    or "does not match" in exceptionMsg \
-                    or "Minmax types incompatible" in exceptionMsg \
-                    or "don't match" in exceptionMsg \
-                    or "Expecting one of" in exceptionMsg \
-                    or "Can't compare values" in exceptionMsg \
-                    or "positional" in exceptionMsg:
-                raise exceptions.TypeMismatchException(exceptionMsg)
-
+            try_decode_exception(exceptionRegex.group(1))
             raise RuntimeError("vyper-lll exception:\n\n{}\n\n".format(out))
         raise RuntimeError("vyper-lll computation got stuck:\n\n" + out + "\n\n")
 
     return lll
+
+
+def try_decode_exception(exceptionMsg):
+    if "Persistent variable undeclared" in exceptionMsg \
+            or "not declared" in exceptionMsg \
+            or "Undeclared" in exceptionMsg \
+            or "Variable name" in exceptionMsg \
+            or "variable name" in exceptionMsg \
+            or "Cannot declare" in exceptionMsg \
+            or "not declared yet" in exceptionMsg \
+            or "Duplicate" in exceptionMsg \
+            or "Variable name duplicated" in exceptionMsg \
+            or "Maximum of 3 topics" in exceptionMsg:
+        raise exceptions.VariableDeclarationException(exceptionMsg)
+    elif "Persistent variable undeclared" in exceptionMsg \
+            or "Concat expects at least two arguments" in exceptionMsg \
+            or "requires argument" in exceptionMsg \
+            or "Unexpected argument" in exceptionMsg \
+            or "Unsupported operator" in exceptionMsg \
+            or "List must have elements" in exceptionMsg \
+            or "Tuple must have elements" in exceptionMsg \
+            or "Invalid contract reference" in exceptionMsg \
+            or "Function visibility must be declared" in exceptionMsg \
+            or "For loops allowed" in exceptionMsg:
+        raise exceptions.StructureException(exceptionMsg)
+    elif "constant function" in exceptionMsg \
+            or "Cannot modify function argument" in exceptionMsg:
+        raise exceptions.ConstancyViolationException(exceptionMsg)
+    elif "in a non-payable function" in exceptionMsg:
+        raise exceptions.NonPayableViolationException(exceptionMsg)
+    elif "Cannot insert special character" in exceptionMsg \
+            or "Number out of range" in exceptionMsg \
+            or "Too many decimal places" in exceptionMsg \
+            or "Cannot read 0x value" in exceptionMsg \
+            or "Can only log" in exceptionMsg \
+            or "Invalid input for uint256" in exceptionMsg \
+            or "Invalid denomination" in exceptionMsg:
+        raise exceptions.InvalidLiteralException(exceptionMsg)
+    elif "Invalid unit" in exceptionMsg:
+        raise exceptions.InvalidTypeException(exceptionMsg)
+    elif "Argument must have type" in exceptionMsg \
+            or "type invalid" in exceptionMsg \
+            or "base type" in exceptionMsg \
+            or "Malformed unit type" in exceptionMsg \
+            or "No mappings allowed" in exceptionMsg \
+            or "Mapping keys must be" in exceptionMsg \
+            or "Invalid member variable for struct" in exceptionMsg \
+            or "Invalid type" in exceptionMsg \
+            or "Byte array length must be a number" in exceptionMsg \
+            or "Bad byte array length" in exceptionMsg \
+            or "Invalid base unit" in exceptionMsg \
+            or "Invalid unit expression" in exceptionMsg \
+            or "Can only raise a base type to an exponent" in exceptionMsg \
+            or "Exponent must be positive integer" in exceptionMsg \
+            or "Mismatched number of elements" in exceptionMsg \
+            or "Typecasting" in exceptionMsg \
+            or "Unsupported type" in exceptionMsg \
+            or "Units must be compatible" in exceptionMsg \
+            or "Boolean operations can only be between booleans" in exceptionMsg \
+            or "Cannot cast" in exceptionMsg \
+            or "mismatch" in exceptionMsg \
+            or "Trying to return" in exceptionMsg \
+            or "Only whole number exponents" in exceptionMsg \
+            or "to return a value" in exceptionMsg \
+            or "Return list length" in exceptionMsg \
+            or "Keys don't match" in exceptionMsg \
+            or "Cannot copy mappings" in exceptionMsg \
+            or "Member variable duplicated" in exceptionMsg \
+            or "does not match" in exceptionMsg \
+            or "Minmax types incompatible" in exceptionMsg \
+            or "don't match" in exceptionMsg \
+            or "Expecting one of" in exceptionMsg \
+            or "Can't compare values" in exceptionMsg \
+            or "positional" in exceptionMsg:
+        raise exceptions.TypeMismatchException(exceptionMsg)
 
 
 def lll2evm(lll):  # string -> string list
