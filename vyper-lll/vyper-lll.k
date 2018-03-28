@@ -1254,7 +1254,7 @@ module VYPER-LLL
 
     rule <k> #compileStmt(%return) => #ifThenElse(T =/=K %void,
                                                   #exception("Expecting to return a value") ~> #compileStmt(%return),
-                                                  $return(0, 0)) ... </k>
+                                                  ($return(0, 0),.LLLExps)) ... </k>
          <return> T </return>
 
     rule <k> #compileStmt(%return(E)) => #ifThenElse(T =/=K %void,
