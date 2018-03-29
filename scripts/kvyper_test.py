@@ -61,7 +61,8 @@ def try_decode_exception(exceptionMsg):
             or "Tuple must have elements" in exceptionMsg \
             or "Invalid contract reference" in exceptionMsg \
             or "Function visibility must be declared" in exceptionMsg \
-            or "For loops allowed" in exceptionMsg:
+            or "For loops allowed" in exceptionMsg \
+            or "Tuple lengths don't match" in exceptionMsg:
         raise exceptions.StructureException(exceptionMsg)
     elif "constant function" in exceptionMsg \
             or "Cannot modify function argument" in exceptionMsg:
