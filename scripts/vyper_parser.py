@@ -308,7 +308,8 @@ def parseFixed10Const(node: ast.Num):
 #
 # additional: None
 def parseConst(node):
-    nameCosntantMap = {True: "true", False: "false", None: "%None"}
+    constConstantMap = {True: "true", False: "false", None: "%None"}
+    nameConstantMap = {"true": "true", "false": "false", "null": "%None"}
     if type(node) == ast.Num and type(node.n) == int:
         hexFormat = get_original_if_0x_prefixed(node)
         if hexFormat is None:
@@ -321,7 +322,9 @@ def parseConst(node):
         # return get_original_str(node)
         return "\"{}\"".format(escapeSpecialChars(node.s))
     elif type(node) == ast.NameConstant:
-        return nameCosntantMap[node.value]
+        return constConstantMap[node.value]
+    elif type(node) == ast.Name:
+        return nameConstantMap[node.id]
     else:
         raise ParserException("Unsupported Const format: " + str(node))
 
@@ -568,7 +571,7 @@ def parseExpr(node):
     if type(node) == ast.Index:
         return parseExpr(node.value)
     elif type(node) == ast.Num or type(node) == ast.Str or type(node) == ast.NameConstant \
-            or (type(node) == ast.Name and node.id in ["true", "false"]):
+            or (type(node) == ast.Name and node.id in ["true", "false", "null"]):
         return parseConst(node)
     elif type(node) == ast.Name and node.id == "self":
         return "%self"
