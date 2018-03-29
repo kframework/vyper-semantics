@@ -799,7 +799,7 @@ def parseProgram(nodeList):
     _defs = []
     _contracts = []
     for node in nodeList:
-        if type(node) == ast.AnnAssign and type(node.annotation) == ast.Call and node.annotation.func.id == "__log__":
+        if type(node) == ast.AnnAssign and type(node.annotation) == ast.Call and node.annotation.func.id == "event":
             _events.append(node)
         elif type(node) == ast.AnnAssign:
             _globals.append(node)
