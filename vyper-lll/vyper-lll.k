@@ -81,10 +81,12 @@ module VYPER-LLL
 
     syntax PackedLoggingData  ::= "@loggingdata" "(" LLLExp ","  // code
                                                      Int    ","  // start loc
-                                                     Int    ")"  // size
+                                                     Int         // size
+                                                 ")"
 
-    syntax PackedArgBy32      ::= "@argby32" "(" LLLExps ","  // code
-                                                 Int     ")"  // size
+    syntax PackedArgBy32      ::= "@argby32" "(" LLLExps    // code
+                                             "," Int        // size
+                                             ")"
 
     syntax PackedArgData      ::= "@argdata" "(" LLLExp      // code
                                              "," Int         // size
@@ -1598,61 +1600,70 @@ module VYPER-LLL
     syntax CPackedLoggingData  ::= "#packLoggingData"    "(" Exprs        ","
                                                              EventParams  ")"
 
-    syntax CPackedLoggingData  ::= "#packLoggingDataAux" "(" Exprs        ","
-                                                             EventParams  ","
-                                                             LLLExps      ","
-                                                             Int          ")"  // size of the packed data
+    syntax CPackedLoggingData  ::= "#packLoggingDataAux" "(" Exprs        "," // args - actual arguments
+                                                             EventParams  "," // expected_data - formal params
+                                                             LLLExps      "," // holder - output LLL code
+                                                             CTypedLLLExp "," // dynamic_offset_counter
+                                                             CTypedLLLExp "," // dynamic_placeholder
+                                                             Int              // event params size
+                                                         ")"    [seqstrict(4,5)]
  // -------------------------------------------------------------------------
-    rule #packLoggingData(DARGS, DEPARAMS)
+    rule #packLoggingData(DARGS, EPARAMS)
         => #ifThenElse(#numOfExprs(DARGS) ==Int 0,
                        @loggingdata($pass, 0, 0),
-                       #packLoggingDataAux(DARGS, DEPARAMS, .LLLExps, 0))
+                       #packLoggingDataAux(DARGS, EPARAMS, .LLLExps, #newPlaceholder(%num), #newPlaceholder(%num),
+                                           #sizeOfEParams(EPARAMS)))
 
-    rule #packLoggingDataAux(.Exprs, .EventParams, CODE, SIZE)
-        => @loggingdata($%seq(CODE), #getFirstStoreLoc(CODE), SIZE)
+    rule #packLoggingDataAux(.Exprs, .EventParams, CODE, _,_, STATICSize)
+         => @loggingdata($%seq(CODE), #getFirstStoreLoc(CODE), STATICSize)
 
-    rule #packLoggingDataAux((DARG DARGS), %eparam(_, T, _) DEPARAMS, CODE, SIZE)
-        => #packArgBy32(#newPlaceholder(T), DARG, T)
-        ~> #packLoggingDataAux(DARGS, DEPARAMS, CODE, SIZE)
+    //datamem_start = dynamic_placeholder + 32
+    rule (. => #packArgBy32(#newPlaceholder(T), DARG, T, DynPL +Int 32, DynOC))
+         ~> #packLoggingDataAux(DARG DARGS => DARGS, %eparam(_, T, _) DEPARAMS => DEPARAMS, HOLDER,
+                                @tlll(_, DynOC:Int, _), @tlll(_, DynPL:Int, _), STATICSize)
 
-    rule @argby32(ARGCODE, ARGSIZE) ~> #packLoggingDataAux(DARGS, DEPARAMS, CODE, TOTALSIZE)
-        => #packLoggingDataAux(DARGS, DEPARAMS, CODE ++LLL ARGCODE, TOTALSIZE +Int ARGSIZE)
+    rule (@argby32(ARGCODE, ARGSIZE) => .)
+         ~> #packLoggingDataAux(DARGS, DEPARAMS, HOLDER => HOLDER ++LLL ARGCODE, _,_,_)
 
 
     syntax CPackedArgBy32  ::= "#packArgBy32" "(" CTypedLLLExp ","  // placeholder
                                                   Expr         ","  // value
-                                                  Type
+                                                  Type         ","  // expected type
+                                                  Int          ","  // datamem_start
+                                                  Int               // dynamic_offset_counter
+
                                               ")"      [strict(1)]
  // --------------------------------------------------------------
     // Base Type
-    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T:BaseType)
+    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T:BaseType, _,_)
         => #packArgBy32Base(LOC, #compileToLoc(EXPR), T)
 
     // Vyper only allows 32-byte byte array as data.
     // String Literal
-    rule #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L))
+    rule #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L), Datamem, DynOC)
         => #ifThen(lengthString(STR) >Int L,
                    #exception("Data input bytes are too big.")
-                      ~> #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L)))
+                      ~> #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L), Datamem, DynOC))
         ~> #ifThen(lengthString(STR) >Int 32,
                    #exception("Can only log a maximum of 32 bytes at a time.")
-                      ~> #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L)))
+                      ~> #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L), Datamem, DynOC))
         ~> #packArgBy32StringLiteral(LOC, #string2Bytes(STR))
 
     // Byte Array Variable
-    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, %bytesT(L))
-        => #packArgBy32BytesTVar(L, #compileToLoc(EXPR), %bytesT(L))
+    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, %bytesT(L), Datamem, DynOC)
+        => #pack_args_by_32_BytesT_Var(L, #compileToLoc(EXPR), %bytesT(L))
+      requires notBool isString(EXPR)
 
 
     // List Literal
-    rule #packArgBy32(@tlll(T0, LOC:Int, LA), %list(EXPRS), T:ListType)
+    rule #packArgBy32(@tlll(T0, LOC:Int, LA), %list(EXPRS), T:ListType, Datamem, DynOC)
          => #ifThenElse(#numOfExprs(EXPRS) =/=Int #getListTCount(T),
                         #exception("The length of list doesn't match the expected length.")
-                          ~> #packArgBy32(@tlll(T0, LOC:Int, LA), %list(EXPRS), T:ListType),
+                          ~> #packArgBy32(@tlll(T0, LOC:Int, LA), %list(EXPRS), T:ListType, Datamem, DynOC),
                         #packArgBy32ListTLiteral(LOC, EXPRS, T, .LLLExps, 0))
 
     // List Var
-    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T:ListType)
+    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T:ListType, Datamem, DynOC)
         => #packArgBy32ListTVar(LOC, #compileToLoc(EXPR), T, .LLLExps, 0, 0)
       requires notBool(isListExpr(EXPR))
 
@@ -1668,7 +1679,7 @@ module VYPER-LLL
     rule #packArgBy32Base(LOC, TCODE, ARGTYPE)
         => #packArgBy32BaseAux(LOC, #baseTypeConvert(TCODE, ARGTYPE))
 
-    rule #packArgBy32BaseAux(LOC, @tlll(_, CODE, _)) => @argby32($mstore(LOC, CODE),.LLLExps, 32)
+    rule #packArgBy32BaseAux(PLLoc, @tlll(_, CODE, _)) => @argby32($mstore(PLLoc, CODE),.LLLExps, 32)
 
 
     syntax CPackedArgBy32  ::= "#packArgBy32StringLiteral" "(" Int    ","  // packing loc
@@ -1678,12 +1689,12 @@ module VYPER-LLL
         => @argby32($mstore(LOC, #bytes2Int(BS, 32, 0)), 32)
 
 
-    syntax CPackedArgBy32  ::= "#packArgBy32BytesTVar" "(" Int          ","  // packing loc
-                                                           CTypedLLLExp ","
-                                                           Type              // arg type
-                                                       ")"      [strict(2)]
+    syntax CPackedArgBy32  ::= "#pack_args_by_32_BytesT_Var" "(" Int          "," // placeholder
+                                                                 CTypedLLLExp "," // value
+                                                                 Type             // arg type
+                                                             ")"      [strict(2)]
  // -----------------------------------------------------------------------
-    // TODO: https://github.com/ethereum/vyper/issues/551
+
 
 
     syntax CPackedArgBy32  ::= "#packArgBy32ListTLiteral" "(" Int     ","  // packing loc
@@ -1696,7 +1707,7 @@ module VYPER-LLL
         => @argby32(RESULTCODE, TOTALSIZE)
 
     rule #packArgBy32ListTLiteral(LOC, EXPR EXPRS, %listT(SUBTYPE, N), RESULTCODE, TOTALSIZE)
-        => #packArgBy32(@tlll(SUBTYPE, LOC, @locattr(@memory, true)), EXPR, SUBTYPE)
+        => #packArgBy32(@tlll(SUBTYPE, LOC, @locattr(@memory, true)), EXPR, SUBTYPE, 0,0) //last 2 args unused
         ~> #packArgBy32ListTLiteral(LOC, EXPRS, %listT(SUBTYPE, N), RESULTCODE, TOTALSIZE)
 
     rule @argby32(CODE, SIZE) ~> #packArgBy32ListTLiteral(LOC, EXPRS, T, RESULTCODE, TOTALSIZE)
@@ -1748,7 +1759,8 @@ module VYPER-LLL
 
     syntax CTypedLLLExp  ::= "#packLoggingTopicBytesTVar" "(" CTypedLLLExp "," Type ")"  [strict(1)]
  // ------------------------------------------------------------------------------------------------
-    // TODO: https://github.com/ethereum/vyper/issues/546
+    rule #packLoggingTopicBytesTVar(@tlll(%bytesT(L), CODE, LA), _)
+         => #byte_array_to_num(@tlll(%bytesT(L), CODE, LA), %num256, L) //not sure what's the last arg.
 
 
 // Statement Expression
@@ -2933,8 +2945,17 @@ module VYPER-LLL
          => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)), @none)
       requires #isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %bytes32) orBool isAddressType(T)
 
-    rule #asNum128(@tlll(T:ByteArrayType, CODE:LLLExp, @locattr(LTGT:LocTarget, _)))
-        => @tlll(%num,
+    rule #asNum128(@tlll(T:ByteArrayType, CODE, LA)) => #byte_array_to_num(@tlll(T, CODE, LA), %num, 32)
+
+    rule (. => #exception("Function arg type does not match expected type."))
+         ~> #asNum128(@tlll(T, CODE:LLLExp, LA))
+      requires notBool(#isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %bytes32)
+                       orBool isAddressType(T) orBool isByteArrayType(T))
+
+    syntax CTypedLLLExp  ::= "#byte_array_to_num"    "(" TypedLLLExp "," Type "," Int ")"
+  // ------------------------------------------------------------------------
+    rule #byte_array_to_num(@tlll(T:ByteArrayType, CODE:LLLExp, @locattr(LTGT:LocTarget, _)), OutT, Offset)
+        => @tlll(OutT,
             $with($_sub, CODE,
                  $with($_el1, /*first_el_getter*/
                               #ifLLLExp(LTGT ==K @memory, $mload($add(32, $_sub)), $sload($add(1, $sha3_32($_sub)))),
@@ -2942,15 +2963,14 @@ module VYPER-LLL
                                            #ifLLLExp(LTGT ==K @memory, $mload($_sub), $sload($sha3_32($_sub))), 32),
                        $%seq(
                           $assert($or($iszero($_len), $div($_el1, $exp(256, 31)))),
-                          $clamp($mload(@minDecimalPos),
-                                 $div($_el1, $exp(256, $sub(32, $_len))),
-                                 $mload(@maxDecimalPos)))))),
+                          #ifLLLExp(OutT ==K %num,
+                              $clamp($mload(@minDecimalPos),
+                                     $div($_el1, $exp(256, $sub(32, $_len))),
+                                     $mload(@maxDecimalPos)),
+                              $div($_el1, $exp(256, $sub(Offset, $_len))) //OutT ==K %num256
+                          )
+                       )))),
             @none)
-
-    rule (. => #exception("Function arg type does not match expected type."))
-         ~> #asNum128(@tlll(T, CODE:LLLExp, LA))
-      requires notBool(#isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %bytes32)
-                       orBool isAddressType(T) orBool isByteArrayType(T))
 
 
     // convert(EXPR, "uint256")
@@ -4101,6 +4121,17 @@ module VYPER-LLL
     rule #sizeOfParam(%param(_, T)) => #sizeOfType(T)    requires notBool isByteArrayType(T)
 
 
+    syntax Int  ::= "#sizeOfEParams" "(" EventParams ")"    [function]
+ // ------------------------------------------------------------
+    rule #sizeOfEParams(.EventParams) => 0
+    rule #sizeOfEParams(%eparam(_, T, true) PS => PS)
+
+    rule #sizeOfEParams(%eparam(_, T, false) PS) => #sizeOfType(T) +Int #sizeOfEParams(PS)
+      requires notBool isByteArrayType(T)
+
+    rule #sizeOfEParams(%eparam(_, %bytesT(_), false) PS) => 32 +Int #sizeOfEParams(PS)
+
+
     syntax Int  ::= "#sizeOfPackedArgs" "(" TypedLLLExps ")"    [function]
     syntax Int  ::= "#sizeOfPackedArg"  "(" TypedLLLExp  ")"    [function]
  // ----------------------------------------------------------------------
@@ -4531,10 +4562,6 @@ module VYPER-LLL
     rule #drop(N, .Bytes)   => .Bytes
 
     rule #drop(N, (B : BS)) => #drop(N -Int 1, BS)    requires N >Int 0
-
-
-    syntax TypedLLLExp  ::= "#byteArray2Num"  "(" TypedLLLExp "," Type "," Int ")"
- // ------------------------------------------------------------------------------
 
 
     syntax Int ::= #string2BytesInt( String )       [function]
