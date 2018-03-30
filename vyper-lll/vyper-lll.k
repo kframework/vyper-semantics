@@ -1614,8 +1614,8 @@ module VYPER-LLL
                        #packLoggingDataAux(DARGS, EPARAMS, .LLLExps, #newPlaceholder(%num), #newPlaceholder(%num),
                                            #sizeOfEParams(EPARAMS)))
 
-    rule #packLoggingDataAux(.Exprs, .EventParams, CODE, _,_, STATICSize)
-         => @loggingdata($%seq(CODE), #getFirstStoreLoc(CODE), STATICSize)
+    rule #packLoggingDataAux(.Exprs, .EventParams, CODE, _, @tlll(_, DynPL:Int, _), STATICSize)
+         => @loggingdata($%seq(CODE), DynPL +Int 32, STATICSize)
 
     //datamem_start = dynamic_placeholder + 32
     rule (. => #packArgBy32(#newPlaceholder(T), DARG, T, DynPL +Int 32, DynOC))
@@ -1623,6 +1623,9 @@ module VYPER-LLL
                                 @tlll(_, DynOC:Int, _), @tlll(_, DynPL:Int, _), STATICSize)
 
     rule (@argby32(ARGCODE, ARGSIZE) => .)
+         ~> #packLoggingDataAux(DARGS, DEPARAMS, HOLDER => HOLDER ++LLL ARGCODE, _,_,_)
+
+    rule (ARGCODE:LLLExps => .)
          ~> #packLoggingDataAux(DARGS, DEPARAMS, HOLDER => HOLDER ++LLL ARGCODE, _,_,_)
 
 
@@ -1654,18 +1657,9 @@ module VYPER-LLL
         => #pack_args_by_32_BytesT_Var(L, #compileToLoc(EXPR), %bytesT(L))
       requires notBool isString(EXPR)
 
-
-    // List Literal
-    rule #packArgBy32(@tlll(T0, LOC:Int, LA), %list(EXPRS), T:ListType, Datamem, DynOC)
-         => #ifThenElse(#numOfExprs(EXPRS) =/=Int #getListTCount(T),
-                        #exception("The length of list doesn't match the expected length.")
-                          ~> #packArgBy32(@tlll(T0, LOC:Int, LA), %list(EXPRS), T:ListType, Datamem, DynOC),
-                        #packArgBy32ListTLiteral(LOC, EXPRS, T, .LLLExps, 0))
-
-    // List Var
-    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T:ListType, Datamem, DynOC)
-        => #packArgBy32ListTVar(LOC, #compileToLoc(EXPR), T, .LLLExps, 0, 0)
-      requires notBool(isListExpr(EXPR))
+    // Lists.
+    rule #packArgBy32(@tlll(T:ListType, LOC:Int, LA), EXPR, T, Datamem, DynOC)
+         => #assignImpl(@tlll(T, LOC:Int, LA), #compileToVal(EXPR))
 
 
     syntax CPackedArgBy32  ::= "#packArgBy32Base"    "(" Int          ","  // packing loc
@@ -1706,12 +1700,12 @@ module VYPER-LLL
     rule #packArgBy32ListTLiteral(LOC, .Exprs, T, RESULTCODE, TOTALSIZE)
         => @argby32(RESULTCODE, TOTALSIZE)
 
-    rule #packArgBy32ListTLiteral(LOC, EXPR EXPRS, %listT(SUBTYPE, N), RESULTCODE, TOTALSIZE)
-        => #packArgBy32(@tlll(SUBTYPE, LOC, @locattr(@memory, true)), EXPR, SUBTYPE, 0,0) //last 2 args unused
-        ~> #packArgBy32ListTLiteral(LOC, EXPRS, %listT(SUBTYPE, N), RESULTCODE, TOTALSIZE)
+    rule (. => #packArgBy32(@tlll(SUBTYPE, LOC, @locattr(@memory, true)), EXPR, SUBTYPE, 0,0)) //last 2 args unused
+         ~> #packArgBy32ListTLiteral(LOC, EXPR EXPRS => EXPRS, %listT(SUBTYPE, N), RESULTCODE, TOTALSIZE)
 
-    rule @argby32(CODE, SIZE) ~> #packArgBy32ListTLiteral(LOC, EXPRS, T, RESULTCODE, TOTALSIZE)
-        => #packArgBy32ListTLiteral(LOC +Int SIZE, EXPRS, T, RESULTCODE ++LLL CODE, TOTALSIZE +Int SIZE)
+    rule (@argby32(CODE, SIZE) => .)
+         ~> #packArgBy32ListTLiteral(LOC => LOC +Int SIZE, EXPRS, T,
+                                     RESULTCODE => RESULTCODE ++LLL CODE, TOTALSIZE => TOTALSIZE +Int SIZE)
 
 
     syntax CPackedArgBy32  ::= "#packArgBy32ListTVar" "(" Int          ","  // packing loc
@@ -4949,11 +4943,6 @@ module VYPER-LLL
  // ----------------------------------------------------------------------------------------------------
     rule #ifThenElse(true, THENCLAUSE, ELSECLAUSE) => THENCLAUSE
     rule #ifThenElse(false, THENCLAUSE, ELSECLAUSE) => ELSECLAUSE
-
-
-    syntax Int  ::= "#getFirstStoreLoc" "(" LLLExps ")"  [function]
- // ---------------------------------------------------------------
-    rule #getFirstStoreLoc($mstore(L:Int, _), CODE) => L
 
 
     syntax Bool  ::= "#isVarNameValid" "(" Id ")"  [function]
