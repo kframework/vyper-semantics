@@ -89,6 +89,7 @@ module VYPER-LLL
                                              ")"
 
     syntax PackedArgData      ::= "@argdata" "(" LLLExp      // code
+                                             "," Int         // ARGSSTART
                                              "," Int         // size
                                              ")"
 
@@ -203,13 +204,12 @@ module VYPER-LLL
 
 
     syntax KItem  ::= "#checkEventParams"      "(" EventParams "," Int "," Ids ")"
-    syntax KItem  ::= "#checkEventParamType"   "(" Type ")"
  // ------------------------------------------------------------------------------
     rule #checkEventParams(.EventParams, TOPICNUM, NAMES) => .
       requires TOPICNUM <=Int 3
 
     rule #checkEventParams(%eparam(NAME, T, true) EPARAMS, TOPICNUM, NAMES)
-        => #checkEventParamType(T)
+        => #checkIndexedEventParamType(T)
         ~> #ifThen(#inIds(NAME, NAMES),
                    #exception("Duplicate function argument name: " +String Id2String(NAME))
                       ~> #checkEventParams(%eparam(NAME, T, true) EPARAMS, TOPICNUM, NAMES)
@@ -221,20 +221,22 @@ module VYPER-LLL
       requires TOPICNUM >=Int 3
 
     rule #checkEventParams(%eparam(NAME, T, false) EPARAMS, TOPICNUM, NAMES)
-        => #checkEventParamType(T)
-        ~> #ifThen(#inIds(NAME, NAMES),
+        => #ifThen(#inIds(NAME, NAMES),
                    #exception("Duplicate function argument name: " +String Id2String(NAME))
                       ~> #checkEventParams(%eparam(NAME, T, false) EPARAMS, TOPICNUM, NAMES)
                   )
         ~> #checkEventParams(EPARAMS, TOPICNUM, NAMES ++Id (NAME .Ids))
 
-    rule #checkEventParamType(%bytesT(L)) => .
+
+    syntax KItem  ::= "#checkIndexedEventParamType"   "(" Type ")"
+ // ------------------------------------------------------------------------------
+    rule #checkIndexedEventParamType(%bytesT(L)) => .
       requires L <=Int 32
 
-    rule (. => #exception("Can only log a maximum of 32 bytes at a time.")) ~> #checkEventParamType(%bytesT(L))
+    rule (. => #exception("Can only log a maximum of 32 bytes at a time.")) ~> #checkIndexedEventParamType(%bytesT(L))
       requires L >Int 32
 
-    rule #checkEventParamType(T) => .
+    rule #checkIndexedEventParamType(T) => .
       requires notBool isByteArrayType(T)
 
 
@@ -772,7 +774,7 @@ module VYPER-LLL
         => #ifThenElse(notBool(isByteArrayType(RT)),
                        #exception("Setter type mismatch: left side is byte array but right side is not.")
                           ~> #assignImpl(@tlll(LT:ByteArrayType, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR)),
-                       #mkSetterBytesT(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
+                       #mkByteArrayCopier(@tlll(LT, LOC, LOCATTR), @tlll(RT, CODE, EXPRATTR))
            )
 
     // Can't copy mappings
@@ -804,12 +806,6 @@ module VYPER-LLL
 
     rule #mkSetterBase(@tlll(_, LOC, @locattr(@memory, _)), @tlll(_, CODE, _))
         => $mstore(LOC, CODE),.LLLExps
-
-
-    // Byte array
-    syntax CLLLExps  ::= "#mkSetterBytesT" "(" TypedLLLExp "," TypedLLLExp ")"
- // --------------------------------------------------------------------------
-    rule #mkSetterBytesT(LTCODE, RTCODE) => #mkByteArrayCopier(LTCODE, RTCODE)
 
 
     // foo = [1, 2, 3] : Assign entire lists.
@@ -1607,12 +1603,25 @@ module VYPER-LLL
                                                              CTypedLLLExp "," // dynamic_placeholder
                                                              Int              // event params size
                                                          ")"    [seqstrict(4,5)]
+    syntax CPackedLoggingData  ::= "#packLoggingDataAux2" "(" CPackedArgData ")"  [strict]
  // -------------------------------------------------------------------------
-    rule #packLoggingData(DARGS, EPARAMS)
+    rule #packLoggingData(ARGS, EPARAMS)
+         => #packLoggingDataAux2(#packArguments(#compileExprs(ARGS), 0, #toParams(EPARAMS)))
+
+    rule #packLoggingDataAux2(@argdata(CODE, ARGSSTART, ARGSWIDTH))
+         => @loggingdata(CODE, ARGSSTART +Int 4, ARGSWIDTH -Int 4) //the substracted 4 are for function id
+
+    syntax Params ::= "#toParams" "(" EventParams ")" [function]
+ // -------------------------------------------------------------------------
+    rule #toParams(%eparam(ID, T, false) EPS) => %param(ID, T) #toParams(EPS)
+    rule #toParams(.EventParams) => .Params
+
+
+    /*rule #packLoggingData(DARGS, EPARAMS)
         => #ifThenElse(#numOfExprs(DARGS) ==Int 0,
                        @loggingdata($pass, 0, 0),
                        #packLoggingDataAux(DARGS, EPARAMS, .LLLExps, #newPlaceholder(%num), #newPlaceholder(%num),
-                                           #sizeOfEParams(EPARAMS)))
+                                           #sizeOfEParams(EPARAMS)))*/
 
     rule #packLoggingDataAux(.Exprs, .EventParams, CODE, _, @tlll(_, DynPL:Int, _), STATICSize)
          => @loggingdata($%seq(CODE), DynPL +Int 32, STATICSize)
@@ -1641,14 +1650,10 @@ module VYPER-LLL
     rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T:BaseType, _,_)
         => #packArgBy32Base(LOC, #compileToLoc(EXPR), T)
 
-    // Vyper only allows 32-byte byte array as data.
     // String Literal
     rule #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L), Datamem, DynOC)
         => #ifThen(lengthString(STR) >Int L,
                    #exception("Data input bytes are too big.")
-                      ~> #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L), Datamem, DynOC))
-        ~> #ifThen(lengthString(STR) >Int 32,
-                   #exception("Can only log a maximum of 32 bytes at a time.")
                       ~> #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L), Datamem, DynOC))
         ~> #packArgBy32StringLiteral(LOC, #string2Bytes(STR))
 
@@ -1744,11 +1749,7 @@ module VYPER-LLL
 
     syntax CTypedLLLExp  ::= "#packLoggingTopicStringLiteral" "(" CBytes "," Type ")"  [strict(1)]
  // ----------------------------------------------------------------------------------------------
-    rule #packLoggingTopicStringLiteral(BS, %bytesT(L))
-         => #ifThenElse(#numOfBytes(BS) >Int 32,
-                        #exception("Can only log a maximum of 32 bytes at a time.")
-                          ~> #packLoggingTopicStringLiteral(BS, %bytesT(L)),
-                        @tlll(%bytesT(L), #bytes2Int(BS, 32, 0), @none))
+    rule #packLoggingTopicStringLiteral(BS, %bytesT(L)) => @tlll(%bytesT(L), #bytes2Int(BS, 32, 0), @none)
 
 
     syntax CTypedLLLExp  ::= "#packLoggingTopicBytesTVar" "(" CTypedLLLExp "," Type ")"  [strict(1)]
@@ -1791,7 +1792,7 @@ module VYPER-LLL
 
     syntax CLLLExps  ::= "#icallNoReturnAux" "(" CPackedArgData ")"  [strict]
  // -------------------------------------------------------------------------
-    rule #icallNoReturnAux(@argdata(CODE, ARGSWIDTH))
+    rule #icallNoReturnAux(@argdata(CODE, _, ARGSWIDTH))
         => $assert($call($gas, $address, 0, CODE, ARGSWIDTH, 0, 0)),.LLLExps
 
 
@@ -2550,7 +2551,7 @@ module VYPER-LLL
                                                       Int           ","  // return width
                                                       Int           ")"  // returner
  // -------------------------------------------------------------------
-    rule #icallWithReturner(@argdata(CODE, ARGSWIDTH), @tlll(RETT, LOC, LOCATTR), RETWIDTH, RETURNER)
+    rule #icallWithReturner(@argdata(CODE, _, ARGSWIDTH), @tlll(RETT, LOC, LOCATTR), RETWIDTH, RETURNER)
         => @tlll(RETT, $%seq(
                          $assert($call($gas, $address, 0, CODE, ARGSWIDTH, LOC, RETWIDTH)),
                          RETURNER,.LLLExps), @locattr(@memory, true))
@@ -2591,11 +2592,11 @@ module VYPER-LLL
                                                    ")"
  // -------------------------------------------------------------------
     rule #packArgumentsAux(_, .TypedLLLExps, .Params, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, SARRO, false)
-        => @argdata($%seq(SETTER ++LLL (ARGSSTART,.LLLExps)), ARGSWIDTH)
+        => @argdata($%seq(SETTER ++LLL (ARGSSTART,.LLLExps)), ARGSSTART, ARGSWIDTH)
 
     rule #packArgumentsAux(_, .TypedLLLExps, .Params, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, SARRO, true)
         => @argdata($with($_poz, ARGNUM *Int 32 +Int SARRO,
-                      $%seq(SETTER ++LLL (ARGSSTART,.LLLExps))), ARGSWIDTH)
+                      $%seq(SETTER ++LLL (ARGSSTART,.LLLExps))), ARGSSTART, ARGSWIDTH)
 
     // Base Type
     // setters.append(make_setter(LLLnode.from_list(placeholder + staticarray_offset + 32 + i * 32, typ=typ), arg, 'memory'))
@@ -2605,7 +2606,9 @@ module VYPER-LLL
         ~> #packArgumentsAux(ARGLOC, TARGS, PARAMS, ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, SARRO, NEEDPOS)
 
     // Byte Array Type
-    // TODO: Byte Array packing does not comply with ABI specification?
+    // fixme: Byte Array packing does not comply with ABI specification?
+    // ABI says for byte arrays: enc(X) = enc(k) pad_right(X)
+    // in reality it is encoded as enc(k) X, without padding to a chunk of 32 bytes.
     rule #packArgumentsAux(ARGLOC, (TARG TARGS), (%param(_, T:ByteArrayType) PARAMS),
                            ARGNUM, SETTER, ARGSSTART, ARGSWIDTH, SARRO, NEEDPOS)
         => #packArgumentBytesT(@tlll(T, ARGLOC, @locattr(@memory, true)), TARG, ARGSSTART +Int 4, SARRO)
@@ -2745,7 +2748,7 @@ module VYPER-LLL
                                          "," Type           //return type
                                          ")"    [seqstrict]
 
-    rule <k> #ecallExpr(@argdata(CODE, SIZE), @tlll(_, PLACEHOLDERLoc:Int, _), @tlll(_, ADDR, @none), RETT:Type)
+    rule <k> #ecallExpr(@argdata(CODE, _, SIZE), @tlll(_, PLACEHOLDERLoc:Int, _), @tlll(_, ADDR, @none), RETT:Type)
              => @tlll(RETT,
                       $%seq($assert($extcodesize(ADDR)),
                             $assert($ne($address, ADDR)),
@@ -2758,7 +2761,7 @@ module VYPER-LLL
          ...</k>
          <constant> true </constant>
 
-    rule <k> #ecallExpr(@argdata(CODE, SIZE), @tlll(_, PLACEHOLDERLoc:Int, _), @tlll(_, ADDR, @none), RETT:Type)
+    rule <k> #ecallExpr(@argdata(CODE, _, SIZE), @tlll(_, PLACEHOLDERLoc:Int, _), @tlll(_, ADDR, @none), RETT:Type)
              => @tlll(RETT,
                       $%seq($assert($extcodesize(ADDR)),
                             $assert($ne($address, ADDR)),
@@ -2805,7 +2808,7 @@ module VYPER-LLL
                                      "," CTypedLLLExp   //address
                                      ")"    [seqstrict]
 
-    rule <k> #ecallStmt(@argdata(CODE, SIZE), @tlll(_, ADDR, @none))
+    rule <k> #ecallStmt(@argdata(CODE, _, SIZE), @tlll(_, ADDR, @none))
              => $%seq($assert($extcodesize(ADDR)),
                       $assert($ne($address, ADDR)),
                       $assert($staticcall($gas, ADDR, CODE, SIZE, 0, 0)), .LLLExps
@@ -2813,7 +2816,7 @@ module VYPER-LLL
          ...</k>
          <constant> true </constant>
 
-    rule <k> #ecallStmt(@argdata(CODE, SIZE), @tlll(_, ADDR, @none))
+    rule <k> #ecallStmt(@argdata(CODE, _, SIZE), @tlll(_, ADDR, @none))
              => $%seq($assert($extcodesize(ADDR)),
                       $assert($ne($address, ADDR)),
                       $assert($call($gas, ADDR, 0, CODE, SIZE, 0, 0)), .LLLExps
@@ -2961,7 +2964,9 @@ module VYPER-LLL
                               $clamp($mload(@minDecimalPos),
                                      $div($_el1, $exp(256, $sub(32, $_len))),
                                      $mload(@maxDecimalPos)),
-                              $div($_el1, $exp(256, $sub(Offset, $_len))) //OutT ==K %num256
+                              //original is probably wrong, reporting an issue
+                              //$div($_el1, $exp(256, $sub(Offset, $_len))) //OutT ==K %num256
+                              $_el1 //OutT ==K %num256
                           )
                        )))),
             @none)
@@ -4158,12 +4163,11 @@ module VYPER-LLL
     syntax Type  ::= "#getType" "(" TypedLLLExp ")"     [function]
     rule #getType(@tlll(T,_,_)) => T
 
-    syntax KItem  ::= "#canonicalizeType" "(" CType "," Bool /*event?*/ ")"   [strict(1)]
+    syntax KItem  ::= "#canonicalizeType" "(" CType "," Bool /*indexed in event?*/ ")"   [strict(1)]
  // ------------------------------------------------------------------------
-    rule #canonicalizeType(%bytesT(L), EVENT)
-        => #ifThenElse(EVENT ==K true andBool L <=Int 32,
-                       "bytes" +String Int2String(L),
-                       "bytes")
+    rule #canonicalizeType(%bytesT(_), false) => "bytes"
+
+    rule #canonicalizeType(%bytesT(L),  true) => "bytes" +String Int2String(L)
 
     rule #canonicalizeType(%listT(SUBTYPE, N), _)
         => #canonicalizeListType(#canonicalizeType(SUBTYPE, false), N)
@@ -4588,10 +4592,10 @@ module VYPER-LLL
     syntax KItem  ::= "#computeEventSig"    "(" String "," EventParams ")"
     syntax KItem  ::= "#computeEventSigAux" "(" String "," EventParams ")"
  // ----------------------------------------------------------------------
-    rule #computeEventSig(SIG, %eparam(_, T, _) EPARAMS)
+    rule #computeEventSig(SIG, %eparam(_, T, INDEXED) EPARAMS)
         => #if isCastType(T)
-            #then #canonicalizeType(%num256, true)
-            #else #canonicalizeType(#parseType(T, true), true)
+            #then #canonicalizeType(%num256, INDEXED)
+            #else #canonicalizeType(#parseType(T, true), INDEXED)
            #fi
         ~> #computeEventSigAux(SIG, EPARAMS)
 
@@ -5071,10 +5075,10 @@ module VYPER-LLL
                                       $break)
 
 
-    syntax CTypedLLLExp  ::= "#getLength" "(" TypedLLLExp ")"
+    syntax CTypedLLLExp  ::= "#getLength" "(" TypedLLLExp ")"   [function]
  // --------------------------------------------------------
     rule #getLength(@tlll(_, LOC, @locattr(@memory, _))) => @tlll(%num, $mload(LOC), @none)
 
-    rule #getLength(@tlll(_, LOC, @locattr(@storage, _))) => @tlll(%num, $mload($sha3_32(LOC)), @none)
+    rule #getLength(@tlll(_, LOC, @locattr(@storage, _))) => @tlll(%num, $sload($sha3_32(LOC)), @none)
 
 endmodule
