@@ -2932,9 +2932,22 @@ module VYPER-LLL
         => @tlll(%decimal, CODE, @none)
 
 
+    // convert()
+    //---------------------
+    rule #compileToLoc(%convert(EXPR, TypeS)) => #convert(#compileToVal(EXPR), TypeS)
+      requires notBool TypeS ==String "uint256" orBool notBool isInt(EXPR)
+
+    rule #compileToLoc(%convert(I:Int, "uint256")) => #asNum256Number(I)
+
+
+    syntax CTypedLLLExp ::= "#convert" "(" CTypedLLLExp "," String ")"    [strict(1)]
+ // ------------------------------------------------------------------------
+    rule #convert(@tlll(%unitT(T, _:Map,_) => T, CODE, LA), _)
+
+
     // convert(EXPR, "int128")
     //---------------------
-    rule #compileToLoc(%convert(EXPR, "int128")) => #asNum128(#compileToVal(EXPR))
+    rule #convert(TLLL:TypedLLLExp, "int128") => #asNum128(TLLL)
 
     syntax CTypedLLLExp  ::= "#asNum128"    "(" CTypedLLLExp ")"    [strict]
  // ------------------------------------------------------------------------
@@ -2974,11 +2987,7 @@ module VYPER-LLL
 
     // convert(EXPR, "uint256")
     //---------------------
-    rule #compileToLoc(%convert(EXPR:Expr, "uint256"))
-         => #ifThenElse(isInt(EXPR),
-                        #asNum256Number(EXPR),
-                        #asNum256(#compileToVal(EXPR))
-                       )
+    rule #convert(@tlll(T, CODE, @none), "uint256") =>#asNum256(@tlll(T, CODE, @none))
 
     syntax CTypedLLLExp  ::= "#asNum256Number" "(" Expr ")"
  // ---------------------------------------------------------
@@ -2999,7 +3008,7 @@ module VYPER-LLL
 
     // convert(EXPR, "decimal")
     //---------------------
-    rule #compileToLoc(%convert(EXPR, "decimal")) => #asDecimal(#compileToVal(EXPR))
+    rule #convert(TLLL:TypedLLLExp, "decimal") => #asDecimal(TLLL)
 
     syntax CTypedLLLExp  ::= "#asDecimal"    "(" CTypedLLLExp ")"    [strict]
  // ------------------------------------------------------------------------
@@ -3008,7 +3017,7 @@ module VYPER-LLL
 
     // convert(EXPR, "bytes32")
     //---------------------
-    rule #compileToLoc(%convert(EXPR, "bytes32")) => #asBytes32(#compileToVal(EXPR))
+    rule #convert(TLLL:TypedLLLExp, "bytes32") => #asBytes32(TLLL)
 
     syntax CTypedLLLExp  ::= "#asBytes32" "(" CTypedLLLExp ")"    [strict]
  // ----------------------------------------------------------------------
