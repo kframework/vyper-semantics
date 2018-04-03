@@ -166,10 +166,13 @@ def parseType(node):
     elif type(node) == ast.Name:
         return parseBaseType(node)
     elif type(node) == ast.Compare and type(node.left) == ast.Name and node.left.id == "bytes":
-        return "%bytesT({})".format(node.comparators[0].n)
+        return "%bytesT({})".format(node.comparators[0].n)  # obsolete
     elif type(node) == ast.Subscript:
         if type(node.slice.value) == ast.Num:
-            return "%listT({}, {})".format(parseType(node.value), parseConst(node.slice.value))
+            if type(node.value) == ast.Name and node.value.id == "bytes":
+                return "%bytesT({})".format(parseConst(node.slice.value))
+            else:
+                return "%listT({}, {})".format(parseType(node.value), parseConst(node.slice.value))
         else:
             return "%mapT({}, {})".format(parseType(node.slice.value), parseType(node.value))
     elif type(node) == ast.Dict:
