@@ -2879,11 +2879,14 @@ module VYPER-LLL
  // ------------------------------------------------------------------
     rule #compileToLoc(%floor(EXPR)) => #floor(#compileToVal(EXPR))
 
-    rule #floor(@tlll(%decimal, CODE, EXPRATTR))
-        => @tlll(%num, $sdiv(CODE, @decimalDivisor), EXPRATTR)
+    rule #floor(@tlll(%decimal, CODE, @none))
+        => @tlll(%num, $if($slt(CODE, 0),
+                           $sdiv($sub( CODE, @decimalDivisor -Int 1), @decimalDivisor),
+                           $sdiv(CODE, @decimalDivisor)
+                       ), @none)
 
-    rule #floor(@tlll(%unitT(%decimal, UNITMAP:Map, POSITIONAL), CODE, EXPRATTR))
-        => @tlll(%unitT(%num, UNITMAP, POSITIONAL), $sdiv(CODE, @decimalDivisor), EXPRATTR)
+    rule #floor(@tlll(%unitT(%decimal, UNITMAP:Map, POSITIONAL), CODE, @none))
+         => #setType(#floor(@tlll(%decimal, CODE, @none)), %unitT(%decimal, UNITMAP:Map, POSITIONAL))
 
 
     // ceil
@@ -2893,7 +2896,13 @@ module VYPER-LLL
     syntax CTypedLLLExp  ::= "#ceil" "(" CTypedLLLExp ")"    [strict]
  // ------------------------------------------------------------------
     rule #ceil(@tlll(%decimal, CODE, @none))
-        => @tlll(%num, $sdiv($add(CODE, @decimalDivisor -Int 1), @decimalDivisor), @none)
+         => @tlll(%num, $if($slt(CODE, 0),
+                            $sdiv(CODE, @decimalDivisor),
+                            $sdiv($add( CODE, @decimalDivisor -Int 1), @decimalDivisor)
+                        ), @none)
+
+    rule #ceil(@tlll(%unitT(%decimal, UNITMAP:Map, POSITIONAL), CODE, @none))
+         => #setType(#ceil(@tlll(%decimal, CODE, @none)), %unitT(%decimal, UNITMAP:Map, POSITIONAL))
 
 
     // decimal
@@ -4488,6 +4497,10 @@ module VYPER-LLL
 
     rule #convertToUnitIfPure(%decimal, @unittuple(UNITMAP, POSITIONAL))
         => %unitT(%decimal, UNITMAP, POSITIONAL)
+
+    syntax CTypedLLLExp ::= "#setType" "(" CTypedLLLExp "," Type ")" [strict]
+ // -------------------------------------------------------------------------------------------
+    rule #changeType(@tlll(T1, CODE, LA), T2) => @tlll(T2, CODE, LA)
 
 
     syntax Bool  ::= "#areUnitsCompatible" "(" Type ","  // from type
