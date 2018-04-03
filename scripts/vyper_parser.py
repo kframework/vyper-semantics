@@ -730,6 +730,8 @@ def parseStmt(node):
             return "%return({})".format(parseExpr(node.value))
     elif type(node) == ast.Assert:
         return "%assert({})".format(parseExpr(node.test))
+    elif type(node) == ast.Delete:
+        return "%del({})".format(parseExpr(node.targets[0]))
     elif type(node) == ast.Expr and type(node.value) == ast.Name and node.value.id == "throw":
         return "%throw"
     elif type(node) == ast.Expr and type(node.value) == ast.Call:

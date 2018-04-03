@@ -1239,6 +1239,11 @@ module VYPER-LLL
     rule #compileStmt(%break) => $break,.LLLExps
 
 
+// Del - delete from map
+// ========
+    rule #compileStmt(%del(E) => %assign(E, %None))
+
+
 // Pass
 // =====
 
@@ -1991,12 +1996,15 @@ module VYPER-LLL
 
     //WARN: Storage nullification will only work for first level of composite data types.
     //Are None assignments allowed for multi-level composites? Like:  a:num[2][2] a=None
+    rule #assignNone(@tlll(T:BaseType, LOC:LLLExp, @locattr(@storage, _)))
+         => $sstore(LOC, 0),.LLLExps
+
     rule #assignNone(@tlll(T:Type, LOC:LLLExp, @locattr(@storage, _)))
          => $with($_opos, $sha3_32(LOC),
                 $repeat(@freeLoopIndexPos, 0, #sizeOfType(T) /Int 32,
                         $sstore($add($_opos, $mload(@freeLoopIndexPos)),
                                 0))),.LLLExps
-
+      requires notBool isBaseType(T)
 
 // Variable
 // ========

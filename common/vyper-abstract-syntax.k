@@ -76,6 +76,7 @@ module VYPER-ABSTRACT-SYNTAX
                    | "%throw"
                    | "%log"       "(" Id "," Exprs ")"
                    | "%stmtexpr"  "(" Expr ")"
+                   | "%del"       "(" Expr ")"
                    // stmt dispatch table
                    | "%send"      "(" Expr "," Expr ")"
                    | "%selfdestruct" "(" Expr ")"
