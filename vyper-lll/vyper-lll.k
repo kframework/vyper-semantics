@@ -2808,7 +2808,7 @@ module VYPER-LLL
                        ), @none)
 
     rule #floor(@tlll(%unitT(%decimal, UNITMAP:Map, POSITIONAL), CODE, @none))
-         => #setType(#floor(@tlll(%decimal, CODE, @none)), %unitT(%decimal, UNITMAP:Map, POSITIONAL))
+         => #setType(#floor(@tlll(%decimal, CODE, @none)), %unitT(%num, UNITMAP:Map, POSITIONAL))
 
 
     // ceil
@@ -2824,7 +2824,7 @@ module VYPER-LLL
                         ), @none)
 
     rule #ceil(@tlll(%unitT(%decimal, UNITMAP:Map, POSITIONAL), CODE, @none))
-         => #setType(#ceil(@tlll(%decimal, CODE, @none)), %unitT(%decimal, UNITMAP:Map, POSITIONAL))
+         => #setType(#ceil(@tlll(%decimal, CODE, @none)), %unitT(%num, UNITMAP:Map, POSITIONAL))
 
 
     // decimal
@@ -2879,6 +2879,7 @@ module VYPER-LLL
     // convert(EXPR, "int128")
     //---------------------
     rule #convert(TLLL:TypedLLLExp, "int128") => #asNum128(TLLL)
+      requires notBool isUnitType(#getType(TLLL))
 
     syntax CTypedLLLExp  ::= "#asNum128"    "(" CTypedLLLExp ")"    [strict]
  // ------------------------------------------------------------------------
@@ -2918,7 +2919,8 @@ module VYPER-LLL
 
     // convert(EXPR, "uint256")
     //---------------------
-    rule #convert(@tlll(T, CODE, @none), "uint256") =>#asNum256(@tlll(T, CODE, @none))
+    rule #convert(TLLL:TypedLLLExp, "uint256") =>#asNum256(TLLL)
+      requires notBool isUnitType(#getType(TLLL))
 
     syntax CTypedLLLExp  ::= "#asNum256Number" "(" Expr ")"
  // ---------------------------------------------------------
@@ -2940,6 +2942,7 @@ module VYPER-LLL
     // convert(EXPR, "decimal")
     //---------------------
     rule #convert(TLLL:TypedLLLExp, "decimal") => #asDecimal(TLLL)
+      requires notBool isUnitType(#getType(TLLL))
 
     syntax CTypedLLLExp  ::= "#asDecimal"    "(" CTypedLLLExp ")"    [strict]
  // ------------------------------------------------------------------------
@@ -2949,6 +2952,7 @@ module VYPER-LLL
     // convert(EXPR, "bytes32")
     //---------------------
     rule #convert(TLLL:TypedLLLExp, "bytes32") => #asBytes32(TLLL)
+      requires notBool isUnitType(#getType(TLLL))
 
     syntax CTypedLLLExp  ::= "#asBytes32" "(" CTypedLLLExp ")"    [strict]
  // ----------------------------------------------------------------------
@@ -4489,7 +4493,7 @@ module VYPER-LLL
 
     syntax CTypedLLLExp ::= "#setType" "(" CTypedLLLExp "," Type ")" [strict]
  // -------------------------------------------------------------------------------------------
-    rule #changeType(@tlll(T1, CODE, LA), T2) => @tlll(T2, CODE, LA)
+    rule #setType(@tlll(T1, CODE, LA), T2) => @tlll(T2, CODE, LA)
 
 
     syntax Bool  ::= "#areUnitsCompatible" "(" Type ","  // from type
