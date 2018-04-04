@@ -235,13 +235,21 @@ def parseEvent(node):  # node.annotation is ast.Call
 # x: public(num(wei / sec))
 #   => %svdecl(x, %unitT(%num, %udiv(%wei, %sec), false), %public)
 def parseGlobal(node):
-    if type(node.annotation) == ast.Call and node.annotation.func.id in {"public", "private"}:
-        n_type = parseType(node.annotation.args[0])
-        visibility = node.annotation.func.id
-    else:
-        n_type = parseType(node.annotation)
-        visibility = "private"
-    return "  %svdecl({}, {}, %{})".format(node.target.id, n_type, visibility)
+    all_annotations = {"public", "private", "modifiable", "static"}
+    annotations = set()
+    typeAST = node.annotation
+    while type(typeAST) == ast.Call and typeAST.func.id in all_annotations:
+        annotations.add(typeAST.func.id)
+        typeAST = typeAST.args[0]
+    n_type = parseType(typeAST)
+    public = "public" in annotations
+    modifiable = "modifiable" in annotations
+    return "  %svdecl({}, {}, {}, {})".format(node.target.id, n_type,
+                                              parseBool(public), parseBool(modifiable))
+
+
+def parseBool(myBool):
+    return str(myBool).lower()
 
 
 #    syntax Decorator  ::= "%@constant" | "%@payable" | "%@private" | "%@public"

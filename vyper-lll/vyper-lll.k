@@ -28,6 +28,7 @@ module VYPER-LLL
         <env> .Map </env>  // In-memory variables. Var |-> TypedAddr
         <nextMem> @reservedMemPos </nextMem>  // Next available memory location
         <global> .Map </global>  // Global variables. Var |-> TypedAddr
+        <modifiableGlobals> .Map </modifiableGlobals>
         <nextStorage> 0 </nextStorage>
         <internalSig> .Map </internalSig>  // internal ABI objects.   (Event, Func)Name |-> (Event, Func)Record
         <contracts> .Map </contracts>      // external ABI objects. Map from contract names to sets of signatures.
@@ -252,13 +253,14 @@ module VYPER-LLL
 
     rule #addGlobals(G GS) => #addGlobal(G) ~> #addGlobals(GS)
 
-    rule <k> #addGlobal(%svdecl(NAME, T, _))
+    rule <k> #addGlobal(%svdecl(NAME, T, _, MODIFIABLE))
             => #addGlobalAux(NAME, #parseType(T, false)) ... </k>
          <global> GLOBALS </global>
+         <modifiableGlobals> MODS => MODS[NAME <- MODIFIABLE] </modifiableGlobals>
       requires notBool %svar(NAME) in_keys(GLOBALS)
 
     rule <k> (. => #exception("Cannot declare a persistent variable twice! " +String Id2String(NAME)))
-             ~> #addGlobal(%svdecl(NAME, _, _))
+             ~> #addGlobal(%svdecl(NAME, _, _,_))
          ... </k>
          <global>... %svar(NAME) |-> _ ...</global>
 
@@ -365,12 +367,10 @@ module VYPER-LLL
  // ----------------------------------------------------------------------------
     rule #mkPublicGetters(.Globals, DEFS) => DEFS
 
-    rule #mkPublicGetters(%svdecl(NAME, T, %public) GS, DEFS)
-        => #mkPublicGetters(GS,
-                            DEFS ++Def #mkPublicGetter(Id2String(NAME), .Params, T, %svar(NAME), 0))
+    rule #mkPublicGetters(%svdecl(NAME, T, true, _) GS => GS,
+                          DEFS => DEFS ++Def #mkPublicGetter(Id2String(NAME), .Params, T, %svar(NAME), 0))
 
-    rule #mkPublicGetters(%svdecl(_, _, %private) GS, DEFS)
-        => #mkPublicGetters(GS, DEFS)
+    rule #mkPublicGetters(%svdecl(_, _, false, _) GS => GS, DEFS)
 
     rule #mkPublicGetter(NAME, PARAMS, T:BaseType, VAR, DEPTH) => #mkPublicGetterBase(NAME, PARAMS, T, VAR, DEPTH)
 
@@ -2632,9 +2632,17 @@ module VYPER-LLL
              => #ifThen(notBool(isBaseType(RETT) orBool isByteArrayType(RETT)),
                         #exception("Invalid output type"))
                 ~> #ecallExpr(#packArguments(#compileExprs(ARGS), FUNCID, PARAMS),
-                              #newPlaceholder(RETT), #compileToVal(ADDRE), RETT)
+                              #newPlaceholder(RETT), #compileToVal(ADDRE), RETT, getModifiable(ADDRE))
          ...</k>
          <contracts>... CONTR |-> ((FNAME |-> @func(FUNCID:Int, _, PARAMS:Params, RETT:Type, _,_,_)) _) ...</contracts>
+
+    syntax K ::= "getModifiable" "(" Expr ")"
+    rule <k> getModifiable(%svar(NAME)) => MODIFIABLE ...</k>
+         <modifiableGlobals>... NAME |-> MODIFIABLE ...</modifiableGlobals>
+
+    rule getModifiable(VAR) => true
+      requires notBool isGlobalVar(VAR)
+
 
     /*  sub = ['seq', ['assert', ['extcodesize', contract_address]],
                         ['assert', ['ne', 'address', contract_address]]]
@@ -2651,11 +2659,14 @@ module VYPER-LLL
                                          "," CTypedLLLExp   //output_placeholder
                                          "," CTypedLLLExp   //address
                                          "," Type           //return type
+                                         "," K              //modifiable
                                          ")"    [seqstrict]
 
-    rule <k> #ecallExpr(@argdata(CODE, _, SIZE), @tlll(_, PLACEHOLDERLoc:Int, _), @tlll(_, ADDR, @none), RETT:Type)
+    rule <k> #ecallExpr(@argdata(CODE, _, SIZE), @tlll(_, PLACEHOLDERLoc:Int, _), @tlll(_, ADDR, @none),
+                        RETT:Type, MODIFIABLE:Bool)
              => @tlll(RETT,
                       $%seq($assert($extcodesize(ADDR)),
+                            $assert($ne($address, ADDR)),
                             $assert($ne($address, ADDR)),
                             $assert($staticcall($gas, ADDR, CODE, SIZE, PLACEHOLDERLoc, #sizeOfType(RETT))),
 
@@ -2664,9 +2675,11 @@ module VYPER-LLL
                       ),
                       @locattr(@memory, false))
          ...</k>
-         <constant> true </constant>
+         <constant> CONST </constant>
+       requires CONST orBool notBool MODIFIABLE
 
-    rule <k> #ecallExpr(@argdata(CODE, _, SIZE), @tlll(_, PLACEHOLDERLoc:Int, _), @tlll(_, ADDR, @none), RETT:Type)
+    rule <k> #ecallExpr(@argdata(CODE, _, SIZE), @tlll(_, PLACEHOLDERLoc:Int, _), @tlll(_, ADDR, @none),
+                        RETT:Type, MODIFIABLE:Bool)
              => @tlll(RETT,
                       $%seq($assert($extcodesize(ADDR)),
                             $assert($ne($address, ADDR)),
@@ -2677,8 +2690,8 @@ module VYPER-LLL
                       ),
                       @locattr(@memory, false))
          ...</k>
-         <constant> false </constant>
-
+         <constant> CONST </constant>
+      requires notBool (CONST orBool notBool MODIFIABLE)
 
 // External Contract Call - expression statement
 //  reference: external_contract_call_stmt()
@@ -2696,7 +2709,8 @@ module VYPER-LLL
       requires notBool FNAME in keys(FUNCS)
 
     rule <k> #stmtExpr(%ecall(CONTR:Id, ADDRE:Expr, FNAME:Id, ARGS:Exprs))
-             => #ecallStmt(#packArguments(#compileExprs(ARGS), FUNCID, PARAMS), #compileToVal(ADDRE))
+             => #ecallStmt(#packArguments(#compileExprs(ARGS), FUNCID, PARAMS),
+                           #compileToVal(ADDRE), getModifiable(ADDRE))
          ...</k>
          <contracts>... CONTR |-> ((FNAME |-> @func(FUNCID:Int, _, PARAMS:Params, _,_,_,_)) _) ...</contracts>
 
@@ -2711,23 +2725,26 @@ module VYPER-LLL
     */
     syntax CLLLExps ::= "#ecallStmt" "(" CPackedArgData //result of #packArguments() : inargs, inargsize
                                      "," CTypedLLLExp   //address
+                                     "," K              //modifiable
                                      ")"    [seqstrict]
 
-    rule <k> #ecallStmt(@argdata(CODE, _, SIZE), @tlll(_, ADDR, @none))
+    rule <k> #ecallStmt(@argdata(CODE, _, SIZE), @tlll(_, ADDR, @none), MODIFIABLE:Bool)
              => $%seq($assert($extcodesize(ADDR)),
                       $assert($ne($address, ADDR)),
                       $assert($staticcall($gas, ADDR, CODE, SIZE, 0, 0)), .LLLExps
                      ), .LLLExps
          ...</k>
-         <constant> true </constant>
+         <constant> CONST </constant>
+       requires CONST orBool notBool MODIFIABLE
 
-    rule <k> #ecallStmt(@argdata(CODE, _, SIZE), @tlll(_, ADDR, @none))
+    rule <k> #ecallStmt(@argdata(CODE, _, SIZE), @tlll(_, ADDR, @none), MODIFIABLE:Bool)
              => $%seq($assert($extcodesize(ADDR)),
                       $assert($ne($address, ADDR)),
                       $assert($call($gas, ADDR, 0, CODE, SIZE, 0, 0)), .LLLExps
                      ), .LLLExps
          ...</k>
-         <constant> false </constant>
+         <constant> CONST </constant>
+      requires notBool (CONST orBool notBool MODIFIABLE)
 
 
 // Reserved Expr

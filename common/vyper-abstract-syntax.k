@@ -22,10 +22,12 @@ module VYPER-ABSTRACT-SYNTAX
 // =======
 
 
-    syntax Global  ::= "%svdecl" "(" Id "," Type "," Visibility ")"
+    syntax Global  ::= "%svdecl" "(" Id
+                                 "," Type
+                                 "," Bool   //public
+                                 "," Bool   //modifiable
+                                 ")"
     syntax Globals ::= List{Global, ""}  [klabel(Globals)]
-
-    syntax Visibility  ::= "%public" | "%private"
 
 
 // Function Definition
@@ -138,9 +140,11 @@ module VYPER-ABSTRACT-SYNTAX
                                                            // %fixed10(A, B) = A/B and B is a power of 10.
 
     syntax Var  ::= "%var"  "(" Id ")"
-                  | "%svar" "(" Id ")"
+                  | GlobalVar
                   | SubscriptVar
                   | AttributeVar
+
+    syntax GlobalVar ::= "%svar" "(" Id ")"
 
     // Var[Expr]: list or map element
     syntax SubscriptVar  ::= "%subscript" "(" Var "," Expr ")"
