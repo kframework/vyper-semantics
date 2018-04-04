@@ -7,6 +7,7 @@ module LLL-ABSTRACT-SYNTAX
                     | "$if"            "(" LLLExp "," LLLExp "," LLLExp ")"
                     | "$repeat"        "(" LLLExp "," LLLExp "," LLLExp "," LLLExp ")"
                     | "$break"
+                    | "$continue"
                     | "$with"          "(" LLLExp "," LLLExp "," LLLExp ")"
                     | "$set"           "(" LLLExp "," LLLExp ")"
                     | "$seq"           "(" LLLExp "," LLLExp ")"

@@ -71,6 +71,7 @@ module VYPER-ABSTRACT-SYNTAX
                    | "%forrange"  "(" Id "," Expr "," Expr  "," Stmts ")"  // for i in range(start, start + rounds)
                    | "%forlist"   "(" Id "," Expr "," Stmts ")"            // for i in list()
                    | "%break"
+                   | "%continue"
                    | "%pass"
                    | "%return"
                    | "%return"    "(" Expr ")"

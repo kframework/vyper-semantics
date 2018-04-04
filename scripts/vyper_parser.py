@@ -732,6 +732,8 @@ def parseStmt(node):
             return "%forlist({}, {},{})".format(node.target.id, parseExpr(node.iter), parseStmts(node.body))
     elif type(node) == ast.Break:
         return "%break"
+    elif type(node) == ast.Continue:
+        return "%continue"
     elif type(node) == ast.Pass:
         return "%pass"
     elif type(node) == ast.Return:

@@ -1234,9 +1234,12 @@ module VYPER-LLL
 
 // Break
 // =====
-
-
     rule #compileStmt(%break) => $break,.LLLExps
+
+
+// continue statement
+// =====
+    rule #compileStmt(%continue) => $continue,.LLLExps
 
 
 // Del - delete from map
