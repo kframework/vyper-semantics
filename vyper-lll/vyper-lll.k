@@ -1621,111 +1621,8 @@ module VYPER-LLL
     rule #toParams(%eparam(ID, T, false) EPS) => %param(ID, T) #toParams(EPS)
     rule #toParams(.EventParams) => .Params
 
-
-    /*rule #packLoggingData(DARGS, EPARAMS)
-        => #ifThenElse(#numOfExprs(DARGS) ==Int 0,
-                       @loggingdata($pass, 0, 0),
-                       #packLoggingDataAux(DARGS, EPARAMS, .LLLExps, #newPlaceholder(%num), #newPlaceholder(%num),
-                                           #sizeOfEParams(EPARAMS)))*/
-
     rule #packLoggingDataAux(.Exprs, .EventParams, CODE, _, @tlll(_, DynPL:Int, _), STATICSize)
          => @loggingdata($%seq(CODE), DynPL +Int 32, STATICSize)
-
-    //datamem_start = dynamic_placeholder + 32
-    rule (. => #packArgBy32(#newPlaceholder(T), DARG, T, DynPL +Int 32, DynOC))
-         ~> #packLoggingDataAux(DARG DARGS => DARGS, %eparam(_, T, _) DEPARAMS => DEPARAMS, HOLDER,
-                                @tlll(_, DynOC:Int, _), @tlll(_, DynPL:Int, _), STATICSize)
-
-    rule (@argby32(ARGCODE, ARGSIZE) => .)
-         ~> #packLoggingDataAux(DARGS, DEPARAMS, HOLDER => HOLDER ++LLL ARGCODE, _,_,_)
-
-    rule (ARGCODE:LLLExps => .)
-         ~> #packLoggingDataAux(DARGS, DEPARAMS, HOLDER => HOLDER ++LLL ARGCODE, _,_,_)
-
-
-    syntax CPackedArgBy32  ::= "#packArgBy32" "(" CTypedLLLExp ","  // placeholder
-                                                  Expr         ","  // value
-                                                  Type         ","  // expected type
-                                                  Int          ","  // datamem_start
-                                                  Int               // dynamic_offset_counter
-
-                                              ")"      [strict(1)]
- // --------------------------------------------------------------
-    // Base Type
-    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, T:BaseType, _,_)
-        => #packArgBy32Base(LOC, #compileToLoc(EXPR), T)
-
-    // String Literal
-    rule #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L), Datamem, DynOC)
-        => #ifThen(lengthString(STR) >Int L,
-                   #exception("Data input bytes are too big.")
-                      ~> #packArgBy32(@tlll(T, LOC:Int, LA), STR:String, %bytesT(L), Datamem, DynOC))
-        ~> #packArgBy32StringLiteral(LOC, #string2Bytes(STR))
-
-    // Byte Array Variable
-    rule #packArgBy32(@tlll(_, LOC:Int, _), EXPR, %bytesT(L), Datamem, DynOC)
-        => #pack_args_by_32_BytesT_Var(L, #compileToLoc(EXPR), %bytesT(L))
-      requires notBool isString(EXPR)
-
-    // Lists.
-    rule #packArgBy32(@tlll(T:ListType, LOC:Int, LA), EXPR, T, Datamem, DynOC)
-         => #assignImpl(@tlll(T, LOC:Int, LA), #compileToVal(EXPR))
-
-
-    syntax CPackedArgBy32  ::= "#packArgBy32Base"    "(" Int          ","  // packing loc
-                                                         CTypedLLLExp ","
-                                                         Type              // arg type
-                                                     ")"      [strict(2)]
-
-    syntax CPackedArgBy32  ::= "#packArgBy32BaseAux" "(" Int          ","
-                                                         CTypedLLLExp ")"  [strict(2)]
- // ----------------------------------------------------------------------------------
-    rule #packArgBy32Base(LOC, TCODE, ARGTYPE)
-        => #packArgBy32BaseAux(LOC, #baseTypeConvert(TCODE, ARGTYPE))
-
-    rule #packArgBy32BaseAux(PLLoc, @tlll(_, CODE, _)) => @argby32($mstore(PLLoc, CODE),.LLLExps, 32)
-
-
-    syntax CPackedArgBy32  ::= "#packArgBy32StringLiteral" "(" Int    ","  // packing loc
-                                                               CBytes ")"  [strict(2)]
- // ----------------------------------------------------------------------------------
-    rule #packArgBy32StringLiteral(LOC, BS)
-        => @argby32($mstore(LOC, #bytes2Int(BS, 32, 0)), 32)
-
-
-    syntax CPackedArgBy32  ::= "#pack_args_by_32_BytesT_Var" "(" Int          "," // placeholder
-                                                                 CTypedLLLExp "," // value
-                                                                 Type             // arg type
-                                                             ")"      [strict(2)]
- // -----------------------------------------------------------------------
-
-
-
-    syntax CPackedArgBy32  ::= "#packArgBy32ListTLiteral" "(" Int     ","  // packing loc
-                                                              Exprs   ","
-                                                              Type    ","  // arg type
-                                                              LLLExps ","  // result code
-                                                              Int     ")"  // total size
- // ---------------------------------------------------------------------
-    rule #packArgBy32ListTLiteral(LOC, .Exprs, T, RESULTCODE, TOTALSIZE)
-        => @argby32(RESULTCODE, TOTALSIZE)
-
-    rule (. => #packArgBy32(@tlll(SUBTYPE, LOC, @locattr(@memory, true)), EXPR, SUBTYPE, 0,0)) //last 2 args unused
-         ~> #packArgBy32ListTLiteral(LOC, EXPR EXPRS => EXPRS, %listT(SUBTYPE, N), RESULTCODE, TOTALSIZE)
-
-    rule (@argby32(CODE, SIZE) => .)
-         ~> #packArgBy32ListTLiteral(LOC => LOC +Int SIZE, EXPRS, T,
-                                     RESULTCODE => RESULTCODE ++LLL CODE, TOTALSIZE => TOTALSIZE +Int SIZE)
-
-
-    syntax CPackedArgBy32  ::= "#packArgBy32ListTVar" "(" Int          ","  // packing loc
-                                                          CTypedLLLExp ","
-                                                          Type         ","  // arg type
-                                                          LLLExps      ","  // result code
-                                                          Int          ","  // index
-                                                          Int          ")"  // total size
- // ----------------------------------------------------------------------
-    // TODO: https://github.com/ethereum/vyper/issues/551
 
 
     syntax CTypedLLLExp  ::= "#packLoggingTopic" "(" Expr "," EventParam ")"
@@ -1760,7 +1657,7 @@ module VYPER-LLL
     syntax CTypedLLLExp  ::= "#packLoggingTopicBytesTVar" "(" CTypedLLLExp "," Type ")"  [strict(1)]
  // ------------------------------------------------------------------------------------------------
     rule #packLoggingTopicBytesTVar(@tlll(%bytesT(L), CODE, LA), _)
-         => #byte_array_to_num(@tlll(%bytesT(L), CODE, LA), %num256, L) //not sure what's the last arg.
+         => #byte_array_to_num(@tlll(%bytesT(L), CODE, LA), %num256, L) //last arg unused
 
 
 // Statement Expression
