@@ -80,7 +80,6 @@ module VYPER-ABSTRACT-SYNTAX
                    // stmt dispatch table
                    | "%send"      "(" Expr "," Expr ")"
                    | "%selfdestruct" "(" Expr ")"
-                   | "%rawlog"    "(" Expr "," Expr ")"
 
     syntax Stmts    ::= List{Stmt, ""}  [klabel(Stmts)]
 
@@ -295,6 +294,7 @@ module VYPER-ABSTRACT-SYNTAX
                            | "%min"                 "(" Expr "," Expr ")"
                            | "%max"                 "(" Expr "," Expr ")"
                            | "%sha3"                "(" Expr ")"
+                           | "%raw_log"             "(" Expr "," Expr ")"
 
 
 endmodule

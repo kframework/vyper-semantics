@@ -1728,10 +1728,10 @@ module VYPER-LLL
     // TODO: https://github.com/ethereum/vyper/issues/551
 
 
-    syntax CTypedLLLExp  ::= "#packLoggingTopic" "(" Expr "," EventParams ")"
+    syntax CTypedLLLExp  ::= "#packLoggingTopic" "(" Expr "," EventParam ")"
  // -------------------------------------------------------------------------
     // Base Type
-    rule #packLoggingTopic(ARG, %eparam(_, T, _)) => #packLoggingTopicBase(#compileToLoc(ARG), T:BaseType)
+    rule #packLoggingTopic(ARG, %eparam(_, T:BaseType, _)) => #packLoggingTopicBase(#compileToLoc(ARG), T)
 
     // String Literal
     rule #packLoggingTopic(ARG:String, %eparam(ID, %bytesT(L), B))
@@ -3907,6 +3907,73 @@ module VYPER-LLL
                   $sha3($add(PL, 32), $sload($sha3_32($_sub))), .LLLExps
                 )
               ), @none)
+
+
+    // raw_log
+    //----------------------------
+    rule #stmtExpr(%raw_log(%list(Es), E2)) => #raw_log(#count(Es), #compileExprs(Es), .LLLExps, #compileToVal(E2))
+
+    rule (. => #exception("Expecting a list of 0-4 topics as first argument"))
+         ~> #stmtExpr(%raw_log(E1, _))
+      requires notBool isListExpr(E1)
+
+    syntax CLLLExps ::= "#raw_log" "(" Int "," CTypedLLLExps "," LLLExps "," CTypedLLLExp ")" [seqstrict]
+ // -------------------------------------------------------
+    rule (. => #exception("Expecting a list of 0-4 topics as first argument"))
+         ~> #raw_log(N, _,_,_)
+      requires N >Int 4
+
+    rule (. => #exception("Expecting a bytes32 argument as topic"))
+         ~> #raw_log(N, @tlll(T, _,_) _, _,_)
+      requires N <=Int 4 andBool notBool T ==K %bytes32
+
+    rule #raw_log(N, @tlll(%bytes32, CODE, @none) TLLLs => TLLLs, TOPICS => TOPICS ++LLL CODE,.LLLExps, _)
+      requires N <=Int 4
+
+    rule #raw_log(_, .TypedLLLExps, TOPICS, @tlll(%bytesT(_), DATA, @locattr(@memory, _)))
+         => $with($_arr, DATA, #logFunc($add($_arr, 32), $mload($_arr), TOPICS)),.LLLExps
+
+    syntax CLLLExps ::= "#raw_log_storage" "(" LLLExps        //topics
+                                           "," TypedLLLExp    //data
+                                           "," CTypedLLLExp   //placeholder
+                                           ")" [seqstrict(3)]
+ // -------------------------------------------------------
+
+    rule #raw_log(_, .TypedLLLExps, TOPICS, @tlll(%bytesT(L), DATA, @locattr(@storage, MT)))
+         => #raw_log_storage(TOPICS, @tlll(%bytesT(L), DATA, @locattr(@storage, MT)), #newPlaceholder(%bytesT(L)))
+
+    rule #raw_log_storage(TOPICS, @tlll(%bytesT(L), DATA, LA), PL:TypedLLLExp)
+         => #raw_log_storage2(TOPICS, DATA, PL, #mkByteArrayCopier(PL, @tlll(%bytesT(L), $_sub, LA)))
+
+    syntax CLLLExps ::= "#raw_log_storage2" "(" LLLExps         //topics
+                                            "," LLLExp          //data
+                                            "," TypedLLLExp     //placeholder
+                                            "," CLLLExps        //copier
+                                            ")" [seqstrict(4)]
+ // -------------------------------------------------------
+    rule #raw_log_storage2(TOPICS, DATA, @tlll(_, PL, _), COPIER)
+         => $with($_sub, DATA,
+                  $%seq(COPIER ++LLL
+                        #logFunc($add(PL, 32), $mload(PL), TOPICS),.LLLExps)),.LLLExps
+
+
+    syntax LLLExp ::= "#logFunc" "(" LLLExp    // data
+                                 "," LLLExp    // data len
+                                 "," LLLExps   // topics
+                                 ")" [function]
+ // -------------------------------------------------------
+    rule #logFunc(DATA, DATALEN, .LLLExps) => $log0(DATA, DATALEN)
+    rule #logFunc(DATA, DATALEN, (TP1:LLLExp, .LLLExps)) => $log1(DATA, DATALEN, TP1)
+    rule #logFunc(DATA, DATALEN, (TP1:LLLExp, TP2:LLLExp, .LLLExps)) => $log2(DATA, DATALEN, TP1, TP2)
+    rule #logFunc(DATA, DATALEN, (TP1:LLLExp, TP2:LLLExp, TP3:LLLExp, .LLLExps)) => $log3(DATA, DATALEN, TP1, TP2, TP3)
+    rule #logFunc(DATA, DATALEN, (TP1:LLLExp, TP2:LLLExp, TP3:LLLExp, TP4:LLLExp, .LLLExps))
+         => $log4(DATA, DATALEN, TP1, TP2, TP3, TP4)
+
+    syntax Int ::= "#count" "(" Exprs ")" [function]
+ // -------------------------------------------------------
+    rule #count(E:Expr Es) => 1 +Int #count(Es)
+    rule #count(.Exprs) => 0
+
 
 //////////////////////////////////////////////////////////////////////////////
 // Utils
