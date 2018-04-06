@@ -1660,7 +1660,7 @@ module VYPER-LLL
     syntax CTypedLLLExp  ::= "#packLoggingTopicBytesTVar" "(" CTypedLLLExp "," Type ")"  [strict(1)]
  // ------------------------------------------------------------------------------------------------
     rule #packLoggingTopicBytesTVar(@tlll(%bytesT(L), CODE, LA), _)
-         => #byte_array_to_num(@tlll(%bytesT(L), CODE, LA), %num256, L) //last arg unused
+         => #byte_array_to_num(@tlll(%bytesT(L), CODE, LA), %num256, L, false)
 
 
 // Statement Expression
@@ -2890,16 +2890,16 @@ module VYPER-LLL
          => @tlll(%num, $clamp($mload(@minNumPos), CODE, $mload(@maxNumPos)), @none)
       requires #isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %bytes32) orBool isAddressType(T)
 
-    rule #asNum128(@tlll(T:ByteArrayType, CODE, LA)) => #byte_array_to_num(@tlll(T, CODE, LA), %num, 32)
+    rule #asNum128(@tlll(T:ByteArrayType, CODE, LA)) => #byte_array_to_num(@tlll(T, CODE, LA), %num, 32, false)
 
     rule (. => #exception("Function arg type does not match expected type."))
          ~> #asNum128(@tlll(T, CODE:LLLExp, LA))
       requires notBool(#isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %bytes32)
                        orBool isAddressType(T) orBool isByteArrayType(T))
 
-    syntax TypedLLLExp  ::= "#byte_array_to_num"    "(" TypedLLLExp "," Type "," Int ")"         [function]
+    syntax TypedLLLExp  ::= "#byte_array_to_num"    "(" TypedLLLExp "," Type "," Int "," Bool ")"         [function]
   // ------------------------------------------------------------------------
-    rule #byte_array_to_num(@tlll(T:ByteArrayType, CODE:LLLExp, @locattr(LTGT:LocTarget, _)), OutT, Offset)
+    rule #byte_array_to_num(@tlll(T:ByteArrayType, CODE:LLLExp, @locattr(LTGT:LocTarget, _)), OutT, Offset, UseOffset)
         => @tlll(OutT,
             $with($_sub, CODE,
                  $with($_el1, /*first_el_getter*/
@@ -2913,8 +2913,10 @@ module VYPER-LLL
                                      $div($_el1, $exp(256, $sub(32, $_len))),
                                      $mload(@maxDecimalPos)),
                               //original is probably wrong, reporting an issue
-                              //$div($_el1, $exp(256, $sub(Offset, $_len))) //OutT ==K %num256
-                              $_el1 //OutT ==K %num256
+                              #ifLLLExp(UseOffset, //OutT ==K %num256
+                                $div($_el1, $exp(256, $sub(Offset, $_len))),  //original version, uses offset
+                                $_el1                                         //fixed version in most contexts
+                              )
                           )
                        )))),
             @none)
@@ -3927,7 +3929,8 @@ module VYPER-LLL
       when notBool (T ==K %num orBool T ==K %num256 orBool T ==K %bytes32 orBool T ==K %address orBool T ==K %bool)
 
     rule #RLPList(ARG0:TypedLLLExp, .Types, Ts:Types, N)
-         => #RLPList2(ARG0, Ts, Ts, #newPlaceholder(%bytesT(2 *Int N +Int 1 +Int #sizeOfType(%tupleT(Ts)))), 0, .TypedLLLExps)
+         => #RLPList2(ARG0, Ts, Ts,
+                      #newPlaceholder(%bytesT((2 *Int N +Int 1) *Int 32 +Int #sizeOfType(%tupleT(Ts)))), 0, .TypedLLLExps)
 
     syntax CTypedLLLExp ::= "#RLPList2" "(" TypedLLLExp   //ARG0
                                         "," Types         //Ts - types
@@ -3964,7 +3967,7 @@ module VYPER-LLL
     //decode num and uint256
     rule #RLPList2(_, T:Type Ts => Ts, _, @tlll(_, OUT, _), I => I +Int 1, DECODER => DECODER ++TLLL
             #byte_array_to_num(@tlll(%bytesT(0), $add(OUT, $mload($add(OUT, 32 *Int I))), @locattr(@memory, false)),
-                               T, 0)
+                               T, 32, true)
          )
       requires T ==K %num orBool T ==K %num256
 
