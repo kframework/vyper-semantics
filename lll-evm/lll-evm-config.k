@@ -14,6 +14,7 @@ module LLL-EVM-CONFIG
       <with> .Map </with> // Var -> StackLoc
       <b> // NOTE: mean break, but parser confuses with <br>
         <b-label> emptyLabel </b-label>
+        <b-continue> emptyLabel </b-continue>
         <b-height> emptyHeight </b-height>
       </b>
       <labelTbl> .Map </labelTbl>

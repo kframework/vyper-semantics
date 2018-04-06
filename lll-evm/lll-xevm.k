@@ -137,15 +137,16 @@ module LLL-XEVM
       ~> JUMPDEST(LEnd)
 
     // for L = I; N times; do S
-    rule $repeat(L, I, N:Int, S) => repeat(L, I, N, S, newLabel, newLabel)    syntax KItem ::= "repeat" "(" LLLExp "," LLLExp "," LLLExp "," LLLExp "," Label "," Label ")"
-    rule <k> repeat(L, I, N:Int, S, LBegin, LEnd)
+    rule $repeat(L, I, N:Int, S) => repeat(L, I, N, S, newLabel, newLabel, newLabel)    syntax KItem ::= "repeat" "(" LLLExp "," LLLExp "," LLLExp "," LLLExp "," Label "," Label "," Label ")"
+    rule <k> repeat(L, I, N:Int, S, LBegin, LContinueDest, LEnd)
           => L
-          ~> ctx(I, H +Int 1, W, BL, BH)
+          ~> ctx(I, H +Int 1, W, BL, BCont, BH)
           ~> push(N) // NOTE: no need to consider zero case
           ~> DUP(2) ~> DUP(4) ~> MSTORE // L := I
           ~> ADD // I + N
           ~> JUMPDEST(LBegin)
-          ~> ctx(S, H +Int 2, W, LEnd, H +Int 2)
+          ~> ctx(S, H +Int 2, W, LEnd, LContinueDest, H +Int 2)
+          ~> JUMPDEST(LContinueDest)
           ~> DUP(2) ~> MLOAD // L
           ~> PUSH(1, 1) ~> ADD // L + 1
           ~> DUP(1) ~> DUP(4) ~> MSTORE // L := L + 1
@@ -156,6 +157,7 @@ module LLL-XEVM
          <height> H </height>
          <with> W </with>
          <b-label> BL </b-label>
+         <b-continue> BCont </b-continue>
          <b-height> BH </b-height>
     when N >Int 0
     /* TODO:DJ: clean semantics
@@ -179,6 +181,12 @@ module LLL-XEVM
              )
     */
 
+    rule <k> $continue
+          => JUMP(BCont)
+         ... </k>
+         <b-continue> BCont </b-continue>
+    when BCont =/=K emptyLabel
+
     rule <k> $break
           => pop(H -Int BH)
           ~> JUMP(BL)
@@ -191,13 +199,14 @@ module LLL-XEVM
     // let X = V in E
     rule <k> $with(X, V, E)
           => V
-          ~> ctx(E, H +Int 1, W[X <- H], BL, BH)
+          ~> ctx(E, H +Int 1, W[X <- H], BL, BCont, BH)
           ~> #if valency(E) ==K 1 #then SWAP(1) #else . #fi
           ~> POP
          ... </k>
          <height> H </height>
          <with> W </with>
          <b-label> BL </b-label>
+         <b-continue> BCont </b-continue>
          <b-height> BH </b-height>
 
     rule $lll(S1, S2) => lll(S1, S2, newLabel, newLabel)    syntax KItem ::= "lll" "(" LLLExp "," LLLExp "," Label "," Label ")"
@@ -205,7 +214,7 @@ module LLL-XEVM
           => JUMP(LEnd)
           ~> BLANK(LBegin)
           ~> LLLBEGIN
-          ~> ctx(S1, 0, .Map, emptyLabel, emptyHeight)
+          ~> ctx(S1, 0, .Map, emptyLabel, emptyLabel, emptyHeight)
           ~> LLLEND
           ~> JUMPDEST(LEnd)
           ~> PUSH(LBegin) ~> PUSH(LEnd) ~> SUB
@@ -281,6 +290,7 @@ module LLL-XEVM
     rule valency(_:Id) => 1
 
     rule valency($break           ) => 0
+    rule valency($continue        ) => 0
     rule valency($set(A,B)        ) => 0 when valency(A) ==K 1 andBool valency(B) ==K 1
     rule valency($pass            ) => 0
     rule valency($assert(A)       ) => 0 when valency(A) ==K 1
@@ -430,20 +440,22 @@ module LLL-XEVM
     rule <k> with(W) => . ... </k>
          <with> _ => W </with>
 
-    syntax KItem ::= "break" "(" Label "," Int ")"
-    rule <k> break(L, H) => . ... </k>
+    syntax KItem ::= "break" "(" Label "," Label "," Int ")"
+    rule <k> break(L, BCont, H) => . ... </k>
          <b-label> _ => L </b-label>
+         <b-continue> _ => BCont </b-continue>
          <b-height> _ => H </b-height>
 
-    syntax KItem ::= "ctx" "(" K "," Int "," Map "," Label "," Int ")"
-    rule <k> ctx(K, H, W, BL, BH)
-          => height(H) ~> with(W) ~> break(BL, BH)
+    syntax KItem ::= "ctx" "(" K "," Int "," Map "," Label "," Label "," Int ")"
+    rule <k> ctx(K, H, W, BL, BCont, BH)
+          => height(H) ~> with(W) ~> break(BL, BCont, BH)
           ~> K
-          ~> height(H') ~> with(W') ~> break(BL', BH')
+          ~> height(H') ~> with(W') ~> break(BL', BCont', BH')
          ... </k>
          <height> H' </height>
          <with> W' </with>
          <b-label> BL' </b-label>
+         <b-continue> BCont' </b-continue>
          <b-height> BH' </b-height>
 
     syntax KItem ::= "assertTrue"
@@ -482,9 +494,10 @@ module LLL-XEVM
                    | "doh" "(" Ls "," Int ")"
     rule <k> do(Es) => do(Es, H) ... </k>
          <height> H </height>
-    rule <k> do(E Es, H) => ctx(E, H, W, BL, BH) ~> do(Es, H +Int 1) ... </k>
+    rule <k> do(E Es, H) => ctx(E, H, W, BL, BCont, BH) ~> do(Es, H +Int 1) ... </k>
          <with> W </with>
          <b-label> BL </b-label>
+         <b-continue> BCont </b-continue>
          <b-height> BH </b-height>
     rule do(.Ls, _) => .
     rule <k> doh(Es, HInc) => do(Es, H +Int HInc) ... </k>
