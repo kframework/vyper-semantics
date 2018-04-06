@@ -766,7 +766,7 @@ module VYPER-LLL
     syntax CLLLExps  ::= "#assignImpl" "(" CTypedLLLExp  /*left variable loc*/   ","
                                            CTypedLLLExp  /*right compiled Expr*/ ")"  [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #assignImpl(@tlll(LT:BaseType, LOC, LOCATTR), RTCODE)
+    rule #assignImpl(@tlll(LT:BaseType, LOC, LOCATTR), RTCODE:TypedLLLExp)
         => #mkSetterBase(@tlll(LT, LOC, LOCATTR),
                          #baseTypeConvert(RTCODE, LT))
 
@@ -952,14 +952,14 @@ module VYPER-LLL
                                                     ")"
  // ------------------------------------------------------------------
     //struct
-    rule (. => #assignImpl(#lookupVarElement(LTTOKENCODE, @tlll(%void, NAME, @none)), TEXPR))
+    rule (. => #assignImpl(#lookupVarElement(LTOKEN, @tlll(%void, NAME, @none)), TEXPR))
          ~> #assignStructOrTLiteral(%structT(%annvar(NAME, T) ANNVARS => ANNVARS),
-                                    LCODE, LTTOKENCODE, $multi(TEXPR TEXPRS => TEXPRS), 0, RESULTCODE)
+                                    LCODE, LTOKEN, $multi(TEXPR TEXPRS => TEXPRS), 0, RESULTCODE)
 
     //tuple
-    rule (. => #assignImpl(#lookupVarElement(LTTOKENCODE, @tlll(%void, CNT, @none)), TEXPR))
-         ~> #assignStructOrTLiteral(%tupleT(_),
-                                    LCODE, LTTOKENCODE, $multi(TEXPR TEXPRS => TEXPRS), CNT:Int => CNT +Int 1, RESULTCODE)
+    rule (. => #assignImpl(#lookupVarElement(LTOKEN, @tlll(%void, CNT, @none)), TEXPR))
+         ~> #assignStructOrTLiteral(%tupleT(T Ts => Ts),
+                                    LCODE, LTOKEN, $multi(TEXPR TEXPRS => TEXPRS), CNT:Int => CNT +Int 1, RESULTCODE)
 
     rule (CODE:LLLExps => .)
          ~> #assignStructOrTLiteral(LT:Type, LCODE, LTTOKENCODE, RCODE, _, RESULTCODE => RESULTCODE ++LLL CODE)
@@ -2897,7 +2897,7 @@ module VYPER-LLL
       requires notBool(#isTypeOf(T, %num) orBool #isTypeOf(T, %num256) orBool #isTypeOf(T, %bytes32)
                        orBool isAddressType(T) orBool isByteArrayType(T))
 
-    syntax CTypedLLLExp  ::= "#byte_array_to_num"    "(" TypedLLLExp "," Type "," Int ")"
+    syntax TypedLLLExp  ::= "#byte_array_to_num"    "(" TypedLLLExp "," Type "," Int ")"         [function]
   // ------------------------------------------------------------------------
     rule #byte_array_to_num(@tlll(T:ByteArrayType, CODE:LLLExp, @locattr(LTGT:LocTarget, _)), OutT, Offset)
         => @tlll(OutT,
@@ -3894,6 +3894,130 @@ module VYPER-LLL
  // -------------------------------------------------------
     rule #count(E:Expr Es) => 1 +Int #count(Es)
     rule #count(.Exprs) => 0
+
+
+// RLPList()
+// ============================
+    rule (. => #exception("RLP list must have at least one item"))
+         ~> #compileToLoc(%RLPList(E, .Types))
+
+    rule #compileToLoc(%RLPList(E, Ts:Types)) => #RLPList(#compileToVal(E), Ts, .Types, 0)
+
+    syntax CTypedLLLExp ::= "#RLPList" "(" CTypedLLLExp "," Types "," Types "," Int ")" [strict(1)]
+ // -------------------------------------------------------
+    rule (. => #exception("RLP list must have at most 32 items"))
+         ~> #RLPList(_, T:Type Ts:Types, _, 32)
+
+    rule (. => #parseType(T, true))
+         ~> #RLPList(_:TypedLLLExp, T:Type Ts:Types => Ts, _, N)
+      requires N <Int 32
+
+    rule (#parseType(%bytes, _) => .)
+         ~> #RLPList(@tlll(%bytesT(L), _,_), _, Ts => Ts ++Types (%bytesT(L) .Types), N => N +Int 1)
+
+    rule (T:BaseType => .) ~> #RLPList(_,_, Ts => Ts ++Types T .Types, N => N +Int 1)
+      when T ==K %num orBool T ==K %num256 orBool T ==K %bytes32 orBool T ==K %address orBool T ==K %bool
+
+    rule (. => #exception("RLP lists only accept BaseTypes and byte arrays"))
+         ~> T:Type ~> #RLPList(_,_, Ts => Ts ++Types T .Types, N => N +Int 1)
+      when notBool isBaseType(T)
+
+    rule (. => #exception("Unsupported base type"))
+         ~> T:BaseType ~> #RLPList(_,_, Ts => Ts ++Types T .Types, N => N +Int 1)
+      when notBool (T ==K %num orBool T ==K %num256 orBool T ==K %bytes32 orBool T ==K %address orBool T ==K %bool)
+
+    rule #RLPList(ARG0:TypedLLLExp, .Types, Ts:Types, N)
+         => #RLPList2(ARG0, Ts, Ts, #newPlaceholder(%bytesT(2 *Int N +Int 1 +Int #sizeOfType(%tupleT(Ts)))), 0, .TypedLLLExps)
+
+    syntax CTypedLLLExp ::= "#RLPList2" "(" TypedLLLExp   //ARG0
+                                        "," Types         //Ts - types
+                                        "," Types         //Ts - types
+                                        "," CTypedLLLExp  //PL - placeholder
+                                        "," Int           //I - index of currently decoded element
+                                        "," TypedLLLExps  //DECODER - result
+                                        ")"   [strict(4)]
+ // -------------------------------------------------------
+    //decode bytes32
+    rule #RLPList2(_, %bytes32 Ts => Ts, _, @tlll(_, OUT, _), I => I +Int 1, DECODER => DECODER ++TLLL
+            @tlll(%bytes32,
+              $seq(
+                    $assert($eq($mload($add(OUT, $mload($add(OUT, 32 *Int I)))), 32)),
+                    $mload($add(32, $add(OUT, $mload($add(OUT, 32 *Int I)))))),
+            @none))
+
+    //decode address
+    rule #RLPList2(_, %address Ts => Ts, _, @tlll(_, OUT, _), I => I +Int 1, DECODER => DECODER ++TLLL
+            @tlll(%address,
+              $seq(
+                $assert($eq($mload($add(OUT, $mload($add(OUT, 32 *Int I)))), 20)),
+                $mod(
+                     $mload($add(20, $add(OUT, $mload($add(OUT, 32 *Int I))))),
+                     $mload(@addrSizePos))),
+            @none))
+
+    //decode byte array
+    rule #RLPList2(_, %bytesT(L) Ts => Ts, _, @tlll(_, OUT, _), I => I +Int 1, DECODER => DECODER ++TLLL
+            @tlll(%bytesT(L),
+              $add(OUT, $mload($add(OUT, 32 *Int I))),
+            @locattr(@memory, true)))
+
+    //decode num and uint256
+    rule #RLPList2(_, T:Type Ts => Ts, _, @tlll(_, OUT, _), I => I +Int 1, DECODER => DECODER ++TLLL
+            #byte_array_to_num(@tlll(%bytesT(0), $add(OUT, $mload($add(OUT, 32 *Int I))), @locattr(@memory, false)),
+                               T, 0)
+         )
+      requires T ==K %num orBool T ==K %num256
+
+    //decode bool
+    rule #RLPList2(_, %bool Ts => Ts, _, @tlll(_, OUT, _), I => I +Int 1, DECODER => DECODER ++TLLL
+            @tlll(%bool,
+              $with($_ans, $mload($add(1, $add(OUT, $mload($add(OUT, 32 *Int I))))),
+                $seq($assert($or($eq($_ans, 0), $eq($_ans, 257))), $div($_ans, 257))),
+            @none))
+
+    //end of decoding, ARG0 is memory
+    rule #RLPList2(@tlll(T, CODE0, LA0), .Types, Ts, TLOUT:TypedLLLExp, N, DECODER)
+         => #RLPList5(TLOUT, DECODER, Ts, CODE0) //variable_pointer
+      requires #isInMemory(LA0)
+
+    //end of decoding, ARG0 is storage
+    rule #RLPList2(@tlll(T, CODE0, LA0), .Types, Ts, TLOUT:TypedLLLExp, N, DECODER)
+         => #RLPList3(@tlll(T, CODE0, LA0), TLOUT, DECODER, Ts, #newPlaceholder(T)) // new placeholder
+      requires notBool #isInMemory(LA0)
+
+    rule #RLPList3(@tlll(T, CODE0, LA0), TLOUT, DECODER, Ts, PL2:TypedLLLExp)
+         => #RLPList4(@tlll(T, CODE0, LA0), TLOUT, DECODER, Ts, PL2:TypedLLLExp,
+                   #mkByteArrayCopier(PL2, @tlll(T, $_ptr, LA0)))
+
+    rule #RLPList4(@tlll(T, CODE0, LA0), TLOUT, DECODER, Ts, @tlll(_, PL2, _), COPIER:LLLExps)
+         => #RLPList5(TLOUT, DECODER, Ts, $with($_ptr, CODE0, $%seq(COPIER ++LLL PL2,.LLLExps)))
+
+    syntax CTypedLLLExp ::= "#RLPList3" "(" TypedLLLExp "," TypedLLLExp "," TypedLLLExps "," Types "," CTypedLLLExp ")" [strict(5)]
+                          | "#RLPList4" "(" TypedLLLExp "," TypedLLLExp "," TypedLLLExps "," Types "," TypedLLLExp "," CLLLExps ")"
+                                        [strict(6)]
+                          | "#RLPList5" "(" TypedLLLExp "," TypedLLLExps "," Types "," LLLExp ")" //PL, DECODER, Ts, variable_pointer
+
+    //compute initial_setter
+    rule #RLPList5(@tlll(_, OUT, _), @tlll(T0, CODE0, LA0) DECREST:TypedLLLExps, Ts, VARPTR)
+         => @tlll(%tupleT(Ts),
+              $multi(@tlll(T0, $%seq($%seq(    //initial_setter
+                                        $with($_sub, VARPTR,
+                                            $pop($call(
+                                                     1500 +Int 400 *Int #listLen(Ts, 0) +Int 10 *Int 2, //len(args) == 2
+                                                     #RLP_DECODER_ADDRESS,
+                                                     0,
+                                                     $add($_sub, 32),
+                                                     $mload($_sub),
+                                                     OUT,
+                                                     64 *Int #listLen(Ts, 0) +Int 32 +Int #sizeOfType(%tupleT(Ts))))),
+                                        $assert($eq($mload(OUT), 32 *Int #listLen(Ts, 0) +Int 32))),
+                                     CODE0),
+                      LA0)
+                     DECREST),
+              @locattr(@memory, false))
+
+    syntax Int ::= "#RLP_DECODER_ADDRESS"
+    rule #RLP_DECODER_ADDRESS => String2Base("5185D17c44699cecC3133114F8df70753b856709", 16)  [macro]
 
 
 //////////////////////////////////////////////////////////////////////////////

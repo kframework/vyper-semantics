@@ -132,5 +132,7 @@ module LLL-ABSTRACT-SYNTAX
                     | "$_di32"   [token] | "$_mi32" [token] | "$_index" [token]
                     // raw_log
                     | "$_arr"    [token]
+                    // RLPList
+                    | "$_ans"    [token] | "$_ptr"  [token]
 
 endmodule

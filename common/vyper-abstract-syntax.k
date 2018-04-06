@@ -182,6 +182,7 @@ module VYPER-ABSTRACT-SYNTAX
                    | MappingType
                    | StructType
                    | TupleType
+                   | "%bytes" //temp value only used for RLPList()
 
     syntax BaseType  ::= "%bool"
                        | NumericType | "%num256"  | "%signed256"
@@ -300,6 +301,7 @@ module VYPER-ABSTRACT-SYNTAX
                            | "%max"                 "(" Expr "," Expr ")"
                            | "%sha3"                "(" Expr ")"
                            | "%raw_log"             "(" Expr "," Expr ")"
+                           | "%RLPList"             "(" Expr "," Types ")"
 
 
 endmodule

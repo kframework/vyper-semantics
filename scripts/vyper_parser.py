@@ -109,7 +109,8 @@ def parseBaseType(name: ast.Name):  # value is Str. NumericType not yet supporte
         if name.id == "uint256":
             return "%num256"
         elif name.id in ["bool", "num256", "signed256", "bytes32", "address", "num", "decimal",
-                         "timestamp", "timedelta", "currency_value", "currency1_value", "currency2_value", "wei_value"]:
+                         "timestamp", "timedelta", "currency_value", "currency1_value", "currency2_value", "wei_value",
+                         "bytes"]:
             return "%{}".format(name.id)
         else:
             return "%contractT({})".format(name.id)
@@ -436,6 +437,8 @@ def parseCallExpr(expr: ast.Call):
             else:
                 typeArg = parseBaseType(expr.keywords[0].value)
             return "%extract32({}, {}, {})".format(parseArg(expr.args[0]), parseArg(expr.args[1]), typeArg)
+        elif expr.func.id == "RLPList":
+            return "%RLPList({}, {})".format(parseArg(expr.args[0]), parseTypes(expr.args[1].elts))
         else:
             return "%{}({})".format(expr.func.id, parseArgs(expr.args + expr.keywords, ", "))
     elif type(expr.func) == ast.Attribute:
@@ -452,6 +455,10 @@ def parseCallExpr(expr: ast.Call):
             raise ParserException("Unsupported Call Expr format: " + str(expr))
     else:
         raise ParserException("Unsupported Call Expr format: " + str(expr))
+
+
+def parseTypes(list):
+    return parseList(list, parseType, " ")
 
 
 def getKeyword(keywords: list, param: str):
