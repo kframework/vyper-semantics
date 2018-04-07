@@ -2909,9 +2909,9 @@ module VYPER-LLL
                        $%seq(
                           $assert($or($iszero($_len), $div($_el1, $exp(256, 31)))),
                           #ifLLLExp(OutT ==K %num,
-                              $clamp($mload(@minDecimalPos),
+                              $clamp($mload(@minNumPos),
                                      $div($_el1, $exp(256, $sub(32, $_len))),
-                                     $mload(@maxDecimalPos)),
+                                     $mload(@maxNumPos)),
                               //original is probably wrong, reporting an issue
                               #ifLLLExp(UseOffset, //OutT ==K %num256
                                 $div($_el1, $exp(256, $sub(Offset, $_len))),  //original version, uses offset
