@@ -16,6 +16,10 @@ class KVStructureException(Exception):
     pass
 
 
+class KVTypeMismatchException(Exception):
+    pass
+
+
 def get_original_if_0x_prefixed(expr):
     context_slice = get_original_str_to_line_end(expr)
     if context_slice[:2] != '0x':
@@ -420,8 +424,10 @@ def encode_char(encoded, i):
 def parseCallExpr(expr: ast.Call):
     if type(expr.func) == ast.Name:
         if expr.func.id == "as_wei_value":
-            return "%as_wei_value({}, {})".format(parseExpr(expr.args[0]),
-                                                  expr.args[1].s if type(expr.args[1]) == ast.Str else expr.args[1].id)
+            if type(expr.args[1]) == ast.Str:
+                return "%as_wei_value({}, {})".format(parseExpr(expr.args[0]), expr.args[1].s)
+            else:
+                raise KVTypeMismatchException("Expecting str_literal for argument 2 of as_wei_value")
         elif expr.func.id == "concat":
             return "%concat({})".format(parseArgs(expr.args + expr.keywords))
         elif expr.func.id == "raw_call":

@@ -2760,6 +2760,9 @@ module VYPER-LLL
  // ------------------------------------------------------------------
     rule #balance(@tlll(_:AddressType, ADDR, @none)) => @tlll(%unitT(%num, %wei |-> 1, false), $balance(ADDR), @none)
 
+    rule (. => #exception("balance keyword expects an address as input"))
+         ~> #balance(@tlll(T:Type, ADDR, @none))
+      requires notBool isAddressType(T)
 
     rule #compileToLoc(%codesize(EXPR))   => #codesize(#compileToVal(EXPR))
 
@@ -2865,6 +2868,9 @@ module VYPER-LLL
     rule #asUnitlessNumber(@tlll(%unitT(%decimal, UNITMAP:Map, POSITIONAL), CODE, _))
         => @tlll(%decimal, CODE, @none)
 
+    rule (. => #exception("Expecting one of ('int128', 'decimal') for argument 1 of as_unitless_number"))
+         ~> #asUnitlessNumber(@tlll(T:Type, _,_))
+      requires notBool (#isTypeOf(T, %num) orBool #isTypeOf(T, %decimal))
 
     // convert()
     //---------------------
@@ -2995,6 +3001,14 @@ module VYPER-LLL
     rule #slice(@tlll(%bytesT(L), BYTESCODE, EXPRATTR), @tlll(%num, START, _), @tlll(%num, LEN, _))
         => #sliceAux(@tlll(%bytesT(L), BYTESCODE, EXPRATTR), START, LEN,
                            #newPlaceholder(%bytesT(L +Int 32)))
+
+    rule (. => #exception("Type for slice start index must be a unitless number"))
+         ~> #slice(@tlll(%bytesT(L), BYTESCODE, EXPRATTR), @tlll(T2:Type, START, LA1), @tlll(%num, LEN, LA2))
+      requires T2 =/=K %num
+
+    rule (. => #exception("Type for slice length must be a unitless number"))
+         ~> #slice(@tlll(%bytesT(L), BYTESCODE, EXPRATTR), @tlll(T2, START, LA1), @tlll(T3:Type, LEN, LA2))
+      requires T3 =/=K %num
 
     rule #sliceAux(@tlll(%bytesT(L), BYTESLOC, @locattr(@storage, MUTABLE)), START, LEN, PLACEHOLDER)
         => #sliceBytesByCopy(@tlll(%bytesT(L),
@@ -3735,11 +3749,16 @@ module VYPER-LLL
         => #ifThen(notBool(#isTypeOf(LT, %num) orBool #isTypeOf(LT, %decimal) orBool #isTypeOf(LT, %num256)) orBool
                    notBool(#isTypeOf(RT, %num) orBool #isTypeOf(RT, %decimal) orBool #isTypeOf(RT, %num256)),
                    #exception("Function arg type does not match expected type."))
-        ~> #ifThen(notBool(#areUnitsCompatible(LT, RT, #isNumLiteral(LCODE))) andBool
-                   notBool(#areUnitsCompatible(RT, LT, #isNumLiteral(RCODE))),
+        ~> #ifThen(notBool #areUnitsCompatible(LT, RT, #isNumLiteral(LCODE)) andBool
+                   notBool #areUnitsCompatible(RT, LT, #isNumLiteral(RCODE)),
                    #exception("Units must be compatible."))
-        ~> #minMaxAux(OP, @tlll(#dropUnit(LT), LCODE, LEXPRATTR),
-                          @tlll(#dropUnit(RT), RCODE, REXPRATTR))
+        ~> #if LT ==K RT
+              #then #setType(#minMaxAux(OP, @tlll(#dropUnit(LT), LCODE, LEXPRATTR),
+                                            @tlll(#dropUnit(RT), RCODE, REXPRATTR)),
+                             LT)
+              #else #minMaxAux(OP, @tlll(#dropUnit(LT), LCODE, LEXPRATTR),
+                                   @tlll(#dropUnit(RT), RCODE, REXPRATTR))
+           #fi
 
     rule #minMaxAux(OP, @tlll(T1, CODE1, A1), @tlll(T2, CODE2, A2))
         => #ifThen(notBool(
@@ -4623,7 +4642,7 @@ module VYPER-LLL
 
     syntax CTypedLLLExp ::= "#setType" "(" CTypedLLLExp "," Type ")" [strict]
  // -------------------------------------------------------------------------------------------
-    rule #setType(@tlll(T1, CODE, LA), T2) => @tlll(T2, CODE, LA)
+    rule #setType(@tlll(_, CODE, LA), T2) => @tlll(T2, CODE, LA)
 
 
     syntax Bool  ::= "#areUnitsCompatible" "(" Type ","  // from type
@@ -4631,17 +4650,14 @@ module VYPER-LLL
                                                Bool      // is from a number literal?
                                            ")"  [function]
  // ------------------------------------------------------
-    rule #areUnitsCompatible(FROM, TO, _) => true
-      requires notBool(isUnitType(FROM)) andBool notBool(isUnitType(TO))
-
     rule #areUnitsCompatible(FROM, TO, true) => true
-      requires notBool(isUnitType(FROM)) andBool isUnitType(TO)
+      requires notBool isUnitType(FROM)
 
-    rule #areUnitsCompatible(FROM, TO, false) => false
-      requires notBool(isUnitType(FROM)) andBool isUnitType(TO)
+    rule #areUnitsCompatible(FROM, TO, false) => (notBool isUnitType(TO)) ==K true
+      requires notBool isUnitType(FROM)
 
     rule #areUnitsCompatible(FROM:UnitType, TO, _) => false
-      requires notBool(isUnitType(TO))
+      requires notBool isUnitType(TO)
 
     rule #areUnitsCompatible(%unitT(_, FROMMAP:Map, FROMPOSITIONAL), %unitT(_, TOMAP:Map, TOPOSITIONAL), _)
         => FROMMAP ==K TOMAP andBool FROMPOSITIONAL ==K TOPOSITIONAL

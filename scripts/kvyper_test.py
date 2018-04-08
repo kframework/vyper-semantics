@@ -7,6 +7,7 @@ import re
 
 from vyper_parser import main as parse  # string -> string
 from vyper_parser import KVStructureException
+from vyper_parser import KVTypeMismatchException
 from op2byte import encode as op2byte  # string list -> bytes
 from vyper import exceptions
 
@@ -78,8 +79,6 @@ def try_decode_exception(exceptionMsg):
             or "Invalid input for uint256" in exceptionMsg \
             or "Invalid denomination" in exceptionMsg:
         raise exceptions.InvalidLiteralException(exceptionMsg)
-    elif "Invalid unit" in exceptionMsg:
-        raise exceptions.InvalidTypeException(exceptionMsg)
     elif "Argument must have type" in exceptionMsg \
             or "type invalid" in exceptionMsg \
             or "base type" in exceptionMsg \
@@ -92,6 +91,7 @@ def try_decode_exception(exceptionMsg):
             or "Bad byte array length" in exceptionMsg \
             or "Invalid base unit" in exceptionMsg \
             or "Invalid unit expression" in exceptionMsg \
+            or "Invalid units" in exceptionMsg \
             or "Can only raise a base type to an exponent" in exceptionMsg \
             or "Exponent must be positive integer" in exceptionMsg \
             or "Mismatched number of elements" in exceptionMsg \
@@ -113,8 +113,12 @@ def try_decode_exception(exceptionMsg):
             or "don't match" in exceptionMsg \
             or "Expecting one of" in exceptionMsg \
             or "Can't compare values" in exceptionMsg \
+            or "keyword expects" in exceptionMsg \
+            or "Type for" in exceptionMsg \
             or "positional" in exceptionMsg:
         raise exceptions.TypeMismatchException(exceptionMsg)
+    elif "Invalid unit" in exceptionMsg:
+        raise exceptions.InvalidTypeException(exceptionMsg)
 
 
 def lll2evm(lll):  # string -> string list
@@ -135,6 +139,8 @@ def compile(code):  # string -> bytes
         ast = parse(code)
     except KVStructureException as e:
         raise exceptions.StructureException(str(e))
+    except KVTypeMismatchException as e:
+        raise exceptions.TypeMismatchException(str(e))
 
     print("\n{}\n\n".format(ast))
 
