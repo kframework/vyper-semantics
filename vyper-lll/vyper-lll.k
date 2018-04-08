@@ -709,15 +709,15 @@ module VYPER-LLL
                                       ")"                         [strict(2)]
  // ---------------------------------------------------------------------------
     rule #assign(V, @tlll(T, CODE, EXPRATTR))
-        => #assignImpl(#getTarget(V, #lookupOrNewVar(V, T)),
+        => #assignImpl(#getTarget(V, #lookupVar(V)),
                       @tlll(T, CODE, EXPRATTR))
       requires T =/=K %NoneType
 
 
-    /*  Checks that var is not used in a loop, then makes some more checks inside #getTargetAux(), 
+    /*  Checks that var is not used in a loop, then makes some more checks inside #getTargetAux(),
         then rewrites into arg 2*/
-    syntax CTypedLLLExp  ::= "#getTarget" "(" Var ","       //raw var 
-                                              CTypedLLLExp  //same var compiled to TypedLLLExp. 
+    syntax CTypedLLLExp  ::= "#getTarget" "(" Var ","       //raw var
+                                              CTypedLLLExp  //same var compiled to TypedLLLExp.
                                           ")"  [strict(2)]
  // -------------------------------------------------------------------------------
     rule <k> (. => #exception("Altering iterator which is in use!"))
@@ -758,7 +758,7 @@ module VYPER-LLL
          <constant> CONSTANT </constant>
 
 
-    /*  Assignment expression: V = E. 
+    /*  Assignment expression: V = E.
         After all checks have been performed and memory was allocated.
 
         Also represents make_setter() from Viper compiler.
@@ -3642,19 +3642,19 @@ module VYPER-LLL
     // uint256_addmod
     syntax CTypedLLLExp  ::= "#num256Addmod" "(" CTypedLLLExp "," CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
-    rule #compileToLoc(%uint256_addmod(EXPR1, EXPR2, EXPR3)) 
+    rule #compileToLoc(%uint256_addmod(EXPR1, EXPR2, EXPR3))
          => #num256Addmod(#compileToVal(EXPR1), #compileToVal(EXPR2), #compileToVal(EXPR3))
 
     /*return LLLnode.from_list(['seq',
                                   ['assert', ['or', ['iszero', args[1]], ['gt', ['add', args[0], args[1]], args[0]]]],
-                                  ['addmod', args[0], args[1], args[2]]], typ=BaseType('num256'), pos=getpos(expr))    
+                                  ['addmod', args[0], args[1], args[2]]], typ=BaseType('num256'), pos=getpos(expr))
     */
     rule #num256Addmod(@tlll(%num256, CODE0, _), @tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq(
                             $assert($or($iszero(CODE1), $gt($add(CODE0, CODE1), CODE0))),
                             $addmod(CODE0, CODE1, $clamp_nonzero(CODE2)),.LLLExps), @none)
-                            
-                            
+
+
     // uint256_mulmod
     syntax CTypedLLLExp  ::= "#num256Mulmod" "(" CTypedLLLExp "," CTypedLLLExp "," CTypedLLLExp ")"    [seqstrict]
  // ------------------------------------------------------------------------------------------
@@ -3664,7 +3664,7 @@ module VYPER-LLL
     /*return LLLnode.from_list(['seq',
                             ['assert', ['or', ['iszero', args[0]],
                             ['eq', ['div', ['mul', args[0], args[1]], args[0]], args[1]]]],
-                            ['mulmod', args[0], args[1], args[2]]], typ=BaseType('num256'), pos=getpos(expr))    
+                            ['mulmod', args[0], args[1], args[2]]], typ=BaseType('num256'), pos=getpos(expr))
     */
     rule #num256Mulmod(@tlll(%num256, CODE0, _), @tlll(%num256, CODE1, _), @tlll(%num256, CODE2, _))
         => @tlll(%num256, $%seq($assert($or($iszero(CODE0),
@@ -4326,11 +4326,11 @@ module VYPER-LLL
     rule #canonicalizeType(%unitT(%decimal, _:Map,_), _) => "decimal10"
 
     rule #canonicalizeType(%num256, _) => "uint256"
-   
+
     rule #canonicalizeType(%bool, _) => "bool"
- 
+
     rule #canonicalizeType(_:AddressType, _) => "address"
- 
+
     rule #canonicalizeType(%bytes32, _) => "bytes32"
 
     syntax KItem  ::= "#canonicalizeListType" "(" K "," Int ")"  [strict(1)]
@@ -4999,22 +4999,6 @@ module VYPER-LLL
  // -------------------------------------------------
     rule <k> CODE:LLLExps ~> (#clearVar(NAME) => .) ... </k>
          <env>... (%var(NAME) |-> _ => .Map) ...</env>
-
-
-    syntax CTypedLLLExp  ::= "#lookupOrNewVar" "(" Var "," Type ")"
- // ---------------------------------------------------------------
-    rule <k> #lookupOrNewVar(%var(NAME), _) => @tlll(T, LOC, LOCATTR) ... </k>
-         <env>... %var(NAME) |-> @taddr(T, LOC, LOCATTR) ...</env>
-
-    rule <k> #lookupOrNewVar(%var(NAME), T) => #newVar(NAME, T) ... </k>
-         <env> ENV </env>
-      requires notBool %var(NAME) in_keys(ENV)
-
-    rule #lookupOrNewVar(%svar(NAME), _) => #lookupVar(%svar(NAME))
-
-    rule #lookupOrNewVar(%subscript(V, EXPR), _) => #lookupVar(%subscript(V, EXPR))
-
-    rule #lookupOrNewVar(%attribute(V, FILEDNAME), _) => #lookupVar(%attribute(V, FILEDNAME))
 
 
     syntax CTypedLLLExp  ::= "#newLoopVar" "(" Id "," Type ")"

@@ -12,6 +12,10 @@ class ParserException(Exception):
     pass
 
 
+class KVStructureException(Exception):
+    pass
+
+
 def get_original_if_0x_prefixed(expr):
     context_slice = get_original_str_to_line_end(expr)
     if context_slice[:2] != '0x':
@@ -605,6 +609,8 @@ def parseExpr(node):
         return "%compareop({}, {}, {})" \
             .format(parseCompareOp(node.ops[0]), parseExpr(node.left), parseExpr(node.comparators[0]))
     elif type(node) == ast.BoolOp:
+        if in_assignment and (type(node.values[0]) == ast.Call or type(node.values[1]) == ast.Call):
+            raise KVStructureException("Boolean operations with calls may not be performed on assignment")
         return "%boolop({}, {}, {})".format(parseBoolOp(node.op), parseExpr(node.values[0]), parseExpr(node.values[1]))
     elif type(node) == ast.UnaryOp:
         return "%unaryop({}, {})".format(parseUnaryOp(node.op), parseExpr(node.operand))
@@ -673,6 +679,9 @@ def parseAnnVars(annVars: ast.Dict):
     return parseDict(annVars, parseAnnVarKeyValue, " ")
 
 
+in_assignment = False
+
+
 # syntax Stmt     ::= AnnVar
 #                   | "%assign"    "(" Var "," Expr ")"
 #                   | "%augassign" "(" AugAssignOp "," Var "," Expr ")"
@@ -715,13 +724,22 @@ def parseAnnVars(annVars: ast.Dict):
 #
 # %forrange(i, 10, %pass)
 def parseStmt(node):
-    if type(node) == ast.AnnAssign:
-        return parseAnnVar(node)
-    elif type(node) == ast.Assign:
-        return "%assign({}, {})".format(parseVar(node.targets[0]), parseExpr(node.value))
-    elif type(node) == ast.AugAssign:
-        return "%augassign({}, {}, {})".format(parseAugAssignOp(node.op), parseVar(node.target),
-                                               parseExpr(node.value))
+    if type(node) == ast.AnnAssign or type(node) == ast.Assign or type(node) == ast.AugAssign:
+        global in_assignment
+        in_assignment = True
+
+        if type(node) == ast.AnnAssign:
+            result = parseAnnVar(node)
+        elif type(node) == ast.Assign:
+            result = "%assign({}, {})".format(parseVar(node.targets[0]), parseExpr(node.value))
+        elif type(node) == ast.AugAssign:
+            result = "%augassign({}, {}, {})".format(parseAugAssignOp(node.op), parseVar(node.target),
+                                                     parseExpr(node.value))
+        else:
+            raise ParserException("unreachable")
+        in_assignment = False
+        return result
+
     elif type(node) == ast.If:
         if len(node.orelse) == 0:
             return "%if({},{})".format(parseExpr(node.test), parseStmts(node.body))

@@ -6,6 +6,7 @@ import subprocess
 import re
 
 from vyper_parser import main as parse  # string -> string
+from vyper_parser import KVStructureException
 from op2byte import encode as op2byte  # string list -> bytes
 from vyper import exceptions
 
@@ -130,7 +131,11 @@ def lll2evm(lll):  # string -> string list
 def compile(code):  # string -> bytes
     print("\n{}\n\n".format(code))
 
-    ast = parse(code)
+    try:
+        ast = parse(code)
+    except KVStructureException as e:
+        raise exceptions.StructureException(str(e))
+
     print("\n{}\n\n".format(ast))
 
     lll = vyper2lll(ast)
