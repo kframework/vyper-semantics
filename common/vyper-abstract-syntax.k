@@ -266,7 +266,6 @@ module VYPER-ABSTRACT-SYNTAX
                            | "%ecadd"               "(" Expr "," Expr ")"
                            | "%ecmul"               "(" Expr "," Expr ")"
                            | "%extract32"           "(" Expr "," Expr "," Type ")"
-                           | "%bytes_to_num"        "(" Expr ")"
                            | "%as_wei_value"        "(" Expr "," Id   ")"
                            | "%raw_call"            "(" Expr    // address
                                                     "," Expr    // data: Bytes

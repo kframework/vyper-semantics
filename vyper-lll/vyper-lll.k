@@ -3339,58 +3339,6 @@ module VYPER-LLL
     rule #toAddress(@tlll(T, CODE, @none)) => @tlll(%address, $uclamplt(CODE, $mload(@addrSizePos)), @none)
 
 
-    // bytes_to_num
-    //---------------------
-    syntax CTypedLLLExp  ::= "#bytes_to_num"    "(" CTypedLLLExp ")"    [strict]
-    syntax CTypedLLLExp  ::= "#bytes_to_num_Aux" "(" LLLExp ")"
- // ------------------------------------------------------------------------
-    rule #compileToLoc(%bytes_to_num(EXPR)) => #bytes_to_num(#compileToLoc(EXPR))
-
-    rule #bytes_to_num(@tlll(T, LOC, @locattr(@memory, B)))
-        => #ifThenElse(isByteArrayType(T),
-                       #bytes_to_num_Aux(LOC),
-                       #exception("Function arg type does not match expected type.")
-                          ~> #bytes_to_num(@tlll(T, LOC, @locattr(@memory, B))))
-
-    /*Conversion algorithm:
-        Allocate 64 bytes to some V.
-        Check that most significant byte in the array is not 0x00.
-        Initialzie first 32 bytes with the correct padding: 0x00 if nonnegative, 0xff if negative.
-        Copy the block starting with LOC+32 to position V+32-[byte array size].
-            This way the useful [byte array size] bites will be the last in the block V -> V+32.
-        Return block V.
-
-        Alternative implementation:
-            allocate only 32 bytes and copy the useful bytes one by one in a loop using $mstore8 .
-
-        Byte array format in memory: First 32 bytes (from LOC): SIZE,
-                                     next SIZE bytes: the actual bytes. (padded with 0x00 to full blocks of 32 bytes)
-        bytes example:    1234000000. Useful bytes position: LOC+32 -> LOC+32 + *LOC
-        int128 equiv :    xxxxxx1234  Useful bytes position: LOC+64 - *LOC -> LOC+64
-    */
-    rule <k> #bytes_to_num_Aux(LOC:LLLExp)
-            => @tlll(%num,
-                     $with($_loc, LOC, // _loc = LOC
-                           $if($iszero($mload(LOC)), 0,
-                               $%seq(
-                                   //checking that most significant byte is not 0x00
-                                   $assert($byte(0, $mload($add($_loc, 32)))),
-
-                                   $mstore(V, 0),
-                                   $mstore($add(V, $sub(32, $mload(LOC))), $mload($add($_loc, 32))),
-
-                                   //re-writing everything with padding 0xff if number is negative
-                                   $if($gt($mload(V), @maxNum),
-                                        $seq($mstore(V, -1),
-                                             $mstore($add(V, $sub(32, $mload(LOC))), $mload($add($_loc, 32))))),
-                                   $mload(V),
-                                   .LLLExps)
-                           )),
-                     @none)
-         ...</k>
-         <nextMem> V:Int => V +Int 64 </nextMem>
-
-
     // as_wei_value
     syntax CTypedLLLExp  ::= "#asWeiValue" "(" Expr "," K ")"    [strict(2)]
  // ------------------------------------------------------------------------
