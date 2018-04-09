@@ -64,6 +64,7 @@ def try_decode_exception(exceptionMsg):
             or "Invalid contract reference" in exceptionMsg \
             or "Function visibility must be declared" in exceptionMsg \
             or "For loops allowed" in exceptionMsg \
+            or "Not enough arguments" in exceptionMsg \
             or "Tuple lengths don't match" in exceptionMsg:
         raise exceptions.StructureException(exceptionMsg)
     elif "constant function" in exceptionMsg \
@@ -115,6 +116,13 @@ def try_decode_exception(exceptionMsg):
             or "Can't compare values" in exceptionMsg \
             or "keyword expects" in exceptionMsg \
             or "Type for" in exceptionMsg \
+            or "Concat expects byte arrays or bytes32 objects" in exceptionMsg \
+            or "Expecting list of types" in exceptionMsg \
+            or "RLP list must have" in exceptionMsg \
+            or "RLP lists only accept" in exceptionMsg \
+            or "Unsupported base type" in exceptionMsg \
+            or "Tuple index invalid" in exceptionMsg \
+            or "Expecting" in exceptionMsg \
             or "positional" in exceptionMsg:
         raise exceptions.TypeMismatchException(exceptionMsg)
     elif "Invalid unit" in exceptionMsg:

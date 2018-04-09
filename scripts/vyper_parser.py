@@ -448,7 +448,12 @@ def parseCallExpr(expr: ast.Call):
                 typeArg = parseBaseType(expr.keywords[0].value)
             return "%extract32({}, {}, {})".format(parseArg(expr.args[0]), parseArg(expr.args[1]), typeArg)
         elif expr.func.id == "RLPList":
-            return "%RLPList({}, {})".format(parseArg(expr.args[0]), parseTypes(expr.args[1].elts))
+            if len(expr.args) == 2 and type(expr.args[1]) == ast.List:
+                return "%RLPList({}, {})".format(parseArg(expr.args[0]), parseTypes(expr.args[1].elts))
+            elif len(expr.args) != 2:
+                raise KVStructureException("Not enough (or too many) arguments for function: RLPList")
+            else:
+                raise KVTypeMismatchException("Expecting list of types for second argument")
         else:
             return "%{}({})".format(expr.func.id, parseArgs(expr.args + expr.keywords, ", "))
     elif type(expr.func) == ast.Attribute:

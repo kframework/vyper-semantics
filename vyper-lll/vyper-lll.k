@@ -711,8 +711,11 @@ module VYPER-LLL
     rule #assign(V, @tlll(T, CODE, EXPRATTR))
         => #assignImpl(#getTarget(V, #lookupVar(V)),
                       @tlll(T, CODE, EXPRATTR))
-      requires T =/=K %NoneType
+      requires T =/=K %NoneType andBool notBool isTupleType(T) //Tuple only when it's the result of RLPList().
 
+    rule #assign(V, @tlll(T:TupleType, CODE, EXPRATTR))
+        => #assignImpl(#getTarget(V, #lookupOrNewVar(V, T)),
+                      @tlll(T, CODE, EXPRATTR))
 
     /*  Checks that var is not used in a loop, then makes some more checks inside #getTargetAux(),
         then rewrites into arg 2*/
@@ -2770,6 +2773,9 @@ module VYPER-LLL
  // --------------------------------------------------------------------
     rule #codesize(@tlll(_:AddressType, ADDR, @none)) => @tlll(%num, $extcodesize(ADDR), @none)
 
+    rule (. => #exception("Type mismatch: codesize keyword expects an address as input"))
+         ~> #codesize(@tlll(T:Type, _,_))
+      requires notBool isAddressType(T)
 
     rule #compileToLoc(%is_contract(EXPR)) => #is_contract(#compileToVal(EXPR))
 
@@ -2777,6 +2783,9 @@ module VYPER-LLL
  // ----------------------------------------------------------------------
     rule #is_contract(@tlll(_:AddressType, ADDR, @none)) => @tlll(%bool, $extcodesize(ADDR), @none)
 
+    rule (. => #exception("Type mismatch: codesize keyword expects an address as input"))
+         ~> #is_contract(@tlll(T:Type, _,_))
+      requires notBool isAddressType(T)
 
     rule #compileToLoc(%msg.sender)       => @tlll(%address, $caller, @none)
 
@@ -3099,6 +3108,10 @@ module VYPER-LLL
 
     rule #alloc(SIZE:Int => SIZE +Int 4, @tlll(%methodIdT, _,_) Rest:TypedLLLExps => Rest )
 
+    rule (. => #exception("Concat expects byte arrays or bytes32 objects"))
+         ~> #alloc(_, @tlll(T:Type, _,_) )
+      requires notBool isByteArrayType(T) andBool notBool (T ==K %bytes32) andBool notBool (T ==K %methodIdT)
+
     rule <k> #alloc(SIZE:Int, .TypedLLLExps) => @tlll(%bytesT(SIZE), REZ, @locattr(@memory, true)) ...</k>
          <nextMem> REZ:Int => REZ +Int #sizeOfType(%bytesT(SIZE)) </nextMem>
 
@@ -3391,7 +3404,7 @@ module VYPER-LLL
 
     rule <k> #raw_call(TL1:TypedLLLExp, @tlll(DataT, DataCODE, DataLA), OUTSIZE, TL4:TypedLLLExp,
                        @tlll(ValT, ValCODE, @none))
-         => #ifThenElse(#areUnitsCompatible(ValT, %unitT(%num, %wei |-> 1, false), false),
+         => #ifThenElse(#areUnitsCompatible(ValT, %unitT(%num, %wei |-> 1, false), #isNumLiteral(ValCODE)),
                         #raw_call2(TL1, @tlll(DataT, DataCODE, DataLA), OUTSIZE, TL4, @tlll(ValT, ValCODE, @none),
                                    #newPlaceholder(DataT)),
                         #exception("Invalid units for value")
@@ -3457,7 +3470,7 @@ module VYPER-LLL
          <constant> true </constant>
 
     rule <k> #create_with_code_of(TL1:TypedLLLExp, @tlll(ValT, ValCODE, @none))
-         => #ifThenElse(#areUnitsCompatible(ValT, %unitT(%num, %wei |-> 1, false), false),
+         => #ifThenElse(#areUnitsCompatible(ValT, %unitT(%num, %wei |-> 1, false), #isNumLiteral(ValCODE)),
                         #create_with_code_of2(TL1, @tlll(ValT, ValCODE, @none),
                                               #newPlaceholder(%bytesT(96))),
                         #exception("Invalid units for value")
@@ -3871,14 +3884,19 @@ module VYPER-LLL
          ~> #compileToLoc(%RLPList(E, .Types))
 
     rule #compileToLoc(%RLPList(E, Ts:Types)) => #RLPList(#compileToVal(E), Ts, .Types, 0)
+      requires Ts =/=K .Types
 
     syntax CTypedLLLExp ::= "#RLPList" "(" CTypedLLLExp "," Types "," Types "," Int ")" [strict(1)]
  // -------------------------------------------------------
+    rule (. => #exception("Expecting bytes for argument 1 of RLPList"))
+         ~> #RLPList(@tlll(T:Type, _,_), _,_,_)
+      requires notBool isByteArrayType(T)
+
     rule (. => #exception("RLP list must have at most 32 items"))
-         ~> #RLPList(_, T:Type Ts:Types, _, 32)
+         ~> #RLPList(@tlll(%bytesT(_), _,_), T:Type Ts:Types, _, 32)
 
     rule (. => #parseType(T, true))
-         ~> #RLPList(_:TypedLLLExp, T:Type Ts:Types => Ts, _, N)
+         ~> #RLPList(@tlll(%bytesT(_), _,_), T:Type Ts:Types => Ts, _, N)
       requires N <Int 32
 
     rule (#parseType(%bytes, _) => .)
@@ -4810,6 +4828,15 @@ module VYPER-LLL
     // Tuple
     rule #lookupVarElement(@tlll(%tupleT(Ts), BASELOC, LOCATTR), @tlll(_, CNT:Int, _))
          => #lookupTupleElement(@tlll(%tupleT(Ts), BASELOC, LOCATTR), Ts, 0, CNT)
+      requires CNT >=Int 0 andBool CNT <Int #listLen(Ts, 0)
+
+    rule (. => #exception("Tuple index invalid"))
+         ~> #lookupVarElement(@tlll(%tupleT(Ts), BASELOC, LOCATTR), @tlll(_, CNT, _))
+      requires notBool isInt(CNT)
+
+    rule (. => #exception("Tuple index invalid"))
+         ~> #lookupVarElement(@tlll(%tupleT(Ts), BASELOC, LOCATTR), @tlll(_, CNT:Int, _))
+      requires notBool (CNT >=Int 0 andBool CNT <Int #listLen(Ts, 0))
 
 
     /* Computes location(List[I]), I converted to %num
@@ -4963,6 +4990,22 @@ module VYPER-LLL
  // -------------------------------------------------
     rule <k> CODE:LLLExps ~> (#clearVar(NAME) => .) ... </k>
          <env>... (%var(NAME) |-> _ => .Map) ...</env>
+
+
+    syntax CTypedLLLExp  ::= "#lookupOrNewVar" "(" Var "," Type ")"
+ // ---------------------------------------------------------------
+    rule <k> #lookupOrNewVar(%var(NAME), _) => @tlll(T, LOC, LOCATTR) ... </k>
+         <env>... %var(NAME) |-> @taddr(T, LOC, LOCATTR) ...</env>
+
+    rule <k> #lookupOrNewVar(%var(NAME), T) => #newVar(NAME, T) ... </k>
+         <env> ENV </env>
+      requires notBool %var(NAME) in_keys(ENV)
+
+    rule #lookupOrNewVar(%svar(NAME), _) => #lookupVar(%svar(NAME))
+
+    rule #lookupOrNewVar(%subscript(V, EXPR), _) => #lookupVar(%subscript(V, EXPR))
+
+    rule #lookupOrNewVar(%attribute(V, FILEDNAME), _) => #lookupVar(%attribute(V, FILEDNAME))
 
 
     syntax CTypedLLLExp  ::= "#newLoopVar" "(" Id "," Type ")"

@@ -302,5 +302,6 @@ module VYPER-ABSTRACT-SYNTAX
                            | "%raw_log"             "(" Expr "," Expr ")"
                            | "%RLPList"             "(" Expr "," Types ")"
 
+    syntax Id ::= "choice" [token] //not parser as id by default
 
 endmodule
