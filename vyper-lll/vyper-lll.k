@@ -707,15 +707,21 @@ module VYPER-LLL
     syntax CLLLExps  ::= "#assign"    "(" Var                             ","
                                           CTypedLLLExp  /*compiled Expr*/
                                       ")"                         [strict(2)]
+    //same as #assign, but allows the target var to be freshly created
+    syntax CLLLExps  ::= "#assignNewVar"    "(" Var
+                                            "," CTypedLLLExp  /*compiled Expr*/
+                                            ")"                         [strict(2)]
  // ---------------------------------------------------------------------------
     rule #assign(V, @tlll(T, CODE, EXPRATTR))
         => #assignImpl(#getTarget(V, #lookupVar(V)),
                       @tlll(T, CODE, EXPRATTR))
       requires T =/=K %NoneType andBool notBool isTupleType(T) //Tuple only when it's the result of RLPList().
 
-    rule #assign(V, @tlll(T:TupleType, CODE, EXPRATTR))
-        => #assignImpl(#getTarget(V, #lookupOrNewVar(V, T)),
-                      @tlll(T, CODE, EXPRATTR))
+    rule #assign(V, @tlll(T:TupleType, CODE, EXPRATTR)) => #assignNewVar(V, @tlll(T, CODE, EXPRATTR))
+
+    rule #assignNewVar(V, @tlll(T, CODE, EXPRATTR))
+         => #assignImpl(#getTarget(V, #lookupOrNewVar(V, T)),
+                        @tlll(T, CODE, EXPRATTR))
 
     /*  Checks that var is not used in a loop, then makes some more checks inside #getTargetAux(),
         then rewrites into arg 2*/
@@ -1133,7 +1139,7 @@ module VYPER-LLL
         for a in list: block
     */
     rule #compileStmt(%forlist(ITER, EXPR, STMTS)) => #forlistNonVar(ITER, EXPR, STMTS, #newVarId)
-    requires notBool isVar(EXPR)
+      requires notBool isVar(EXPR)
 
     syntax CLLLExps  ::= "#forlistNonVar" "(" Id           "," // loop iterator
                                               Expr         "," // list expr
@@ -1142,9 +1148,9 @@ module VYPER-LLL
                                           ")"                  [strict(4)]
   // ---------------------------------------------------------
     rule #forlistNonVar(ITER, EXPR, STMTS, ListId:Id)
-         => #compileStmts((
-                %assign(%var(ListId), EXPR)
-                %forlist(ITER, %var(ListId), STMTS)),
+         => #assignNewVar(%var(ListId), #compileToLoc(EXPR))
+            ~> #compileStmts(
+                %forlist(ITER, %var(ListId), STMTS),
                 .LLLExps
             )
 
@@ -2281,7 +2287,7 @@ module VYPER-LLL
                    #exception("Can't use IN comparison with different types!"))
         ~> #exprSeq(
               #compileStmts((
-                %assign(%var(RESULTID), false)
+                %annvar(RESULTID, %bool, false)
                 %forlist(LOOPID, REXP,
                          %if(%compareop(%eq, LEXP, %var(LOOPID)),
                              %assign(%var(RESULTID), true)))),
