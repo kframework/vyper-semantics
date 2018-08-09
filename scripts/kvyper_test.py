@@ -30,7 +30,6 @@ def krun(kdir, pgm):  # string * string -> string
 
 def vyper2lll(ast):  # string -> string
     out = krun('vyper-lll', ast)
-    print("\n{}\n\n".format(out))
     lll = re.search(r'<lll> (.*) </lll>', out).group(1)
     if lll == ".":
         exceptionRegex = re.search(r'<k> #exception \( "([^"]+)" \)', out)
@@ -129,19 +128,16 @@ def try_decode_exception(exceptionMsg):
         raise exceptions.InvalidTypeException(exceptionMsg)
 
 
-def lll2evm(lll):  # string -> string list
-    out = krun('lll-evm', lll)
-    # print("\n{}\n\n".format(out))
-
-    if "<k> . </k>" in out:
-        evm = re.compile(r' \) ListItem \( ').sub(' ', re.search(r'<evm> ListItem \( (.*) \) </evm>', out).group(1))
+def evm2opcodes(evm):  # string -> string list
+    if "<k> . </k>" in evm:
+        evm = re.compile(r' \) ListItem \( ').sub(' ', re.search(r'<evm> ListItem \( (.*) \) </evm>', evm).group(1))
         return evm.split(' ')
     else:
-        raise RuntimeError("lll-evm computation got stuck:\n\n" + out + "\n\n")
+        raise RuntimeError("lll-evm computation got stuck:\n\n" + evm + "\n\n")
 
 
 def compile(code):  # string -> bytes
-    print("\n{}\n\n".format(code))
+    print("{}\n".format(code))
 
     try:
         ast = parse(code)
@@ -150,11 +146,25 @@ def compile(code):  # string -> bytes
     except KVTypeMismatchException as e:
         raise exceptions.TypeMismatchException(str(e))
 
-    print("\n{}\n\n".format(ast))
+    print("\nAST\n===================\n{}\n".format(ast))
 
     lll = vyper2lll(ast)
-    evm = lll2evm(lll)  # list of opcodes
-    return op2byte(evm)
+    print("\nLLL\n===================\n{}\n".format(lll))
+
+    evm = krun('lll-evm', lll)
+    print("\nLLL-EVM out\n===================\n{}\n".format(evm))
+
+    opcodes = evm2opcodes(evm)  # list of opcodes
+    print_opcodes(opcodes)
+
+    return op2byte(opcodes)
+
+
+def print_opcodes(opcodes):
+    print("\nOpcodes\n===================")
+    for opcode in opcodes:
+        print(opcode)
+    print("\n")
 
 
 if __name__ == '__main__':
