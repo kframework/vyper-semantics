@@ -1,4 +1,5 @@
 module LLL-ABSTRACT-SYNTAX
+  imports DOMAINS
 
     syntax LLLExp ::= LLLEVM
                     | Int

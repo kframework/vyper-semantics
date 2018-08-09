@@ -1,4 +1,5 @@
 module EVM-SYNTAX
+    imports DOMAINS
     imports EVM-CORE-SYNTAX
     syntax EVM ::= EVMCORE
                   | Int

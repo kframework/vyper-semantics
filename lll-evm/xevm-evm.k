@@ -4,6 +4,7 @@ require "../common/evm-syntax.k"
 require "lll-evm-config.k"
 
 module XEVM-EVM
+    imports DOMAINS
     imports XEVM-EVM-INTERFACE
 
     imports LLL-EVM-CONFIG
@@ -18,6 +19,7 @@ module XEVM-EVM
     rule xevm2evm(Code) => genLabelTbl(Code) ~> decode(Code)
 
 ////
+    syntax KItem ::= genLabelTbl ( List /* XEVM* */ )
 
     rule genLabelTbl(.List) => .
 
@@ -62,9 +64,9 @@ module XEVM-EVM
     rule     decode(ListItem(PUSH(N, B))      Code) => decode(ListItem(decode1(PUSH(N,B)))) ~> decodeBytes(B) ~> decode(Code)
 
     rule <k> decode(ListItem(CODELEN)         Code) => decodeInt(POS) ~>       decode(                   Code) ... </k> <pos> POS </pos>
-    rule <k> decode(ListItem(PUSH (label(L))) Code) => decodeInt(M[L]:>Int) ~> decode(                   Code) ... </k> <labelTbl> M </labelTbl> when L in keys(M)
-    rule <k> decode(ListItem(JUMP (label(L))) Code) => decodeInt(M[L]:>Int) ~> decode(ListItem(JUMP)     Code) ... </k> <labelTbl> M </labelTbl> when L in keys(M)
-    rule <k> decode(ListItem(JUMPI(label(L))) Code) => decodeInt(M[L]:>Int) ~> decode(ListItem(JUMPI)    Code) ... </k> <labelTbl> M </labelTbl> when L in keys(M)
+    rule <k> decode(ListItem(PUSH (label(L))) Code) => decodeInt(POS) ~>       decode(                   Code) ... </k> <labelTbl>... L |-> POS ...</labelTbl>
+    rule <k> decode(ListItem(JUMP (label(L))) Code) => decodeInt(POS) ~>       decode(ListItem(JUMP)     Code) ... </k> <labelTbl>... L |-> POS ...</labelTbl>
+    rule <k> decode(ListItem(JUMPI(label(L))) Code) => decodeInt(POS) ~>       decode(ListItem(JUMPI)    Code) ... </k> <labelTbl>... L |-> POS ...</labelTbl>
     rule     decode(ListItem(JUMPI(pc))       Code) =>            decode(ListItem(PC) ListItem(JUMPI)    Code)
     rule     decode(ListItem(JUMPDEST(_))     Code) =>                         decode(ListItem(JUMPDEST) Code)
     rule     decode(ListItem(BLANK(_))        Code) =>                         decode(                   Code)

@@ -1,6 +1,7 @@
 require "../common/evm-syntax.k"
 
 module XEVM-SYNTAX
+    imports DOMAINS
     imports EVM-CORE-SYNTAX
 
     syntax XEVM ::= EVMCORE

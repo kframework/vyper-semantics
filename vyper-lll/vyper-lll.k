@@ -4,6 +4,7 @@
 
 require "../common/vyper-abstract-syntax.k"
 require "../common/lll-abstract-syntax.k"
+require "../vyper/krypto.k"
 require "vyper-lll-utils.k"
 require "domains.k"
 
@@ -528,7 +529,7 @@ module VYPER-LLL
 
     syntax CLLLExps  ::= "#copyArg" "(" Params "," Bool /*init?*/ ")"
  // -----------------------------------------------------------------
-    rule #copyArg(.Params, _) => $pass,.LLLExps
+    rule #copyArg(.Params, _) => .LLLExps
 
     rule <k> #copyArg(PARAMS, true) => $codecopy(@reservedMemPos,
                                                  $codelen,
@@ -628,17 +629,17 @@ module VYPER-LLL
            #mkClamperListT(N -Int 1, T, DPOS +Int #sizeOfType(T), MPOS +Int #sizeOfType(T), ISINIT)
       requires N >Int 1
 
-    rule #mkClamper(%decimal, _, _, _) => $pass,.LLLExps
+    rule #mkClamper(%decimal, _, _, _) => .LLLExps
 
-    rule #mkClamper(%unitT(%decimal, _:Map, _), _, _, _) => $pass,.LLLExps
+    rule #mkClamper(%unitT(%decimal, _:Map, _), _, _, _) => .LLLExps
 
-    rule #mkClamper(%num256, _, _, _) => $pass,.LLLExps
+    rule #mkClamper(%num256, _, _, _) => .LLLExps
 
-    rule #mkClamper(%bytes32, _, _, _) => $pass,.LLLExps
+    rule #mkClamper(%bytes32, _, _, _) => .LLLExps
 
-    rule #mkClamper(%mapT(_, _), _, _, _) => $pass,.LLLExps
+    rule #mkClamper(%mapT(_, _), _, _, _) => .LLLExps
 
-    rule #mkClamper(%structT(_), _, _, _) => $pass,.LLLExps
+    rule #mkClamper(%structT(_), _, _, _) => .LLLExps
 
     rule #mkCopier(MPOS, POS, SIZE, true) => $codecopy(MPOS, $add($codelen, POS), SIZE)
 
@@ -686,7 +687,7 @@ module VYPER-LLL
 // ====================
 
 
-    rule #compileStmt(%annvar(NAME, T)) => #newVar(NAME, #parseType(T, true)) ~> #deletePrev ~> $pass,.LLLExps
+    rule #compileStmt(%annvar(NAME, T)) => #newVar(NAME, #parseType(T, true)) ~> #deletePrev ~> .LLLExps
 
     rule #compileStmt(%annvar(NAME, T, EXPR))
          => #newVar(NAME, #parseType(T, true)) ~> #deletePrev ~> #compileStmt(%assign(%var(NAME), EXPR))
@@ -4652,16 +4653,16 @@ module VYPER-LLL
       requires lengthString(STR) ==Int 0
 
     rule #string2BytesAux(STR, RESULT)
-        => #nonEmptystring2Bytes(STR, RESULT)
+        => #nonEmptyString2Bytes(STR, RESULT)
       requires lengthString(STR) >Int 0
 
-    rule #nonEmptystring2Bytes(STR, RESULT)
+    rule #nonEmptyString2Bytes(STR, RESULT)
         => #string2BytesAux(substrString(STR, 1, lengthString(STR)),
                             RESULT ++Byte (ordChar(substrString(STR, 0, 1)) : .Bytes))
       requires ordChar(substrString(STR, 0, 1)) <Int 256
 
     rule (. => #exception("Cannot insert special character into byte array"))
-         ~> #nonEmptystring2Bytes(STR, RESULT)
+         ~> #nonEmptyString2Bytes(STR, RESULT)
       requires ordChar(substrString(STR, 0, 1)) >=Int 256
 
 
