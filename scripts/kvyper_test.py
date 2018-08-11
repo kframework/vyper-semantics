@@ -30,7 +30,7 @@ def krun(kdir, pgm):  # string * string -> string
 
 def vyper2lll(ast):  # string -> string
     out = krun('vyper-lll', ast)
-    lll = re.search(r'<lll> (.*) </lll>', out).group(1)
+    lll = re.search(r'<lll>\s*(.*[^\s])\s*</lll>', out).group(1)
     if lll == ".":
         exceptionRegex = re.search(r'<k> #exception \( "([^"]+)" \)', out)
         if exceptionRegex is not None:
@@ -129,9 +129,11 @@ def try_decode_exception(exceptionMsg):
 
 
 def evm2opcodes(evm):  # string -> string list
-    if "<k> . </k>" in evm:
-        evm = re.compile(r' \) ListItem \( ').sub(' ', re.search(r'<evm> ListItem \( (.*) \) </evm>', evm).group(1))
-        return evm.split(' ')
+    if re.search(r'<k>\s*\.\s*</k>', evm) is not None:
+        evmCellContent = re.search(r'<evm>(.*)</evm>', evm, re.DOTALL).group(1)
+        items = evmCellContent.split('ListItem')
+        rez = list(re.search(r'\s*\(\s*([^\s]+)\s*\)\s*', item).group(1) for item in items[1:])
+        return rez
     else:
         raise RuntimeError("lll-evm computation got stuck:\n\n" + evm + "\n\n")
 
@@ -152,7 +154,7 @@ def compile(code):  # string -> bytes
     print("\nLLL\n===================\n{}\n".format(lll))
 
     evm = krun('lll-evm', lll)
-    print("\nLLL-EVM out\n===================\n{}\n".format(evm))
+    # print("\nLLL-EVM out\n===================\n{}\n".format(evm))
 
     opcodes = evm2opcodes(evm)  # list of opcodes
     print_opcodes(opcodes)
