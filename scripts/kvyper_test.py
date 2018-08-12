@@ -16,13 +16,15 @@ path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
 def krun(kdir, pgm):  # string * string -> string
     try:
-        p = subprocess.run(['krun', '-d', os.path.join(path, kdir), '-cPGM=' + pgm, '-pPGM=kast -e', '--debug'],
+        p = subprocess.run(['krun', '-d', os.path.join(path, kdir), '-cPGM=' + pgm, '-pPGM=kast -e', '--debug',
+                            '--verbose'],
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
     except FileNotFoundError as e:
         print("Error: subprocess.run() ended with FileNotFoundError for file: " + str(e.filename), file=sys.stderr)
         raise e
 
     if p.returncode == 0:
+        print("\nkrun stderr\n===================\n{}\n".format(p.stderr))
         return p.stdout
     else:
         raise RuntimeError(p.stderr)
